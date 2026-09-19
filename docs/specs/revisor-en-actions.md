@@ -30,6 +30,10 @@ Que el job `Revisor` termine con un veredicto en cada PR. En los PR 4 y siguient
 - El propio PR de la rebanada ejecuta el Revisor: es el caso de prueba real.
 - Sin ninguno de los dos secretos, `comprobar` deja el check en verde con aviso (comportamiento anterior conservado).
 
+## Resultado de la primera ejecución
+
+El PR #8 ejecutó el workflow nuevo el 2026-09-19. El check `Revisor` falló y el paso de diagnóstico mostró el motivo real: `subtype=success is_error=true turnos=1 coste=0` y `error: Credit balance is too low`. Con `claude-sonnet-5` fijado, la causa no es el modelo: la organización de la clave no tiene crédito. El criterio 6 se cumple por su segunda rama. Que el Revisor deje veredicto en cada PR depende de una acción de Jesús: recargar crédito en la consola de la API o crear `CLAUDE_CODE_OAUTH_TOKEN` con `claude setup-token`. El runbook recoge ambas.
+
 ## Fuera de alcance
 
 Cambiar el rol del Revisor (`.claude/agents/revisor.md`), la plantilla de PR o la vía primaria de las rutinas nocturnas, que ya está decidida como Rutinas de Claude Code.
