@@ -1,0 +1,13 @@
+name: Preparar Node y pnpm
+description: Instala Node 22, pnpm (versión de packageManager) y las dependencias del workspace con caché.
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+    - uses: actions/setup-node@v5
+      with:
+        node-version-file: .node-version
+        cache: pnpm
+    - name: Instalar dependencias
+      shell: bash
+      run: pnpm install --frozen-lockfile
