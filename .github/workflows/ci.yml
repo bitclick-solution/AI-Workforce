@@ -20,34 +20,34 @@ env:
 jobs:
   lint:
     name: Lint y formato
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
       - run: pnpm lint
       - run: pnpm format:check
 
   typecheck:
     name: Tipos
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
       - run: pnpm typecheck
 
   test:
     name: Pruebas
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
       - run: pnpm test
 
   evals-smoke:
     name: Evals de humo
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
       - run: pnpm evals:smoke
       - uses: actions/upload-artifact@v4
@@ -59,18 +59,18 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
       - run: pnpm build
 
   e2e:
     name: Playwright
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [build]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
       - run: pnpm --filter @aiw/web build
       - run: pnpm exec playwright install --with-deps chromium
@@ -84,9 +84,9 @@ jobs:
 
   secretos:
     name: Sin secretos en el repositorio
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: gitleaks sobre los commits de este cambio
@@ -101,11 +101,30 @@ jobs:
 
   compose:
     name: Compose de desarrollo arranca
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Decidir si hace falta arrancar
+        id: cambios
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # El arranque completo tarda varios minutos: solo corre si el PR toca lo que lo afecta.
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] || [ -z "$BASE" ]; then
+            echo "arrancar=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$BASE" "$HEAD" | grep -qE '^(deploy/|scripts/|\.env\.example$|\.github/workflows/ci\.yml$)'; then
+            echo "arrancar=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "arrancar=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::El PR no toca deploy/, scripts/, .env.example ni ci.yml: se valida el fichero pero no se arranca el Compose."
+          fi
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
       - name: Validar el fichero
@@ -113,27 +132,28 @@ jobs:
           node scripts/dev-up.mjs --solo-env
           docker compose --env-file .env -f deploy/compose/docker-compose.dev.yml config --quiet
       - name: Arrancar con un solo comando
+        if: steps.cambios.outputs.arrancar == 'true'
         run: node scripts/dev-up.mjs
       - name: Estado de los servicios
-        if: always()
+        if: always() && steps.cambios.outputs.arrancar == 'true'
         run: docker compose --env-file .env -f deploy/compose/docker-compose.dev.yml ps
       - name: Registros si algo falló
-        if: failure()
+        if: failure() && steps.cambios.outputs.arrancar == 'true'
         run: docker compose --env-file .env -f deploy/compose/docker-compose.dev.yml logs --tail=100
       - name: Parar
-        if: always()
+        if: always() && steps.cambios.outputs.arrancar == 'true'
         run: node scripts/dev-down.mjs --volumes
 
   imagenes:
     name: Imagen ${{ matrix.app }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [lint, typecheck, test]
     strategy:
       fail-fast: false
       matrix:
         app: [api, worker, platform-agents, channels, web]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
       - name: Construir sin publicar
         uses: docker/build-push-action@v6

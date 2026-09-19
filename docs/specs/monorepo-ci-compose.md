@@ -5,7 +5,7 @@ VIGENTE
 - Rebanada: [Notion](https://app.notion.com/p/3e05306618988159a779d6370b3a06a8) · Ciclo 0 · Tipo Plataforma · Paquetes deploy, docs · P0
 - Rama: `rebanada/monorepo-ci-compose`
 - Plan de referencia: [Plan de construcción v8](https://claude.ai/artifact/Mf7PeYbaXCnp5wFhQu3XWn), secciones _Stack_, _Estructura del monorepo_, _Cómo llevarlo a cabo_ y _Definición de hecho_.
-- Zona crítica: no. `CODEOWNERS` declara las zonas críticas para las rebanadas siguientes.
+- Zona crítica: sí. El PR crea `.github/` (integración continua y `CODEOWNERS`) y los Dockerfiles, así que requiere la aprobación de Jesús además del veredicto del Revisor.
 
 ## Objetivo
 
