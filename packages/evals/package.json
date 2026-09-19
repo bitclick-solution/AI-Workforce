@@ -1,0 +1,27 @@
+{
+  "name": "@aiw/evals",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Casos dorados por puesto, evaluadores y evals de humo para la integración continua.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist coverage .turbo",
+    "evals:smoke": "vitest run --config vitest.evals.config.ts"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

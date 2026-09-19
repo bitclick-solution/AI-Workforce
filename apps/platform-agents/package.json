@@ -1,0 +1,26 @@
+{
+  "name": "@aiw/platform-agents",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agentes de plataforma: moderador de sala, supervisor de departamento y Director de IA.",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist coverage .turbo"
+  },
+  "dependencies": {
+    "@aiw/domain": "workspace:*",
+    "@aiw/rooms": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsup": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

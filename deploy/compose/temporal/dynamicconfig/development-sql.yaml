@@ -1,0 +1,7 @@
+# Configuración dinámica de Temporal para desarrollo. No usar en producción.
+limit.maxIDLength:
+  - value: 255
+    constraints: {}
+system.forceSearchAttributesCacheRefreshOnRead:
+  - value: true
+    constraints: {}

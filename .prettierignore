@@ -1,0 +1,11 @@
+node_modules
+dist
+.next
+coverage
+pnpm-lock.yaml
+.turbo
+playwright-report
+test-results
+evals-report
+CHANGELOG.md
+next-env.d.ts

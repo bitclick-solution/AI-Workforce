@@ -1,0 +1,33 @@
+# Zonas críticas con revisión humana obligatoria de Jesús (plan v8, "Cómo llevarlo a cabo").
+# La protección de la rama main debe exigir la aprobación de los propietarios de estas rutas.
+# Las rutas se afinan cuando exista el código; hasta entonces se protege el paquete completo.
+
+# Identidad y permisos; motor de políticas y niveles de autonomía
+/packages/domain/                 @3rChuss
+/apps/api/src/auth/               @3rChuss
+**/auth/**                        @3rChuss
+**/permisos/**                    @3rChuss
+**/policies/**                    @3rChuss
+
+# Gateway MCP y credenciales
+/packages/mcp-gateway/            @3rChuss
+**/credenciales/**                @3rChuss
+
+# Libro de auditoría y contador
+/packages/ledger/                 @3rChuss
+
+# Promociones del aprendizaje
+/packages/learning/               @3rChuss
+
+# Prompts de sistema de los agentes de plataforma
+/apps/platform-agents/            @3rChuss
+**/prompts/**                     @3rChuss
+
+# Migraciones de datos
+**/migrations/**                  @3rChuss
+**/drizzle/**                     @3rChuss
+
+# La fábrica de agentes y la propia CI también pasan por Jesús
+/CLAUDE.md                        @3rChuss
+/.claude/                         @3rChuss
+/.github/                         @3rChuss

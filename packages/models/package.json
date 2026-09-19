@@ -1,0 +1,26 @@
+{
+  "name": "@aiw/models",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Enrutado de modelos sobre el AI SDK, caché de prompts y coste por tarea.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist coverage .turbo"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
