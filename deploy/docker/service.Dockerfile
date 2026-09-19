@@ -21,6 +21,8 @@ FROM base AS builder
 ARG APP
 WORKDIR /repo
 COPY --from=pruner /repo/out/json/ ./
+# turbo prune no copia los ficheros raíz que no son del workspace.
+COPY --from=pruner /repo/tsconfig.base.json ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 COPY --from=pruner /repo/out/full/ ./
 RUN pnpm turbo run build --filter="@aiw/${APP}"

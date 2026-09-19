@@ -17,6 +17,8 @@ RUN pnpm dlx turbo@2 prune "@aiw/web" --docker
 FROM base AS builder
 WORKDIR /repo
 COPY --from=pruner /repo/out/json/ ./
+# turbo prune no copia los ficheros raíz que no son del workspace.
+COPY --from=pruner /repo/tsconfig.base.json ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 COPY --from=pruner /repo/out/full/ ./
 ENV NEXT_TELEMETRY_DISABLED=1

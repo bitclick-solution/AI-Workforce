@@ -77,7 +77,8 @@ services:
     volumes:
       - ./temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
     healthcheck:
-      test: ['CMD-SHELL', 'temporal operator cluster health --address 127.0.0.1:7233 || exit 1']
+      # El servidor escucha en la IP del contenedor, no en 127.0.0.1: se comprueba por el nombre del servicio.
+      test: ['CMD', 'temporal', 'operator', 'cluster', 'health', '--address', 'temporal:7233']
       interval: 5s
       timeout: 5s
       retries: 30
