@@ -1,0 +1,26 @@
+{
+  "name": "@aiw/channels",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Canales: WhatsApp, correo y enlaces de aprobación firmados de un solo uso.",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist coverage .turbo"
+  },
+  "dependencies": {
+    "@aiw/domain": "workspace:*",
+    "@aiw/notifications": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsup": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

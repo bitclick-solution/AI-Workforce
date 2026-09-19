@@ -1,0 +1,220 @@
+# Entorno de desarrollo de AI Workforce.
+# Arranque: `pnpm dev:up` desde la raíz (crea .env con secretos locales y ejecuta `docker compose up --wait`).
+# Los valores secretos vienen de .env; aquí solo hay valores por defecto que no son secretos.
+name: aiw-dev
+
+x-langfuse-env: &langfuse-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}@postgres:5432/langfuse
+  SALT: ${LANGFUSE_SALT:?Falta LANGFUSE_SALT en .env}
+  ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?Falta LANGFUSE_ENCRYPTION_KEY en .env}
+  TELEMETRY_ENABLED: 'false'
+  LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: 'false'
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Falta CLICKHOUSE_PASSWORD en .env}
+  CLICKHOUSE_CLUSTER_ENABLED: 'false'
+  LANGFUSE_USE_AZURE_BLOB: 'false'
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-aiw}
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Falta MINIO_ROOT_PASSWORD en .env}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: 'true'
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-aiw}
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Falta MINIO_ROOT_PASSWORD en .env}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: 'true'
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  LANGFUSE_S3_BATCH_EXPORT_ENABLED: 'false'
+  REDIS_HOST: redis
+  REDIS_PORT: '6379'
+  REDIS_AUTH: ${REDIS_PASSWORD:?Falta REDIS_PASSWORD en .env}
+  REDIS_TLS_ENABLED: 'false'
+  NEXTAUTH_URL: http://localhost:${LANGFUSE_PORT:-3001}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: postgres
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d postgres']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  temporal:
+    image: temporalio/auto-setup:1.29.7
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: '5432'
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CLI_ADDRESS: temporal:7233
+    ports:
+      - '127.0.0.1:${TEMPORAL_PORT:-7233}:7233'
+    volumes:
+      - ./temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'temporal operator cluster health --address 127.0.0.1:7233 || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  temporal-ui:
+    image: temporalio/ui:2.54.1
+    restart: unless-stopped
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - '127.0.0.1:${TEMPORAL_UI_PORT:-8080}:8080'
+
+  centrifugo:
+    image: centrifugo/centrifugo:v6.9.6
+    restart: unless-stopped
+    command: centrifugo -c /centrifugo/config.json
+    environment:
+      CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: ${CENTRIFUGO_TOKEN_HMAC_SECRET_KEY:?Falta CENTRIFUGO_TOKEN_HMAC_SECRET_KEY en .env}
+      CENTRIFUGO_HTTP_API_KEY: ${CENTRIFUGO_API_KEY:?Falta CENTRIFUGO_API_KEY en .env}
+      CENTRIFUGO_ADMIN_PASSWORD: ${CENTRIFUGO_ADMIN_PASSWORD:?Falta CENTRIFUGO_ADMIN_PASSWORD en .env}
+      CENTRIFUGO_ADMIN_SECRET: ${CENTRIFUGO_ADMIN_SECRET:?Falta CENTRIFUGO_ADMIN_SECRET en .env}
+    ports:
+      - '127.0.0.1:${CENTRIFUGO_PORT:-8000}:8000'
+    volumes:
+      - ./centrifugo/config.json:/centrifugo/config.json:ro
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    restart: unless-stopped
+    entrypoint: sh
+    # Crea los cubos de la plataforma y de Langfuse antes de arrancar.
+    command: -c 'mkdir -p /data/langfuse /data/aiworkforce && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aiw}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Falta MINIO_ROOT_PASSWORD en .env}
+    ports:
+      - '127.0.0.1:${MINIO_PORT:-9000}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 2s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      --requirepass ${REDIS_PASSWORD:?Falta REDIS_PASSWORD en .env}
+      --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 10s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.12
+    restart: unless-stopped
+    user: '101:101'
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Falta CLICKHOUSE_PASSWORD en .env}
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:4.38
+    restart: unless-stopped
+    depends_on: &langfuse-depends-on
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment: *langfuse-env
+
+  langfuse:
+    image: langfuse/langfuse:4.38
+    restart: unless-stopped
+    depends_on: *langfuse-depends-on
+    ports:
+      - '127.0.0.1:${LANGFUSE_PORT:-3001}:3000'
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:?Falta LANGFUSE_NEXTAUTH_SECRET en .env}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:${MINIO_PORT:-9000}
+      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://minio:9000
+      # Organización, proyecto y usuario de desarrollo creados al arrancar.
+      LANGFUSE_INIT_ORG_ID: bitclick
+      LANGFUSE_INIT_ORG_NAME: Bitclick Solutions
+      LANGFUSE_INIT_PROJECT_ID: aiw-dev
+      LANGFUSE_INIT_PROJECT_NAME: AI Workforce · desarrollo
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:?Falta LANGFUSE_PUBLIC_KEY en .env}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:?Falta LANGFUSE_SECRET_KEY en .env}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-dev@aiworkforce.local}
+      LANGFUSE_INIT_USER_NAME: Desarrollo
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:?Falta LANGFUSE_INIT_USER_PASSWORD en .env}
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget --no-verbose --tries=1 --spider http://localhost:3000/api/public/health || exit 1',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+
+volumes:
+  postgres_data:
+  minio_data:
+  redis_data:
+  clickhouse_data:
+  clickhouse_logs:

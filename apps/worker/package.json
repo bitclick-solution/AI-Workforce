@@ -1,0 +1,27 @@
+{
+  "name": "@aiw/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Temporal: flujos de tarea, delegación entre agentes, bucle del agente y aprendizaje programado.",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist coverage .turbo"
+  },
+  "dependencies": {
+    "@aiw/domain": "workspace:*",
+    "@aiw/models": "workspace:*",
+    "@aiw/learning": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsup": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

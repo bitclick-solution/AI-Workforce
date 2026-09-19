@@ -1,0 +1,9 @@
+[project]
+name = "aiw-documents"
+version = "0.0.0"
+description = "OCR de respaldo y generación de PDF como servicio aislado"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.ruff]
+line-length = 100

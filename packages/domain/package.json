@@ -1,0 +1,29 @@
+{
+  "name": "@aiw/domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Entidades, políticas, niveles de autonomía, brand voice, clase de riesgo y esquemas Zod compartidos.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist coverage .turbo"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  }
+}

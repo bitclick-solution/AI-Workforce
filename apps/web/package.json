@@ -1,0 +1,31 @@
+{
+  "name": "@aiw/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Next.js: panel, sala común, onboarding de contratación y aprobaciones móviles.",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "next typegen && tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf .next coverage .turbo next-env.d.ts"
+  },
+  "dependencies": {
+    "@aiw/ui": "workspace:*",
+    "next": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "postcss": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
