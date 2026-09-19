@@ -203,11 +203,12 @@ services:
       LANGFUSE_INIT_USER_NAME: Desarrollo
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:?Falta LANGFUSE_INIT_USER_PASSWORD en .env}
     healthcheck:
+      # La imagen de Langfuse no trae wget ni curl: se comprueba con el propio Node.
       test:
-        [
-          'CMD-SHELL',
-          'wget --no-verbose --tries=1 --spider http://localhost:3000/api/public/health || exit 1',
-        ]
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/api/public/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
       interval: 5s
       timeout: 5s
       retries: 40
