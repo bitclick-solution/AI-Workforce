@@ -8,3 +8,4 @@ playwright-report
 test-results
 evals-report
 CHANGELOG.md
+next-env.d.ts
