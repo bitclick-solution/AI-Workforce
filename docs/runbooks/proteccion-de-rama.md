@@ -21,7 +21,9 @@ Ajustes de GitHub que Jesús configura una vez para que la fábrica funcione. Ni
 ## Secretos y variables
 
 1. En **Settings > Secrets and variables > Actions**, crea los secretos:
-   - `ANTHROPIC_API_KEY`: clave para el Revisor y las rutinas nocturnas.
+   - Autenticación de Claude para el Revisor y las rutinas, una de las dos:
+     - `ANTHROPIC_API_KEY`: clave de la consola de la API de Anthropic. La organización de la clave debe tener acceso al modelo que fija `claude_args` en los workflows (`claude-sonnet-5`) y crédito disponible.
+     - `CLAUDE_CODE_OAUTH_TOKEN`: token de una suscripción de Claude, generado en tu equipo con `claude setup-token`. Úsalo si no tienes clave de la API.
    - `NOTION_TOKEN`: token de la integración interna de Notion, con permisos de lectura y escritura sobre la página **AI Workforce**.
 2. Comparte la página **AI Workforce** con la integración desde Notion (**Conexiones** en el menú de la página).
 3. Solo si eliges GitHub Actions como vía de las rutinas nocturnas (ver la sección siguiente), crea la variable `RUTINAS_NOCTURNAS` con el valor `true` y el secreto `CRONISTA_TOKEN`: un token de acceso personal de grano fino con permisos de contenido y de pull requests sobre este repositorio, o un token de GitHub App. Sin `CRONISTA_TOKEN`, el Cronista usa `GITHUB_TOKEN` y los PR que abre no disparan la CI ni al Revisor, así que no se podrían fusionar con el ruleset.
@@ -40,7 +42,7 @@ Recomendación del Revisor y del Constructor: Rutinas de Claude Code como vía p
 
 ## Comprobación
 
-1. Abre un PR de prueba desde una rama `rebanada/<nombre>`. El workflow `Revisor` debe dejar un comentario con veredicto en menos de diez minutos.
+1. Abre un PR de prueba desde una rama `rebanada/<nombre>`. El workflow `Revisor` debe dejar un comentario con veredicto en menos de diez minutos. Si el job falla, el paso **Diagnóstico si el action falla** imprime en el registro el tipo de resultado, `is_error`, el número de turnos y el mensaje de error recortado. Un fallo en menos de un segundo con un turno y coste cero es de autenticación o de modelo: revisa el secreto y el acceso al modelo, no el prompt.
 2. Si la vía elegida es Actions, ejecuta **Actions > Rutinas nocturnas > Run workflow** con la rutina `cronista`. La página del ciclo en curso debe recibir un resumen de dirección nuevo.
 
 **Precaución:** Los secretos no se copian nunca al repositorio, a `.env.example`, a los prompts ni a los registros de los workflows.
