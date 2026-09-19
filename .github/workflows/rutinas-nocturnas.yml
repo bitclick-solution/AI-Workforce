@@ -1,0 +1,97 @@
+name: Rutinas nocturnas
+
+# Evaluador a las 01:00 UTC y Cronista a las 02:00 UTC. Desactivadas hasta que exista la variable
+# de repositorio RUTINAS_NOCTURNAS=true. Requieren los secretos ANTHROPIC_API_KEY y NOTION_TOKEN.
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      rutina:
+        description: Rutina a ejecutar
+        required: true
+        type: choice
+        options: [cronista, evaluador]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  comprobar:
+    name: Comprobar activación y secretos
+    if: vars.RUTINAS_NOCTURNAS == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      hay_clave: ${{ steps.clave.outputs.hay_clave }}
+    steps:
+      - id: clave
+        env:
+          HAY_CLAVE: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        run: |
+          echo "hay_clave=$HAY_CLAVE" >> "$GITHUB_OUTPUT"
+          if [ "$HAY_CLAVE" != "true" ]; then
+            echo "::error::RUTINAS_NOCTURNAS está activa pero falta ANTHROPIC_API_KEY."
+            exit 1
+          fi
+
+  evaluador:
+    name: Evaluador
+    needs: comprobar
+    if: >-
+      needs.comprobar.outputs.hay_clave == 'true' &&
+      ((github.event_name == 'schedule' && github.event.schedule == '0 1 * * *') ||
+       (github.event_name == 'workflow_dispatch' && inputs.rutina == 'evaluador'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        if: hashFiles('pnpm-lock.yaml') != ''
+      - uses: actions/setup-node@v4
+        if: hashFiles('pnpm-lock.yaml') != ''
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: hashFiles('pnpm-lock.yaml') != ''
+      - uses: anthropics/claude-code-action@v1
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: Lee .claude/routines/evaluador.md y ejecuta el bloque de prompt que contiene, tal cual.
+          claude_args: |
+            --max-turns 50
+            --mcp-config .github/mcp/notion.json
+            --allowedTools "Read,Grep,Glob,Bash(pnpm:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(git log:*),mcp__Notion__*"
+
+  cronista:
+    name: Cronista
+    needs: comprobar
+    if: >-
+      needs.comprobar.outputs.hay_clave == 'true' &&
+      ((github.event_name == 'schedule' && github.event.schedule == '0 2 * * *') ||
+       (github.event_name == 'workflow_dispatch' && inputs.rutina == 'cronista'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: Lee .claude/routines/cronista.md y ejecuta el bloque de prompt que contiene, tal cual.
+          claude_args: |
+            --max-turns 40
+            --mcp-config .github/mcp/notion.json
+            --allowedTools "Read,Grep,Glob,Write,Edit,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(git checkout:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git log:*),Bash(git status:*),mcp__Notion__*"
