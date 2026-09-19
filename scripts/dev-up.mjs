@@ -1,41 +1,32 @@
 #!/usr/bin/env node
 // Arranca el entorno de desarrollo con un solo comando.
 // 1. Si no existe .env, lo crea desde .env.example con secretos aleatorios locales.
-// 2. Ejecuta `docker compose up -d --wait` sobre deploy/compose/docker-compose.dev.yml.
-// Uso: `pnpm dev:up` · `pnpm dev:up --solo-env` (solo genera .env) · argumentos extra van a docker compose.
+// 2. Si .env tiene nombres antiguos (MINIO_*), añade sus equivalentes S3_*.
+// 3. Ejecuta `docker compose up -d --wait` sobre deploy/compose/docker-compose.dev.yml.
+// Uso: `pnpm dev:up` · `pnpm dev:up --solo-env` (solo prepara .env) · argumentos extra van a docker compose.
 import { spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
-const rutaEnv = join(raiz, '.env');
-const rutaEjemplo = join(raiz, '.env.example');
-const compose = [
-  'compose',
-  '--env-file',
-  rutaEnv,
-  '-f',
-  join(raiz, 'deploy/compose/docker-compose.dev.yml'),
-];
+import { asegurarEnv, composeArgs, leerEnv, migrarEnv, raiz } from './env-local.mjs';
 
 const argumentos = process.argv.slice(2);
 const soloEnv = argumentos.includes('--solo-env');
 const extra = argumentos.filter((a) => a !== '--solo-env');
 
-if (!existsSync(rutaEnv)) {
-  const ejemplo = readFileSync(rutaEjemplo, 'utf8');
-  const generado = ejemplo.replaceAll('GENERAR', () => randomBytes(32).toString('hex'));
-  writeFileSync(rutaEnv, generado, { mode: 0o600 });
+if (asegurarEnv()) {
   console.log('Creado .env con secretos aleatorios de desarrollo. No lo versiones.');
 } else {
   console.log('Reutilizando .env existente.');
 }
+const migradas = migrarEnv();
+if (migradas.length > 0) {
+  console.log(
+    `Añadidas a .env las variables ${migradas.join(', ')} a partir de los nombres MINIO_* anteriores.`,
+  );
+}
 
 if (soloEnv) process.exit(0);
 
-const resultado = spawnSync('docker', [...compose, 'up', '-d', '--wait', ...extra], {
+const resultado = spawnSync('docker', [...composeArgs, 'up', '-d', '--wait', ...extra], {
   cwd: raiz,
   stdio: 'inherit',
 });
@@ -46,15 +37,7 @@ if (resultado.error) {
 }
 if (resultado.status !== 0) process.exit(resultado.status ?? 1);
 
-const env = Object.fromEntries(
-  readFileSync(rutaEnv, 'utf8')
-    .split('\n')
-    .filter((linea) => linea.includes('=') && !linea.startsWith('#'))
-    .map((linea) => {
-      const indice = linea.indexOf('=');
-      return [linea.slice(0, indice), linea.slice(indice + 1)];
-    }),
-);
+const env = leerEnv();
 const puerto = (clave, porDefecto) => env[clave] || porDefecto;
 
 console.log(`
