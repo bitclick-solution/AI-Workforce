@@ -15,7 +15,8 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
-  id-token: write
+  checks: read
+  statuses: read
 
 jobs:
   comprobar:
@@ -69,7 +70,7 @@ jobs:
             1. Lee la descripción del PR y localiza el enlace a la rebanada de Notion y a docs/specs/<rebanada>.md.
             2. Obtén el diff completo con `gh pr diff ${{ github.event.pull_request.number }}` y el estado de la CI con `gh pr checks ${{ github.event.pull_request.number }}`.
             3. Aplica las comprobaciones del rol en su orden: reglas del tablero, zonas críticas de .github/CODEOWNERS, fronteras de arquitectura, corrección, secretos, alcance.
-            4. Publica un único comentario de revisión con `gh pr review ${{ github.event.pull_request.number }} --comment --body-file <archivo>` (o `--request-changes` si el veredicto es bloqueado). El comentario termina con una línea `Veredicto: favorable | favorable con cambios menores | bloqueado` y con la firma "— Revisor (agente)".
+            4. Publica un único comentario de revisión con `gh pr review ${{ github.event.pull_request.number }} --comment --body "<contenido>"` (o `--request-changes` si el veredicto es bloqueado). No tienes herramienta para escribir un archivo aparte: construye el cuerpo del comentario como el argumento de `--body`. El comentario termina con una línea `Veredicto: favorable | favorable con cambios menores | bloqueado` y con la firma "— Revisor (agente)".
             5. Si el servidor MCP de Notion está disponible, actualiza la rebanada según el rol: Demostrada si es favorable y no toca zona crítica; nota en Bloqueo si es bloqueado. Si no está disponible, dilo en el comentario.
             No modifiques archivos ni hagas commits. No fusiones.
           claude_args: |
