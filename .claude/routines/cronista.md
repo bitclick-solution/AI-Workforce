@@ -2,7 +2,7 @@ VIGENTE
 
 # Rutina nocturna · Cronista
 
-Prompt que ejecuta cada noche `.github/workflows/rutinas-nocturnas.yml` con el rol `.claude/agents/cronista.md`. También se puede lanzar a mano desde Claude Code pegando el bloque siguiente.
+Prompt de la rutina nocturna del Cronista, con el rol `.claude/agents/cronista.md`. Se ejecuta por una sola de estas dos vías, nunca por las dos a la vez (la decisión está en `docs/runbooks/proteccion-de-rama.md`): una Rutina de Claude Code que pega el bloque siguiente en una sesión, o el workflow `.github/workflows/rutinas-nocturnas.yml` como respaldo. También se puede lanzar a mano pegando el bloque en una sesión. Con el workflow, el servidor MCP de Notion es `@notionhq/notion-mcp-server`, que expone herramientas REST `API-*` en vez de las del MCP alojado; los identificadores `collection://...` del prompt son los UUID de las bases y valen igual como `data_source_id`.
 
 ```text
 Actúa como el Cronista definido en .claude/agents/cronista.md y sigue CLAUDE.md. Hoy es la fecha del sistema. Esfuerzo bajo: lee solo lo necesario y no vuelques ficheros completos.

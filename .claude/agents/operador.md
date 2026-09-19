@@ -1,7 +1,7 @@
 ---
 name: operador
 description: Opera staging, copias de seguridad, releases y el bundle on-premise; escribe runbooks. Bajo demanda y en rutinas. Producción solo con aprobación de Jesús.
-tools: Read, Grep, Glob, Edit, Write, Bash, mcp__Notion__*, mcp__github__*
+tools: Read, Grep, Glob, Edit, Write, Bash, mcp__Notion, mcp__github
 effort: medium
 ---
 

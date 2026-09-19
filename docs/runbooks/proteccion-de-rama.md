@@ -24,12 +24,23 @@ Ajustes de GitHub que Jesús configura una vez para que la fábrica funcione. Ni
    - `ANTHROPIC_API_KEY`: clave para el Revisor y las rutinas nocturnas.
    - `NOTION_TOKEN`: token de la integración interna de Notion, con permisos de lectura y escritura sobre la página **AI Workforce**.
 2. Comparte la página **AI Workforce** con la integración desde Notion (**Conexiones** en el menú de la página).
-3. Cuando quieras activar las rutinas nocturnas, crea la variable `RUTINAS_NOCTURNAS` con el valor `true`. Sin ella, los workflows programados no ejecutan nada.
+3. Solo si eliges GitHub Actions como vía de las rutinas nocturnas (ver la sección siguiente), crea la variable `RUTINAS_NOCTURNAS` con el valor `true` y el secreto `CRONISTA_TOKEN`: un token de acceso personal de grano fino con permisos de contenido y de pull requests sobre este repositorio, o un token de GitHub App. Sin `CRONISTA_TOKEN`, el Cronista usa `GITHUB_TOKEN` y los PR que abre no disparan la CI ni al Revisor, así que no se podrían fusionar con el ruleset.
 4. Si quieres que el Revisor pueda emitir aprobaciones formales además de comentarios, activa **Settings > Actions > General > Allow GitHub Actions to create and approve pull requests**. Sin este ajuste, el Revisor deja el veredicto como comentario de revisión y pide cambios cuando bloquea.
+
+## Vía de ejecución de las rutinas nocturnas
+
+Hay dos formas de ejecutar `.claude/routines/cronista.md` y `evaluador.md`. Elige una como primaria antes de activar nada: con las dos activas, el tablero recibe cada actualización por duplicado.
+
+| Vía                                      | Cómo se activa                                                                                                                        | Ventajas                                                                                                  | Límites                                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Rutinas de Claude Code (recomendada)     | Ya existen en la cuenta de Bitclick: "Cronista nocturno · AI Workforce" (22:00 UTC) y "Evaluador nocturno · AI Workforce" (22:30 UTC) | Sin clave de API; la app de GitHub de Claude dispara la CI y al Revisor sobre los PR que abre el Cronista | Dependen de la suscripción de Claude Code y de la sesión a la que están ligadas  |
+| GitHub Actions (`rutinas-nocturnas.yml`) | Variable `RUTINAS_NOCTURNAS=true` más `ANTHROPIC_API_KEY`, `NOTION_TOKEN` y `CRONISTA_TOKEN`                                          | Auditable en el repositorio e independiente de cualquier sesión                                           | Consume clave de API; sin `CRONISTA_TOKEN` los PR del Cronista no disparan la CI |
+
+Recomendación del Revisor y del Constructor: Rutinas de Claude Code como vía primaria y el workflow apagado como respaldo documentado. Si eliges Actions, desactiva antes las dos Rutinas de Claude Code.
 
 ## Comprobación
 
 1. Abre un PR de prueba desde una rama `rebanada/<nombre>`. El workflow `Revisor` debe dejar un comentario con veredicto en menos de diez minutos.
-2. Ejecuta **Actions > Rutinas nocturnas > Run workflow** con la rutina `cronista`. La página del ciclo en curso debe recibir un resumen de dirección nuevo.
+2. Si la vía elegida es Actions, ejecuta **Actions > Rutinas nocturnas > Run workflow** con la rutina `cronista`. La página del ciclo en curso debe recibir un resumen de dirección nuevo.
 
 **Precaución:** Los secretos no se copian nunca al repositorio, a `.env.example`, a los prompts ni a los registros de los workflows.

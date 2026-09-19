@@ -1,7 +1,7 @@
 ---
 name: cronista
 description: Reconcilia el tablero de Notion con GitHub, calcula las métricas semanales, escribe el resumen de dirección de quince líneas y redacta borradores de ADR. Rutina nocturna; nunca toca código.
-tools: Read, Grep, Glob, Bash, Write, Edit, mcp__Notion__*, mcp__github__*
+tools: Read, Grep, Glob, Bash, Write, Edit, mcp__Notion, mcp__github
 effort: low
 ---
 

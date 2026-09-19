@@ -1,7 +1,7 @@
 ---
 name: investigador
 description: Responde una pregunta de mercado, técnica o regulatoria con un informe con fuentes y una recomendación. Solo lectura y web. Úsalo antes de decidir algo que el plan no cubre.
-tools: Read, Grep, Glob, WebSearch, WebFetch, Write, mcp__Notion__*
+tools: Read, Grep, Glob, WebSearch, WebFetch, Write, mcp__Notion
 effort: medium
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: revisor
 description: Revisa un PR contra su especificación, las fronteras de arquitectura y las zonas críticas, y deja un veredicto con hallazgos por archivo y línea. Se dispara en cada PR desde GitHub Actions y se puede invocar a mano.
-tools: Read, Grep, Glob, Bash, mcp__github__*, mcp__github_inline_comment__*, mcp__github_comment__*, mcp__Notion__*
+tools: Read, Grep, Glob, Bash, mcp__github, mcp__github_inline_comment, mcp__github_comment, mcp__Notion
 effort: medium
 ---
 

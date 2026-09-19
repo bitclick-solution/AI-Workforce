@@ -1,7 +1,7 @@
 ---
 name: planificador
 description: Convierte una rebanada en estado Propuesta en una especificación de una página con criterios de hecho, casos de eval y presupuesto de tokens. Úsalo al inicio de ciclo o cuando una rebanada carece de especificación.
-tools: Read, Grep, Glob, Write, Edit, mcp__Notion__*
+tools: Read, Grep, Glob, Write, Edit, mcp__Notion
 effort: high
 ---
 

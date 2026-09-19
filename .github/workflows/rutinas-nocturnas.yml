@@ -1,7 +1,10 @@
 name: Rutinas nocturnas
 
-# Evaluador a las 01:00 UTC y Cronista a las 02:00 UTC. Desactivadas hasta que exista la variable
-# de repositorio RUTINAS_NOCTURNAS=true. Requieren los secretos ANTHROPIC_API_KEY y NOTION_TOKEN.
+# Vía de respaldo en GitHub Actions para el Evaluador (01:00 UTC) y el Cronista (02:00 UTC).
+# La vía primaria recomendada son las Rutinas de Claude Code; nunca las dos a la vez.
+# Ver docs/runbooks/proteccion-de-rama.md. Desactivadas hasta que exista la variable de repositorio
+# RUTINAS_NOCTURNAS=true. Requieren los secretos ANTHROPIC_API_KEY y NOTION_TOKEN; el Cronista
+# necesita además CRONISTA_TOKEN, porque los PR abiertos con GITHUB_TOKEN no disparan la CI ni al Revisor.
 
 on:
   schedule:
@@ -15,28 +18,28 @@ on:
         type: choice
         options: [cronista, evaluador]
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-  id-token: write
-
 jobs:
   comprobar:
     name: Comprobar activación y secretos
     if: vars.RUTINAS_NOCTURNAS == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       hay_clave: ${{ steps.clave.outputs.hay_clave }}
     steps:
       - id: clave
         env:
           HAY_CLAVE: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAY_TOKEN_CRONISTA: ${{ secrets.CRONISTA_TOKEN != '' }}
         run: |
           echo "hay_clave=$HAY_CLAVE" >> "$GITHUB_OUTPUT"
           if [ "$HAY_CLAVE" != "true" ]; then
             echo "::error::RUTINAS_NOCTURNAS está activa pero falta ANTHROPIC_API_KEY."
             exit 1
+          fi
+          if [ "$HAY_TOKEN_CRONISTA" != "true" ]; then
+            echo "::warning::Sin CRONISTA_TOKEN: los PR que abra el Cronista con GITHUB_TOKEN no dispararán la CI ni al Revisor."
           fi
 
   evaluador:
@@ -46,13 +49,16 @@ jobs:
       needs.comprobar.outputs.hay_clave == 'true' &&
       ((github.event_name == 'schedule' && github.event.schedule == '0 1 * * *') ||
        (github.event_name == 'workflow_dispatch' && inputs.rutina == 'evaluador'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
         if: hashFiles('pnpm-lock.yaml') != ''
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: hashFiles('pnpm-lock.yaml') != ''
         with:
           node-version-file: .node-version
@@ -62,14 +68,15 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ github.token }}
           prompt: Lee .claude/routines/evaluador.md y ejecuta el bloque de prompt que contiene, tal cual.
           claude_args: |
             --max-turns 50
             --mcp-config .github/mcp/notion.json
-            --allowedTools "Read,Grep,Glob,Bash(pnpm:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(git log:*),mcp__Notion__*"
+            --allowedTools "Read,Grep,Glob,Bash(pnpm:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(git log:*),mcp__Notion"
 
   cronista:
     name: Cronista
@@ -78,20 +85,27 @@ jobs:
       needs.comprobar.outputs.hay_clave == 'true' &&
       ((github.event_name == 'schedule' && github.event.schedule == '0 2 * * *') ||
        (github.event_name == 'workflow_dispatch' && inputs.rutina == 'cronista'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          # Con CRONISTA_TOKEN los PR del Cronista disparan la CI y al Revisor; con GITHUB_TOKEN no.
+          token: ${{ secrets.CRONISTA_TOKEN || github.token }}
       - uses: anthropics/claude-code-action@v1
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          GH_TOKEN: ${{ secrets.CRONISTA_TOKEN || github.token }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.CRONISTA_TOKEN || github.token }}
           prompt: Lee .claude/routines/cronista.md y ejecuta el bloque de prompt que contiene, tal cual.
           claude_args: |
             --max-turns 40
             --mcp-config .github/mcp/notion.json
-            --allowedTools "Read,Grep,Glob,Write,Edit,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(git checkout:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git log:*),Bash(git status:*),mcp__Notion__*"
+            --allowedTools "Read,Grep,Glob,Write,Edit,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(git checkout:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git log:*),Bash(git status:*),mcp__Notion"

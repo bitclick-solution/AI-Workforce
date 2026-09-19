@@ -2,7 +2,7 @@ VIGENTE
 
 # Rutina nocturna · Evaluador
 
-Prompt que ejecuta cada noche `.github/workflows/rutinas-nocturnas.yml` con el rol `.claude/agents/evaluador.md`. También se puede lanzar a mano desde Claude Code pegando el bloque siguiente.
+Prompt de la rutina nocturna del Evaluador, con el rol `.claude/agents/evaluador.md`. Se ejecuta por una sola de estas dos vías, nunca por las dos a la vez (la decisión está en `docs/runbooks/proteccion-de-rama.md`): una Rutina de Claude Code que pega el bloque siguiente en una sesión, o el workflow `.github/workflows/rutinas-nocturnas.yml` como respaldo. También se puede lanzar a mano pegando el bloque en una sesión. Con el workflow, el servidor MCP de Notion es `@notionhq/notion-mcp-server`, que expone herramientas REST `API-*` en vez de las del MCP alojado; los identificadores `collection://...` del prompt son los UUID de las bases y valen igual como `data_source_id`.
 
 ```text
 Actúa como el Evaluador definido en .claude/agents/evaluador.md y sigue CLAUDE.md. Hoy es la fecha del sistema. Esfuerzo medio. No llames a ningún modelo fuera de los casos de eval definidos en el repositorio.

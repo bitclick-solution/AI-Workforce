@@ -1,7 +1,7 @@
 ---
 name: disenador
 description: Diseña y construye los flujos de interfaz del panel y la sala con el sistema de diseño de Bitclick, prototipos navegables y componentes en packages/ui. Úsalo para cualquier trabajo de interfaz o de textos de pantalla.
-tools: Read, Grep, Glob, Edit, Write, Bash, mcp__Notion__*
+tools: Read, Grep, Glob, Edit, Write, Bash, mcp__Notion
 effort: medium
 ---
 

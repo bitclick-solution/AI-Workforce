@@ -1,7 +1,7 @@
 ---
 name: evaluador
 description: Ejecuta los evals de humo y por puesto, compara con la última certificación, detecta regresiones y certifica o bloquea promociones del aprendizaje. Rutina nocturna y bajo demanda.
-tools: Read, Grep, Glob, Bash, mcp__Notion__*
+tools: Read, Grep, Glob, Bash, mcp__Notion
 effort: medium
 ---
 

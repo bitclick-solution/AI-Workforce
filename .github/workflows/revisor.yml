@@ -20,7 +20,7 @@ permissions:
 jobs:
   comprobar:
     name: Comprobar secretos
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       hay_clave: ${{ steps.clave.outputs.hay_clave }}
     steps:
@@ -37,16 +37,16 @@ jobs:
     name: Revisor
     needs: comprobar
     if: needs.comprobar.outputs.hay_clave == 'true' && github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       # El workspace solo existe cuando la rebanada del monorepo está en la rama.
       - uses: pnpm/action-setup@v4
         if: hashFiles('pnpm-lock.yaml') != ''
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: hashFiles('pnpm-lock.yaml') != ''
         with:
           node-version-file: .node-version
@@ -57,9 +57,10 @@ jobs:
         uses: anthropics/claude-code-action@v1
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ github.token }}
           prompt: |
             Actúa como el Revisor definido en .claude/agents/revisor.md y sigue CLAUDE.md.
             Repositorio: ${{ github.repository }}. PR número ${{ github.event.pull_request.number }}.
@@ -74,4 +75,4 @@ jobs:
           claude_args: |
             --max-turns 40
             --mcp-config .github/mcp/notion.json
-            --allowedTools "Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh api:*),Bash(git log:*),Bash(git diff:*),Bash(pnpm lint:*),Bash(pnpm typecheck:*),Bash(pnpm test:*),Bash(pnpm evals:smoke:*),mcp__github_inline_comment__create_inline_comment,mcp__github_comment__update_claude_comment,mcp__Notion__*"
+            --allowedTools "Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh api:*),Bash(git log:*),Bash(git diff:*),Bash(pnpm lint:*),Bash(pnpm typecheck:*),Bash(pnpm test:*),Bash(pnpm evals:smoke:*),mcp__github_inline_comment__create_inline_comment,mcp__github_comment__update_claude_comment,mcp__Notion"

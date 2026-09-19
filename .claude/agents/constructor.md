@@ -1,7 +1,7 @@
 ---
 name: constructor
 description: Implementa una rebanada en estado Lista en su propia rama y abre el PR con la lista de hecho rellena. Úsalo para cualquier trabajo de código, pruebas, evals, migraciones o configuración.
-tools: Read, Grep, Glob, Edit, Write, Bash, mcp__Notion__*, mcp__github__*
+tools: Read, Grep, Glob, Edit, Write, Bash, mcp__Notion, mcp__github
 effort: high
 ---
 
