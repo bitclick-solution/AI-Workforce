@@ -8,22 +8,37 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./db": {
+      "types": "./src/db/index.ts",
+      "default": "./src/db/index.ts"
+    },
+    "./pruebas": {
+      "types": "./src/pruebas/index.ts",
+      "default": "./src/pruebas/index.ts"
     }
   },
   "files": [
-    "src"
+    "src",
+    "drizzle"
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
+    "db:migrar": "tsx src/db/cli.ts migrar",
+    "db:revertir": "tsx src/db/cli.ts revertir",
     "clean": "rm -rf dist coverage .turbo"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "drizzle-kit": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "dependencies": {
+    "drizzle-orm": "catalog:",
+    "postgres": "catalog:",
     "zod": "catalog:"
   }
 }
