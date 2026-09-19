@@ -43,6 +43,69 @@ jobs:
       - uses: ./.github/actions/setup
       - run: pnpm test
 
+  base-de-datos:
+    name: Base de datos
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16-trixie
+        env:
+          # Base efímera del runner, sin contraseña a propósito: así no hay ninguna
+          # credencial escrita en el repositorio, ni siquiera de juguete.
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: aiworkforce
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/aiworkforce
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - name: Migración, aislamiento, inmutabilidad, purga y carga reducida
+        run: pnpm --filter @aiw/domain --filter @aiw/ledger test
+
+  base-de-datos-carga:
+    name: Base de datos · carga
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16-trixie
+        env:
+          # Base efímera del runner, sin contraseña a propósito: así no hay ninguna
+          # credencial escrita en el repositorio, ni siquiera de juguete.
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: aiworkforce
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/aiworkforce
+      AIW_PRUEBA_CARGA: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - name: Un millón de entradas, cien mil mensajes y el panel por debajo de 200 ms
+        run: pnpm --filter @aiw/domain exec vitest run src/pruebas/carga.test.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: informe-de-carga
+          path: packages/domain/bench/informe.md
+          if-no-files-found: ignore
+
   evals-smoke:
     name: Evals de humo
     runs-on: ubuntu-24.04
