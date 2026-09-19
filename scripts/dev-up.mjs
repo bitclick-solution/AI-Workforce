@@ -63,7 +63,7 @@ Entorno de desarrollo arrancado:
   Temporal          localhost:${puerto('TEMPORAL_PORT', '7233')}
   Temporal UI       http://localhost:${puerto('TEMPORAL_UI_PORT', '8080')}
   Centrifugo        http://localhost:${puerto('CENTRIFUGO_PORT', '8000')}
-  MinIO consola     http://localhost:${puerto('MINIO_CONSOLE_PORT', '9001')}
+  Silo (S3) consola http://localhost:${puerto('S3_CONSOLE_PORT', puerto('MINIO_CONSOLE_PORT', '9001'))}
   Langfuse          http://localhost:${puerto('LANGFUSE_PORT', '3001')}  (usuario ${puerto('LANGFUSE_INIT_USER_EMAIL', 'dev@aiworkforce.local')}; contraseña en .env)
 Para parar: pnpm dev:down
 `);

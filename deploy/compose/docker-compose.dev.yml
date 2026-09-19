@@ -17,16 +17,16 @@ x-langfuse-env: &langfuse-env
   LANGFUSE_USE_AZURE_BLOB: 'false'
   LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
   LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
-  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-aiw}
-  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Falta MINIO_ROOT_PASSWORD en .env}
-  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${S3_ROOT_USER:-${MINIO_ROOT_USER:-aiw}}
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${S3_ROOT_PASSWORD:-${MINIO_ROOT_PASSWORD:?Falta S3_ROOT_PASSWORD en .env}}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://silo:9000
   LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: 'true'
   LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
   LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
   LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
-  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-aiw}
-  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Falta MINIO_ROOT_PASSWORD en .env}
-  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${S3_ROOT_USER:-${MINIO_ROOT_USER:-aiw}}
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${S3_ROOT_PASSWORD:-${MINIO_ROOT_PASSWORD:?Falta S3_ROOT_PASSWORD en .env}}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://silo:9000
   LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: 'true'
   LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
   LANGFUSE_S3_BATCH_EXPORT_ENABLED: 'false'
@@ -114,26 +114,42 @@ services:
         soft: 65535
         hard: 65535
 
-  minio:
-    image: cgr.dev/chainguard/minio:latest
+  silo:
+    # Almacén de objetos S3 (ADR-012). Fork mantenido de MinIO: misma API, mismas variables MINIO_*.
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
     restart: unless-stopped
-    entrypoint: sh
-    # Crea los cubos de la plataforma y de Langfuse antes de arrancar.
-    command: -c 'mkdir -p /data/langfuse /data/aiworkforce && minio server --address ":9000" --console-address ":9001" /data'
+    command: server /data --address ":9000" --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aiw}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Falta MINIO_ROOT_PASSWORD en .env}
+      MINIO_ROOT_USER: ${S3_ROOT_USER:-${MINIO_ROOT_USER:-aiw}}
+      MINIO_ROOT_PASSWORD: ${S3_ROOT_PASSWORD:-${MINIO_ROOT_PASSWORD:?Falta S3_ROOT_PASSWORD en .env}}
     ports:
-      - '127.0.0.1:${MINIO_PORT:-9000}:9000'
-      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
+      - '127.0.0.1:${S3_PORT:-${MINIO_PORT:-9000}}:9000'
+      - '127.0.0.1:${S3_CONSOLE_PORT:-${MINIO_CONSOLE_PORT:-9001}}:9001'
     volumes:
-      - minio_data:/data
+      - s3_data:/data
     healthcheck:
-      test: ['CMD', 'mc', 'ready', 'local']
+      test: ['CMD', 'mcli', 'ready', 'local']
       interval: 2s
       timeout: 5s
       retries: 15
       start_period: 2s
+
+  silo-init:
+    # Crea los cubos una vez que Silo está sano y termina. Langfuse espera a que acabe.
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
+    restart: 'no'
+    depends_on:
+      silo:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${S3_ROOT_USER:-${MINIO_ROOT_USER:-aiw}}
+      MINIO_ROOT_PASSWORD: ${S3_ROOT_PASSWORD:-${MINIO_ROOT_PASSWORD:?Falta S3_ROOT_PASSWORD en .env}}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - >-
+        mcli alias set silo http://silo:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
+        mcli mb --ignore-existing silo/aiworkforce silo/langfuse &&
+        mcli ls silo
 
   redis:
     image: redis:7-alpine
@@ -176,8 +192,8 @@ services:
     depends_on: &langfuse-depends-on
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_healthy
+      silo-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       clickhouse:
@@ -193,8 +209,8 @@ services:
     environment:
       <<: *langfuse-env
       NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:?Falta LANGFUSE_NEXTAUTH_SECRET en .env}
-      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:${MINIO_PORT:-9000}
-      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:${S3_PORT:-${MINIO_PORT:-9000}}
+      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://silo:9000
       # Organización, proyecto y usuario de desarrollo creados al arrancar.
       LANGFUSE_INIT_ORG_ID: bitclick
       LANGFUSE_INIT_ORG_NAME: Bitclick Solutions
@@ -220,7 +236,7 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  s3_data:
   redis_data:
   clickhouse_data:
   clickhouse_logs:
