@@ -89,10 +89,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: gitleaks
+      - name: gitleaks sobre los commits de este cambio
+        env:
+          RANGO: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
         run: |
+          # En la primera subida de una rama no hay commit anterior: se escanea toda la historia hasta HEAD.
+          case "$RANGO" in 0000000000000000000000000000000000000000..*) RANGO="${RANGO#*..}" ;; esac
+          echo "Rango: $RANGO"
           docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
-            detect --source=/repo --redact --verbose --exit-code 1
+            git /repo --log-opts="$RANGO" --redact --verbose --exit-code 1
 
   compose:
     name: Compose de desarrollo arranca
