@@ -127,6 +127,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
+          # Este job no instala pnpm; setup-node v5 intentaría usarlo para la caché.
+          package-manager-cache: false
       - name: Validar el fichero
         run: |
           node scripts/dev-up.mjs --solo-env
