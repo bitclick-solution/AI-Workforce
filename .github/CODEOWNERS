@@ -1,6 +1,0 @@
-# Zonas críticas (ver CLAUDE.md, sección "Zonas críticas con revisión humana obligatoria de Jesús").
-# Cualquier PR que toque estas rutas exige la aprobación de Jesús además del veredicto del Revisor.
-
-/CLAUDE.md @3rChuss
-/.claude/ @3rChuss
-/.github/ @3rChuss
