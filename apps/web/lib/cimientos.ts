@@ -11,7 +11,7 @@ export function estadoCimientos(): EstadoCimientos {
       'Monorepo con pnpm y Turborepo',
       'TypeScript estricto en Node 22',
       'Integración continua: lint, tipos, pruebas, evals de humo, Playwright e imágenes',
-      'Compose de desarrollo: PostgreSQL con pgvector, Temporal, Centrifugo, Langfuse y MinIO',
+      'Compose de desarrollo: PostgreSQL con pgvector, Temporal, Centrifugo, Langfuse y Silo (S3)',
     ],
   };
 }

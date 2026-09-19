@@ -20,7 +20,7 @@ Plataforma de equipos de agentes de IA de Bitclick Solutions: se contratan como 
    pnpm install
    ```
 
-2. Arranca la infraestructura de desarrollo. El comando crea `.env` a partir de `.env.example` con secretos aleatorios locales y levanta PostgreSQL 16 con pgvector, Temporal con su interfaz, Centrifugo, Langfuse y MinIO:
+2. Arranca la infraestructura de desarrollo. El comando crea `.env` a partir de `.env.example` con secretos aleatorios locales y levanta PostgreSQL 16 con pgvector, Temporal con su interfaz, Centrifugo, Langfuse y Silo (almacén S3):
 
    ```bash
    pnpm dev:up
