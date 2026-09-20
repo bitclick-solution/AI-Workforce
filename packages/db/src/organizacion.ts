@@ -10,6 +10,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  check,
   index,
   jsonb,
   numeric,
@@ -21,7 +22,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import { columnasMutables, idPrimario, tenantId } from './columnas.js';
-import { estadoOrganizacion, planOrganizacion } from './enumeraciones.js';
+import { estadoOrganizacion } from './enumeraciones.js';
 
 /** Partner con organizaciones cliente, permisos cruzados y facturación por cliente. */
 export const organizacionParaguas = pgTable(
@@ -46,11 +47,19 @@ export const organizacion = pgTable(
       onDelete: 'restrict',
     }),
     nombre: text('nombre').notNull(),
-    plan: planOrganizacion('plan').notNull().default('starter'),
+    /**
+     * Plan comercial. Columna `text` validada por `esquemas.planOrganizacion` de
+     * `@aiw/domain`: el ADR-011 marca los planes como hipótesis que se revisa al
+     * cierre de la fase 1, y cambiar la lista no puede costar una migración.
+     */
+    plan: text('plan').notNull().default('departamento'),
     regionDatos: text('region_datos').notNull().default('eu-west'),
     limites: jsonb('limites').notNull().default({}),
-    /** Mínimo legal de seis meses; la retención se cumple soltando particiones. */
-    retencionMeses: bigint('retencion_meses', { mode: 'number' }).notNull().default(6),
+    /**
+     * Retención de la auditoría en meses (ADR-010): mínimo 6, por defecto 24 y
+     * máximo 120. La retención se cumple soltando particiones, nunca borrando filas.
+     */
+    retencionMeses: bigint('retencion_meses', { mode: 'number' }).notNull().default(24),
     politicaCruceDepartamentos: jsonb('politica_cruce_departamentos').notNull().default({}),
     brandVoice: jsonb('brand_voice').notNull().default({}),
     estado: estadoOrganizacion('estado').notNull().default('activa'),
@@ -59,6 +68,7 @@ export const organizacion = pgTable(
   (t) => [
     index('organizacion_paraguas_idx').on(t.paraguasId, t.creadoEn),
     index('organizacion_estado_idx').on(t.estado, t.creadoEn),
+    check('organizacion_retencion_rango', sql`${t.retencionMeses} between 6 and 120`),
   ],
 );
 

@@ -71,7 +71,8 @@ services/
   pii/              Detección de datos personales (Presidio), servicio aislado en Python
   documents/        OCR de respaldo y generación de PDF, servicio aislado en Python
 packages/
-  domain/           Entidades, políticas, niveles de autonomía, brand voice, riesgo, esquemas Zod
+  domain/           Enumeraciones del negocio y esquemas Zod de las cargas jsonb
+  db/               Esquema de PostgreSQL con Drizzle, migraciones, cliente con tenant
   models/           Enrutado sobre AI SDK, caché de prompts, coste por tarea
   mcp-gateway/      Cliente MCP, lista blanca por puesto y nivel, credenciales, registro
   learning/         Señales, lecciones, evaluación en sombra, promoción, versiones

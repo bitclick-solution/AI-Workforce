@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-const RAIZ = fileURLToPath(new URL('../../', import.meta.url));
+const RAIZ = fileURLToPath(new URL('../', import.meta.url));
 
 const EXTENSIONES = ['.ts', '.sql', '.json', '.md'];
 
@@ -62,7 +62,7 @@ describe('sin secretos en el paquete', () => {
   });
 
   it('la conexión llega del entorno, no del código', () => {
-    const cli = readFileSync(join(RAIZ, 'src/db/cli.ts'), 'utf8');
+    const cli = readFileSync(join(RAIZ, 'src/cli.ts'), 'utf8');
     expect(cli).toContain("process.env['DATABASE_URL']");
   });
 });

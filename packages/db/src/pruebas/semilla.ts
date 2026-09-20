@@ -7,9 +7,9 @@
  */
 import type postgres from 'postgres';
 
-import { DIMENSION_EMBEDDING } from '../db/columnas.js';
-import { conTenant } from '../db/cliente.js';
-import { uuidV7 } from '../db/identificadores.js';
+import { DIMENSION_EMBEDDING } from '../columnas.js';
+import { conTenant } from '../cliente.js';
+import { uuidV7 } from '../identificadores.js';
 
 export interface OrganizacionSembrada {
   tenantId: string;
@@ -22,6 +22,8 @@ export interface OrganizacionSembrada {
   tareaHijaId: string;
   pasoId: string;
   aprobacionId: string;
+  aprobacionDecididaId: string;
+  decisionId: string;
   senalId: string;
   leccionId: string;
   salaId: string;
@@ -136,18 +138,45 @@ export async function sembrarOrganizacion(
       )
     `;
 
+    // Sin fila en `decision_aprobacion`: es la aprobación pendiente que busca el panel.
     const [aprobacion] = await tx<{ id: string }[]>`
       insert into aprobacion (
         tenant_id, tarea_id, paso_id, persona_id, clase_accion, nivel_exigido,
-        borrador_opaco, resumen_legible, decision
+        borrador_opaco, resumen_legible, vence_en
       ) values (
         ${tenantId}, ${tareaId}, ${pasoId}, ${personaId}, 'pago.emitir', 'n1',
         '{"tipo":"pago","carga":{"opaco":true}}'::jsonb,
-        'Pagar 1.200 € a Suministros Pérez', 'pendiente'
+        'Pagar 1.200 € a Suministros Pérez', now() + interval '1 day'
       )
       returning id
     `;
     const aprobacionId = exigir(aprobacion?.id, 'aprobacion');
+
+    // Y una segunda ya resuelta, para que la tabla de decisiones tenga filas.
+    const [aprobacionDecidida] = await tx<{ id: string }[]>`
+      insert into aprobacion (
+        tenant_id, tarea_id, paso_id, persona_id, clase_accion, nivel_exigido,
+        borrador_opaco, resumen_legible
+      ) values (
+        ${tenantId}, ${tareaId}, ${pasoId}, ${personaId}, 'correo.enviar', 'n1',
+        '{"tipo":"correo","carga":{"opaco":true}}'::jsonb,
+        'Enviar el recordatorio de la factura 2026/114'
+      )
+      returning id
+    `;
+    const aprobacionDecididaId = exigir(aprobacionDecidida?.id, 'aprobacion decidida');
+
+    const [decision] = await tx<{ id: string }[]>`
+      insert into decision_aprobacion (
+        tenant_id, aprobacion_id, persona_id, sentido, motivo, edicion_previa
+      ) values (
+        ${tenantId}, ${aprobacionDecididaId}, ${personaId}, 'editada',
+        'Cambié el importe: el albarán decía otra cosa',
+        '{"importe":1200}'::jsonb
+      )
+      returning id
+    `;
+    const decisionId = exigir(decision?.id, 'decision_aprobacion');
 
     await tx`
       insert into disparador (tenant_id, tipo, puesto_id, propietario_persona_id, nivel, activo)
@@ -306,6 +335,8 @@ export async function sembrarOrganizacion(
       tareaHijaId,
       pasoId,
       aprobacionId,
+      aprobacionDecididaId,
+      decisionId,
       senalId,
       leccionId,
       salaId,

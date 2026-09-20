@@ -3,6 +3,17 @@
 -- No borra las extensiones `pgcrypto` ni `vector` porque pueden servir a otra base
 -- del mismo clúster; sí borra todo lo que crea la migración: tablas, tipos, funciones
 -- y roles. El orden es de la hoja a la raíz porque las claves foráneas restringen.
+--
+-- Los objetos son de `aiw_migrador`: el reverso lo asume, igual que la migración,
+-- para que no haga falta ser superusuario. El rol se suelta antes de borrarlo.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'aiw_migrador') then
+    execute 'set local role aiw_migrador';
+  end if;
+end
+$$;
+--> statement-breakpoint
 
 drop table if exists contador_consumo;
 --> statement-breakpoint
@@ -49,6 +60,8 @@ drop table if exists leccion;
 drop table if exists senal;
 --> statement-breakpoint
 drop table if exists disparador;
+--> statement-breakpoint
+drop table if exists decision_aprobacion;
 --> statement-breakpoint
 drop table if exists aprobacion;
 --> statement-breakpoint
@@ -118,7 +131,7 @@ drop type if exists estado_leccion;
 --> statement-breakpoint
 drop type if exists tipo_senal;
 --> statement-breakpoint
-drop type if exists decision_aprobacion;
+drop type if exists sentido_decision;
 --> statement-breakpoint
 drop type if exists resultado_accion;
 --> statement-breakpoint
@@ -136,8 +149,6 @@ drop type if exists estado_departamento;
 --> statement-breakpoint
 drop type if exists estado_organizacion;
 --> statement-breakpoint
-drop type if exists plan_organizacion;
---> statement-breakpoint
 
 drop function if exists crear_particion_mensual(text, date);
 --> statement-breakpoint
@@ -148,6 +159,10 @@ drop function if exists aiw_libro_solo_insercion();
 drop function if exists aiw_tenant_actual();
 --> statement-breakpoint
 drop function if exists uuid_generar_v7();
+--> statement-breakpoint
+
+-- Nadie borra el rol que está asumiendo: se suelta antes.
+reset role;
 --> statement-breakpoint
 
 -- `drop owned by` retira los permisos que quedan (uso del esquema, funciones)

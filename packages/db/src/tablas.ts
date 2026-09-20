@@ -34,7 +34,7 @@ import {
   persona,
 } from './organizacion.js';
 import { intervencion, mensaje, sala, salaParticipante } from './salas.js';
-import { aprobacion, delegacion, disparador, paso, tarea } from './trabajo.js';
+import { aprobacion, decisionAprobacion, delegacion, disparador, paso, tarea } from './trabajo.js';
 
 /** Tablas con `tenant_id` y política de RLS por tenant. */
 export const TABLAS_CON_TENANT = [
@@ -49,6 +49,7 @@ export const TABLAS_CON_TENANT = [
   paso,
   delegacion,
   aprobacion,
+  decisionAprobacion,
   disparador,
   senal,
   leccion,
@@ -88,6 +89,7 @@ export const TABLAS_INFRAESTRUCTURA = [migracionAplicada] as const satisfies rea
 export const NOMBRES_TABLAS_INMUTABLES = [
   'version_puesto',
   'aprobacion',
+  'decision_aprobacion',
   'leccion',
   'promocion',
   'paso',
@@ -145,6 +147,7 @@ export const ORDEN_PURGA: readonly string[] = [
   'leccion',
   'senal',
   'disparador',
+  'decision_aprobacion',
   'aprobacion',
   'delegacion',
   'paso',

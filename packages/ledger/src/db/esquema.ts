@@ -1,7 +1,7 @@
 /**
  * Esquema del libro de auditoría y del contador.
  *
- * El DDL entra en la migración inicial de `@aiw/domain` porque es una sola base de
+ * El DDL entra en la migración inicial de `@aiw/db` porque es una sola base de
  * datos; aquí vive la declaración tipada que usa el punto único de escritura.
  *
  * `entrada_auditoria` está particionada por mes sobre `creado_en`, su clave primaria
@@ -32,7 +32,7 @@ import {
   idParticionado,
   idPrimario,
   tenantId,
-} from '@aiw/domain/db';
+} from '@aiw/db';
 
 export const entradaAuditoria = pgTable(
   'entrada_auditoria',

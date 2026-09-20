@@ -1,16 +1,57 @@
 -- Migración inicial del modelo de datos v1 (ADR-007).
 --
--- Cubre lo que el esquema Drizzle de `packages/domain/src/db` y `packages/ledger/src/db`
+-- Cubre lo que el esquema Drizzle de `packages/db/src` y `packages/ledger/src/db`
 -- declara, más lo que Drizzle no expresa: extensiones, función de UUID v7, roles,
 -- seguridad a nivel de fila con sus políticas, particionado mensual, índices HNSW,
 -- permisos del rol de aplicación y la prohibición de tocar el libro de auditoría.
 --
--- Se aplica con `pnpm --filter @aiw/domain db:migrar` y se deshace con `db:revertir`.
+-- Se aplica con `pnpm --filter @aiw/db db:migrar` y se deshace con `db:revertir`.
 -- Ningún entorno se cambia a mano.
 
 create extension if not exists pgcrypto;
 --> statement-breakpoint
 create extension if not exists vector;
+--> statement-breakpoint
+
+-- ---------------------------------------------------------------------------
+-- Roles. `aiw_migrador` posee el esquema; `aiw_app` corre la aplicación y no
+-- tiene BYPASSRLS, así que las políticas se le aplican siempre.
+--
+-- Se crean lo primero y el usuario que migra los asume: todo lo que viene después
+-- —funciones, tipos y tablas— queda a nombre de `aiw_migrador` y no del usuario
+-- que abrió la conexión, que cambia entre entornos. Sin esto, el dueño del esquema
+-- sería quien migró ese día.
+-- ---------------------------------------------------------------------------
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'aiw_migrador') then
+    create role aiw_migrador nologin;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'aiw_app') then
+    create role aiw_app nologin;
+  end if;
+end
+$$;
+--> statement-breakpoint
+
+-- El esquema `public` no deja crear a cualquiera desde PostgreSQL 15.
+grant usage, create on schema public to aiw_migrador;
+--> statement-breakpoint
+
+do $$
+begin
+  execute format('grant aiw_migrador to %I', current_user);
+exception
+  when insufficient_privilege then
+    raise exception
+      'El usuario % no puede asumir aiw_migrador. Dale la pertenencia con «grant aiw_migrador to %» desde un rol con opción de administración y repite la migración.',
+      current_user, current_user;
+end
+$$;
+--> statement-breakpoint
+
+-- Local a la transacción de la migración: al terminar, la sesión vuelve a su rol.
+set local role aiw_migrador;
 --> statement-breakpoint
 
 -- ---------------------------------------------------------------------------
@@ -44,22 +85,6 @@ as $$
 $$;
 --> statement-breakpoint
 
--- ---------------------------------------------------------------------------
--- Roles. `aiw_migrador` posee el esquema; `aiw_app` corre la aplicación y no
--- tiene BYPASSRLS, así que las políticas se le aplican siempre.
--- ---------------------------------------------------------------------------
-do $$
-begin
-  if not exists (select 1 from pg_roles where rolname = 'aiw_migrador') then
-    create role aiw_migrador nologin;
-  end if;
-  if not exists (select 1 from pg_roles where rolname = 'aiw_app') then
-    create role aiw_app nologin;
-  end if;
-end
-$$;
---> statement-breakpoint
-
 create table if not exists migracion_aplicada (
   nombre text primary key,
   huella text not null,
@@ -70,8 +95,6 @@ create table if not exists migracion_aplicada (
 -- ---------------------------------------------------------------------------
 -- Enumeraciones. Columnas para lo que se filtra y se ordena.
 -- ---------------------------------------------------------------------------
-create type plan_organizacion as enum ('starter', 'business', 'enterprise');
---> statement-breakpoint
 create type estado_organizacion as enum ('activa', 'pausada', 'dada_de_baja');
 --> statement-breakpoint
 create type estado_departamento as enum ('propuesto', 'activo', 'pausado', 'disuelto', 'fusionado');
@@ -88,7 +111,8 @@ create type estado_tarea as enum ('pendiente', 'en_curso', 'esperando_aprobacion
 --> statement-breakpoint
 create type resultado_accion as enum ('exito', 'error', 'rechazado', 'parcial');
 --> statement-breakpoint
-create type decision_aprobacion as enum ('pendiente', 'aprobada', 'rechazada', 'editada');
+-- Sin «pendiente»: una aprobación pendiente es la que no tiene fila de decisión.
+create type sentido_decision as enum ('aprobada', 'rechazada', 'editada');
 --> statement-breakpoint
 create type tipo_senal as enum ('aprobacion', 'correccion', 'queja', 'eval', 'metrica', 'incidencia');
 --> statement-breakpoint
@@ -137,16 +161,20 @@ create table organizacion (
   id uuid primary key default uuid_generar_v7(),
   paraguas_id uuid references organizacion_paraguas (id) on delete restrict,
   nombre text not null,
-  plan plan_organizacion not null default 'starter',
+  -- Texto y no tipo enum a propósito: el ADR-011 marca los planes como hipótesis
+  -- que se revisa al cierre de la fase 1. Lo valida el esquema Zod
+  -- `esquemas.planOrganizacion` de `@aiw/domain`; cambiar la lista no es migración.
+  plan text not null default 'departamento',
   region_datos text not null default 'eu-west',
   limites jsonb not null default '{}'::jsonb,
-  retencion_meses bigint not null default 6,
+  -- ADR-010: mínimo 6 meses, por defecto 24, máximo 10 años.
+  retencion_meses bigint not null default 24,
   politica_cruce_departamentos jsonb not null default '{}'::jsonb,
   brand_voice jsonb not null default '{}'::jsonb,
   estado estado_organizacion not null default 'activa',
   creado_en timestamptz not null default now(),
   actualizado_en timestamptz not null default now(),
-  constraint organizacion_retencion_minima check (retencion_meses >= 6)
+  constraint organizacion_retencion_rango check (retencion_meses between 6 and 120)
 );
 --> statement-breakpoint
 create index organizacion_paraguas_idx on organizacion (paraguas_id, creado_en);
@@ -364,6 +392,8 @@ create index delegacion_tenant_origen_idx on delegacion (tenant_id, tarea_origen
 create index delegacion_tenant_destino_idx on delegacion (tenant_id, puesto_destino_id, creado_en);
 --> statement-breakpoint
 
+-- La aprobación es inmutable: se inserta cuando el agente pide permiso y no se
+-- toca nunca más. Resolverla inserta una fila en `decision_aprobacion` (ADR-005).
 create table aprobacion (
   id uuid primary key default uuid_generar_v7(),
   tenant_id uuid not null references organizacion (id) on delete restrict,
@@ -374,18 +404,35 @@ create table aprobacion (
   nivel_exigido nivel_autonomia not null,
   borrador_opaco jsonb not null default '{}'::jsonb,
   resumen_legible text not null,
-  decision decision_aprobacion not null default 'pendiente',
-  motivo text,
-  edicion_previa jsonb,
-  decidida_en timestamptz,
+  vence_en timestamptz,
   creado_en timestamptz not null default now()
 );
---> statement-breakpoint
-create index aprobacion_tenant_decision_idx on aprobacion (tenant_id, decision, creado_en);
 --> statement-breakpoint
 create index aprobacion_tenant_tarea_idx on aprobacion (tenant_id, tarea_id);
 --> statement-breakpoint
 create index aprobacion_tenant_persona_idx on aprobacion (tenant_id, persona_id, creado_en);
+--> statement-breakpoint
+create index aprobacion_tenant_clase_idx on aprobacion (tenant_id, clase_accion, creado_en);
+--> statement-breakpoint
+
+-- Una fila por decisión, una decisión por aprobación. La unicidad es lo que hace
+-- fiable la consulta «aprobaciones sin decisión» del panel.
+create table decision_aprobacion (
+  id uuid primary key default uuid_generar_v7(),
+  tenant_id uuid not null references organizacion (id) on delete restrict,
+  aprobacion_id uuid not null references aprobacion (id) on delete restrict,
+  persona_id uuid references persona (id) on delete restrict,
+  sentido sentido_decision not null,
+  motivo text,
+  edicion_previa jsonb,
+  creado_en timestamptz not null default now()
+);
+--> statement-breakpoint
+create unique index decision_aprobacion_tenant_aprobacion_key on decision_aprobacion (tenant_id, aprobacion_id);
+--> statement-breakpoint
+create index decision_aprobacion_tenant_sentido_idx on decision_aprobacion (tenant_id, sentido, creado_en);
+--> statement-breakpoint
+create index decision_aprobacion_tenant_persona_idx on decision_aprobacion (tenant_id, persona_id, creado_en);
 --> statement-breakpoint
 
 create table disparador (
@@ -949,7 +996,8 @@ declare
   v_tablas text[] := array[
     'persona', 'paquete_tareas', 'departamento', 'puesto', 'version_puesto',
     'habilidad', 'habilidad_version_puesto', 'tarea', 'paso', 'delegacion',
-    'aprobacion', 'disparador', 'senal', 'leccion', 'leccion_senal', 'promocion',
+    'aprobacion', 'decision_aprobacion', 'disparador', 'senal', 'leccion',
+    'leccion_senal', 'promocion',
     'sala', 'sala_participante', 'mensaje', 'intervencion', 'propuesta_operacion',
     'conector', 'autorizacion_herramientas', 'documento_canonico',
     'fragmento_conocimiento', 'memoria', 'entidad', 'relacion', 'indicador',

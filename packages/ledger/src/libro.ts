@@ -63,7 +63,7 @@ function exigirUuid(valor: string, campo: string): string {
 
 /**
  * Anota una acción y suma al contador. Se llama dentro de una transacción con el
- * tenant fijado (`conTenant` de `@aiw/domain/db`); si el tenant de la sesión no
+ * tenant fijado (`conTenant` de `@aiw/db`); si el tenant de la sesión no
  * coincide con el que se pasa, la política de RLS rechaza la inserción.
  */
 export async function anotar(
@@ -77,8 +77,16 @@ export async function anotar(
     throw new Error('Una entrada de auditoría sin acción no dice nada: indica la acción.');
   }
 
-  // Serializa las escrituras de este tenant durante la transacción.
-  await tx`select pg_advisory_xact_lock(hashtextextended(${tenantId}, 0))`;
+  // Serializa las escrituras de este tenant durante la transacción y toma la hora
+  // del reloj de la base en la misma ida y vuelta. `clock_timestamp()` avanza dentro
+  // de la transacción, al contrario que `now()`: dos entradas seguidas no comparten
+  // marca. La hora sale de la base y no del proceso porque el panel ordena por
+  // `creado_en` y la cadena por `numero_orden`: con relojes distintos en cada
+  // instancia de la aplicación, los dos órdenes podrían no coincidir.
+  const [reloj] = await tx<{ ahora: Date }[]>`
+    select pg_advisory_xact_lock(hashtextextended(${tenantId}, 0)), clock_timestamp() as ahora
+  `;
+  if (!reloj) throw new Error('La base no devolvió la hora de la entrada.');
 
   const [ultima] = await tx<{ numero_orden: string; hash: string }[]>`
     select numero_orden, hash
@@ -90,7 +98,7 @@ export async function anotar(
 
   const numeroOrden = ultima ? Number(ultima.numero_orden) + 1 : 1;
   const hashAnterior = ultima ? ultima.hash : HASH_GENESIS;
-  const creadoEn = new Date();
+  const creadoEn = reloj.ahora;
   const datosReferenciados = entrada.datosReferenciados ?? [];
   const costeEuros = entrada.costeEuros ?? 0;
   const duracionMs = entrada.duracionMs ?? 0;
@@ -129,7 +137,7 @@ export async function anotar(
   };
   const hash = calcularHash(contenido, hashAnterior);
 
-  const filas = await tx<{ id: string }[]>`
+  const filas = await tx<{ id: string; creado_en: Date }[]>`
     insert into entrada_auditoria (
       tenant_id, numero_orden, actor_tipo, actor_id, puesto_id, version_puesto_id,
       tarea_id, paso_id, accion, herramienta, datos_referenciados, resultado,
@@ -145,14 +153,14 @@ export async function anotar(
       ${JSON.stringify(cambioDeNivel)}::text::jsonb,
       ${hashAnterior}, ${hash}, ${creadoEn}
     )
-    returning id
+    returning id, creado_en
   `;
   const fila = filas[0];
   if (!fila) throw new Error('La entrada de auditoría no se insertó.');
 
-  await sumarAlContador(tx, tenantId, creadoEn, costeEuros, incrementos);
+  await sumarAlContador(tx, tenantId, fila.creado_en, costeEuros, incrementos);
 
-  return { id: fila.id, numeroOrden, hash, hashAnterior, creadoEn };
+  return { id: fila.id, numeroOrden, hash, hashAnterior, creadoEn: fila.creado_en };
 }
 
 /** El contador es una proyección por periodo: toda acción suma una unidad. */

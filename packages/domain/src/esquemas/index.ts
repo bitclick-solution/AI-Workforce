@@ -7,11 +7,20 @@
  */
 import { z } from 'zod';
 
-export const NIVELES = ['n0', 'n1', 'n2', 'n3'] as const;
-export const AMBITOS = ['organizacion', 'departamento', 'puesto'] as const;
+import { AMBITOS, NIVELES, PLANES, SENTIDOS_DECISION } from '../enumeraciones.js';
+
+export { AMBITOS, NIVELES, PLANES, SENTIDOS_DECISION };
 
 export const nivelAutonomia = z.enum(NIVELES);
 export const ambito = z.enum(AMBITOS);
+export const sentidoDecision = z.enum(SENTIDOS_DECISION);
+
+/**
+ * Plan comercial de la organización. Es una columna `text` y no un tipo `enum` de
+ * PostgreSQL a propósito: el ADR-011 marca los planes como hipótesis que se revisa
+ * al cierre de la fase 1, y cambiar esta lista no puede costar una migración.
+ */
+export const planOrganizacion = z.enum(PLANES);
 
 /** Brand voice: la de rama hereda la general y la sobrescribe por campos, con versión. */
 export const brandVoice = z.object({
@@ -104,6 +113,8 @@ export type PoliticaPuesto = z.infer<typeof politicaPuesto>;
 export type BorradorOpaco = z.infer<typeof borradorOpaco>;
 export type ParametrosLeccion = z.infer<typeof parametrosLeccion>;
 export type DatosReferenciados = z.infer<typeof datosReferenciados>;
+export type PlanOrganizacion = z.infer<typeof planOrganizacion>;
+export type SentidoDecision = z.infer<typeof sentidoDecision>;
 
 /** Valida una carga antes de escribirla en una columna `jsonb`. Lanza con el detalle. */
 export function validarCarga<T>(esquema: z.ZodType<T>, valor: unknown, dondeEscribe: string): T {

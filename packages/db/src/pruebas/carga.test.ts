@@ -13,10 +13,10 @@ import { fileURLToPath } from 'node:url';
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { conTenant } from '../db/cliente.js';
-import { generarCarga, medirPanel, type MedidaConsulta } from '../db/carga.js';
-import { purgarOrganizacion } from '../db/mantenimiento.js';
-import { aplicarMigraciones } from '../db/migrador.js';
+import { conTenant } from '../cliente.js';
+import { generarCarga, medirPanel, type MedidaConsulta } from '../carga.js';
+import { purgarOrganizacion } from '../mantenimiento.js';
+import { aplicarMigraciones } from '../migrador.js';
 import {
   ES_CARGA_COMPLETA,
   HAY_BASE_DE_DATOS,
@@ -113,7 +113,7 @@ function informe(
     '',
     '# Informe de carga · modelo de datos v1',
     '',
-    'Lo genera la prueba `packages/domain/src/pruebas/carga.test.ts` con `AIW_PRUEBA_CARGA=1`.',
+    'Lo genera la prueba `packages/db/src/pruebas/carga.test.ts` con `AIW_PRUEBA_CARGA=1`.',
     'Vuelve a generarlo cuando cambien el esquema, los índices o la versión de PostgreSQL.',
     '',
     `- Fecha: ${new Date().toISOString()}`,

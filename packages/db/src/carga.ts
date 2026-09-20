@@ -120,11 +120,18 @@ export const CONSULTAS_PANEL: readonly ConsultaPanel[] = [
     parametros: (tenantId, ctx) => [tenantId, ctx.salaId],
   },
   {
-    nombre: 'aprobaciones pendientes de la persona',
-    sql: `select id, resumen_legible, creado_en
-          from aprobacion
-          where tenant_id = $1 and persona_id = $2 and decision = 'pendiente'
-          order by creado_en desc
+    // «Pendiente» no es un estado de la aprobación: es no tener decisión. La
+    // aprobación es inmutable y resolverla inserta una fila en `decision_aprobacion`.
+    nombre: 'aprobaciones sin decisión de la persona',
+    sql: `select a.id, a.resumen_legible, a.creado_en
+          from aprobacion a
+          where a.tenant_id = $1
+            and a.persona_id = $2
+            and not exists (
+              select 1 from decision_aprobacion d
+              where d.tenant_id = a.tenant_id and d.aprobacion_id = a.id
+            )
+          order by a.creado_en desc
           limit 50`,
     parametros: (tenantId, ctx) => [tenantId, ctx.personaId],
   },

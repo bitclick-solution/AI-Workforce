@@ -141,6 +141,18 @@ export async function purgarPuesto(
           or tarea_id in (select id from tarea where tenant_id = ${tenantId} and puesto_id = ${puestoId}))
     `;
     borradas['intervencion'] = intervenciones.count;
+    // La decisión cuelga de la aprobación: se vacía antes, o el borrado restringido
+    // rechaza el de la aprobación.
+    const decisiones = await tx`
+      delete from decision_aprobacion
+      where tenant_id = ${tenantId}
+        and aprobacion_id in (
+          select a.id from aprobacion a
+          join tarea t on t.id = a.tarea_id and t.tenant_id = a.tenant_id
+          where a.tenant_id = ${tenantId} and t.puesto_id = ${puestoId}
+        )
+    `;
+    borradas['decision_aprobacion'] = decisiones.count;
     const aprobaciones = await tx`
       delete from aprobacion
       where tenant_id = ${tenantId}

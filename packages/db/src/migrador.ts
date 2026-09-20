@@ -23,8 +23,8 @@ export interface Migracion {
 export const MIGRACIONES: readonly Migracion[] = [
   {
     nombre: '0000_inicial',
-    ruta: fileURLToPath(new URL('../../drizzle/0000_inicial.sql', import.meta.url)),
-    rutaReverso: fileURLToPath(new URL('../../drizzle/reverso/0000_inicial.sql', import.meta.url)),
+    ruta: fileURLToPath(new URL('../drizzle/0000_inicial.sql', import.meta.url)),
+    rutaReverso: fileURLToPath(new URL('../drizzle/reverso/0000_inicial.sql', import.meta.url)),
   },
 ];
 

@@ -11,4 +11,4 @@ CHANGELOG.md
 next-env.d.ts
 
 # Informe de carga generado por la prueba de carga: no se formatea a mano.
-packages/domain/bench
+packages/db/bench

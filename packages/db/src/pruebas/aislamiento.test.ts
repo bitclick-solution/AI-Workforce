@@ -9,9 +9,9 @@
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { ROL_APLICACION, conTenant, conTenantYRol, identificadorSeguro } from '../db/cliente.js';
-import { aplicarMigraciones } from '../db/migrador.js';
-import { purgarOrganizacion } from '../db/mantenimiento.js';
+import { ROL_APLICACION, conTenant, conTenantYRol, identificadorSeguro } from '../cliente.js';
+import { aplicarMigraciones } from '../migrador.js';
+import { purgarOrganizacion } from '../mantenimiento.js';
 import { HAY_BASE_DE_DATOS, MOTIVO_SALTO, conectar } from './entorno.js';
 import { sembrarOrganizacion, type OrganizacionSembrada } from './semilla.js';
 
@@ -24,6 +24,7 @@ const TABLAS_VIGILADAS = [
   'tarea',
   'paso',
   'aprobacion',
+  'decision_aprobacion',
   'senal',
   'leccion',
   'sala',

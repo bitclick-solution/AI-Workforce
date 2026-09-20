@@ -9,14 +9,14 @@ import {
   conTenant,
   conTenantYRol,
   purgarOrganizacion,
-} from '@aiw/domain/db';
+} from '@aiw/db';
 import {
   HAY_BASE_DE_DATOS,
   MOTIVO_SALTO,
   conectar,
   sembrarOrganizacion,
   type OrganizacionSembrada,
-} from '@aiw/domain/pruebas';
+} from '@aiw/db/pruebas';
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 

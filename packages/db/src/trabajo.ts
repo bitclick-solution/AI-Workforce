@@ -1,5 +1,5 @@
 /**
- * Trabajo: tarea, paso, delegación, aprobación y disparador.
+ * Trabajo: tarea, paso, delegación, aprobación, decisión de aprobación y disparador.
  *
  * El estado de la tarea lo dicta el historial de Temporal; aquí vive una proyección
  * para el panel que se puede reconstruir. Las delegaciones e intervenciones cuentan
@@ -22,11 +22,11 @@ import {
 
 import { columnasInmutables, columnasMutables, idPrimario, tenantId } from './columnas.js';
 import {
-  decisionAprobacion,
   estadoTarea,
   nivelAutonomia,
   origenTarea,
   resultadoAccion,
+  sentidoDecision,
   tipoDisparador,
 } from './enumeraciones.js';
 import { puesto, versionPuesto } from './equipo.js';
@@ -135,8 +135,11 @@ export const delegacion = pgTable(
 );
 
 /**
- * Borrador opaco, resumen legible, decisión, motivo, persona y fecha.
- * Fila inmutable: la decisión se inserta una vez y es la señal de aprendizaje más valiosa.
+ * Lo que se pide aprobar: borrador opaco, resumen legible, clase de acción y nivel.
+ *
+ * Fila inmutable: se inserta cuando el agente pide permiso y no se toca nunca más.
+ * Resolverla no la actualiza; inserta una fila en `decisionAprobacion` (ADR-005).
+ * Una aprobación pendiente es, por tanto, una aprobación sin decisión.
  */
 export const aprobacion = pgTable(
   'aprobacion',
@@ -147,22 +150,52 @@ export const aprobacion = pgTable(
       .notNull()
       .references(() => tarea.id, { onDelete: 'restrict' }),
     pasoId: uuid('paso_id').references(() => paso.id, { onDelete: 'restrict' }),
+    /** A quién se le pide. Quién decide de verdad queda en la fila de la decisión. */
     personaId: uuid('persona_id').references(() => persona.id, { onDelete: 'restrict' }),
     claseAccion: text('clase_accion').notNull(),
     nivelExigido: nivelAutonomia('nivel_exigido').notNull(),
     /** Carga opaca para el plano de control (ADR-001): no se interpreta aquí. */
     borradorOpaco: jsonb('borrador_opaco').notNull().default({}),
     resumenLegible: text('resumen_legible').notNull(),
-    decision: decisionAprobacion('decision').notNull().default('pendiente'),
-    motivo: text('motivo'),
-    edicionPrevia: jsonb('edicion_previa'),
-    decididaEn: timestamp('decidida_en', { withTimezone: true }),
+    venceEn: timestamp('vence_en', { withTimezone: true }),
     ...columnasInmutables(),
   },
   (t) => [
-    index('aprobacion_tenant_decision_idx').on(t.tenantId, t.decision, t.creadoEn),
     index('aprobacion_tenant_tarea_idx').on(t.tenantId, t.tareaId),
     index('aprobacion_tenant_persona_idx').on(t.tenantId, t.personaId, t.creadoEn),
+    index('aprobacion_tenant_clase_idx').on(t.tenantId, t.claseAccion, t.creadoEn),
+  ],
+);
+
+/**
+ * La decisión de una aprobación: una fila, una vez, inmutable.
+ *
+ * Vive aparte porque `aprobacion` es inmutable y resolverla en sitio exigiría un
+ * `UPDATE` sobre una tabla que no se actualiza. El panel de «pendientes» no filtra
+ * por un estado: busca aprobaciones sin fila aquí, que es la misma pregunta hecha
+ * de una forma que la base puede garantizar.
+ */
+export const decisionAprobacion = pgTable(
+  'decision_aprobacion',
+  {
+    id: idPrimario(),
+    tenantId: tenantId().references(() => organizacion.id, { onDelete: 'restrict' }),
+    aprobacionId: uuid('aprobacion_id')
+      .notNull()
+      .references(() => aprobacion.id, { onDelete: 'restrict' }),
+    /** Quién decidió. Nulo si la resolvió la plataforma por vencimiento o política. */
+    personaId: uuid('persona_id').references(() => persona.id, { onDelete: 'restrict' }),
+    sentido: sentidoDecision('sentido').notNull(),
+    motivo: text('motivo'),
+    /** Lo que había antes de que la persona lo editara: la señal más valiosa. */
+    edicionPrevia: jsonb('edicion_previa'),
+    ...columnasInmutables(),
+  },
+  (t) => [
+    // Una decisión por aprobación: la unicidad es lo que hace fiable «sin decisión».
+    uniqueIndex('decision_aprobacion_tenant_aprobacion_key').on(t.tenantId, t.aprobacionId),
+    index('decision_aprobacion_tenant_sentido_idx').on(t.tenantId, t.sentido, t.creadoEn),
+    index('decision_aprobacion_tenant_persona_idx').on(t.tenantId, t.personaId, t.creadoEn),
   ],
 );
 

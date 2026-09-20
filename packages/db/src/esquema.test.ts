@@ -5,9 +5,11 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { PLANES, esquemas } from '@aiw/domain';
 import { getTableColumns, getTableName } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 
+import { CONSULTAS_PANEL } from './carga.js';
 import { MIGRACIONES, sentenciasDe } from './migrador.js';
 import {
   NOMBRES_TABLAS,
@@ -18,6 +20,8 @@ import {
   ORDEN_PURGA,
   TABLAS_CON_TENANT,
 } from './tablas.js';
+
+const { planOrganizacion } = esquemas;
 
 const migracion = MIGRACIONES[0];
 if (!migracion) throw new Error('No hay migración inicial.');
@@ -172,9 +176,73 @@ describe('tablas inmutables', () => {
 });
 
 describe('el fichero de migración está en el paquete', () => {
-  it('la ruta apunta dentro de packages/domain/drizzle', () => {
-    expect(fileURLToPath(new URL('../../drizzle/', import.meta.url))).toContain(
-      'packages/domain/drizzle',
+  it('la ruta apunta dentro de packages/db/drizzle', () => {
+    expect(fileURLToPath(new URL('../drizzle/', import.meta.url))).toContain('packages/db/drizzle');
+  });
+});
+
+describe('el migrador asume el rol dueño del esquema', () => {
+  it('se pone aiw_migrador antes de crear nada y le da permiso sobre el esquema', () => {
+    const rol = sql.indexOf('set local role aiw_migrador');
+    const primeraFuncion = sql.indexOf('create or replace function uuid_generar_v7');
+    const primerTipo = sql.indexOf('create type ');
+    const primeraTabla = sql.indexOf('create table ');
+    expect(rol, 'la migración nunca asume aiw_migrador').toBeGreaterThan(-1);
+    expect(sql).toContain('grant usage, create on schema public to aiw_migrador');
+    expect(rol).toBeLessThan(primeraFuncion);
+    expect(rol).toBeLessThan(primerTipo);
+    expect(rol).toBeLessThan(primeraTabla);
+  });
+
+  it('el reverso lo suelta antes de borrar el rol', () => {
+    expect(reverso.indexOf('reset role;')).toBeLessThan(reverso.indexOf('drop role aiw_migrador'));
+  });
+});
+
+describe('la decisión de una aprobación es una fila propia', () => {
+  it('la aprobación no guarda ni decisión ni fecha de decisión', () => {
+    const bloque = sql.slice(
+      sql.indexOf('create table aprobacion ('),
+      sql.indexOf('create index aprobacion_tenant_tarea_idx'),
     );
+    expect(bloque.length).toBeGreaterThan(0);
+    expect(bloque).not.toContain('decision');
+    expect(bloque).not.toContain('decidida_en');
+  });
+
+  it('una aprobación no puede tener dos decisiones', () => {
+    expect(sql).toContain(
+      'create unique index decision_aprobacion_tenant_aprobacion_key on decision_aprobacion (tenant_id, aprobacion_id)',
+    );
+  });
+
+  it('el sentido de la decisión no admite «pendiente»', () => {
+    expect(sql).toContain(
+      "create type sentido_decision as enum ('aprobada', 'rechazada', 'editada')",
+    );
+    expect(sql).not.toContain('create type decision_aprobacion as enum');
+  });
+
+  it('el panel pregunta por aprobaciones sin decisión, no por un estado', () => {
+    const consulta = CONSULTAS_PANEL.find((c) => c.nombre.includes('aprobaciones'));
+    expect(consulta?.sql).toContain('not exists');
+    expect(consulta?.sql).toContain('decision_aprobacion');
+    expect(consulta?.sql).not.toContain("decision = 'pendiente'");
+  });
+});
+
+describe('el plan y la retención siguen los ADR', () => {
+  it('el plan es texto validado por Zod y no un tipo enum', () => {
+    expect(sql).toContain('plan text not null');
+    expect(sql).not.toContain('create type plan_organizacion');
+    for (const plan of PLANES) {
+      expect(planOrganizacion.parse(plan)).toBe(plan);
+    }
+    expect(() => planOrganizacion.parse('starter')).toThrow();
+  });
+
+  it('la retención va de 6 a 120 meses y por defecto son 24 (ADR-010)', () => {
+    expect(sql).toContain('retencion_meses bigint not null default 24');
+    expect(sql).toContain('check (retencion_meses between 6 and 120)');
   });
 });

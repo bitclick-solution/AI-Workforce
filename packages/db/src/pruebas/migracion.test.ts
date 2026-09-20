@@ -6,12 +6,12 @@
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { aplicarMigraciones, comprobarHuellas } from '../db/migrador.js';
+import { aplicarMigraciones, comprobarHuellas } from '../migrador.js';
 import {
   NOMBRES_TABLAS,
   NOMBRES_TABLAS_CON_TENANT,
   NOMBRES_TABLAS_PARTICIONADAS,
-} from '../db/tablas.js';
+} from '../tablas.js';
 import { HAY_BASE_DE_DATOS, MOTIVO_SALTO, conectar } from './entorno.js';
 
 const TITULO = HAY_BASE_DE_DATOS
@@ -139,6 +139,76 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     await expect(cliente`select crear_particion_mensual('persona', current_date)`).rejects.toThrow(
       /no particionada/,
     );
+  });
+
+  it('el dueño de todas las tablas es el migrador, no quien abrió la conexión', async () => {
+    const filas = await cliente<{ tablename: string; tableowner: string }[]>`
+      select tablename, tableowner
+      from pg_tables
+      where schemaname = 'public' and tableowner <> 'aiw_migrador'
+      order by 1
+    `;
+    expect(
+      filas.map((f) => `${f.tablename} es de ${f.tableowner}`),
+      'la migración creó tablas sin asumir aiw_migrador',
+    ).toEqual([]);
+  });
+
+  it('los tipos y las funciones también son del migrador', async () => {
+    const [tipos] = await cliente<{ ajenos: string }[]>`
+      select count(*) as ajenos
+      from pg_type t
+      join pg_namespace n on n.oid = t.typnamespace
+      join pg_roles r on r.oid = t.typowner
+      where n.nspname = 'public' and t.typtype = 'e' and r.rolname <> 'aiw_migrador'
+    `;
+    expect(tipos?.ajenos).toBe('0');
+
+    const [funciones] = await cliente<{ ajenas: string }[]>`
+      select count(*) as ajenas
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      join pg_roles r on r.oid = p.proowner
+      where n.nspname = 'public'
+        and p.proname in ('uuid_generar_v7', 'aiw_tenant_actual', 'crear_particion_mensual',
+                          'aiw_proteger_particion', 'aiw_libro_solo_insercion')
+        and r.rolname <> 'aiw_migrador'
+    `;
+    expect(funciones?.ajenas).toBe('0');
+  });
+
+  it('la retención respeta el mínimo, el máximo y el valor por defecto del ADR-010', async () => {
+    const [fila] = await cliente<{ defecto: string }[]>`
+      select column_default as defecto
+      from information_schema.columns
+      where table_name = 'organizacion' and column_name = 'retencion_meses'
+    `;
+    expect(fila?.defecto).toContain('24');
+
+    const tenantId = '01920000-0000-7000-8000-0000000000a1';
+    for (const meses of [5, 121]) {
+      await expect(
+        cliente`
+          insert into organizacion (id, nombre, retencion_meses)
+          values (${tenantId}, 'fuera de rango', ${meses})
+        `,
+        `retencion_meses = ${meses} debería rechazarse`,
+      ).rejects.toThrow(/organizacion_retencion_rango/);
+    }
+  });
+
+  it('el plan es texto libre validado por Zod, no un tipo enum de la base', async () => {
+    const [fila] = await cliente<{ tipo: string }[]>`
+      select data_type as tipo
+      from information_schema.columns
+      where table_name = 'organizacion' and column_name = 'plan'
+    `;
+    expect(fila?.tipo).toBe('text');
+
+    const [tipo] = await cliente<{ existe: boolean }[]>`
+      select exists (select 1 from pg_type where typname = 'plan_organizacion') as existe
+    `;
+    expect(tipo?.existe).toBe(false);
   });
 
   it('el rol de aplicación existe y no puede saltarse la seguridad de fila', async () => {

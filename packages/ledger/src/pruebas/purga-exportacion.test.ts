@@ -15,14 +15,14 @@ import {
   exportarPuesto,
   purgarOrganizacion,
   purgarPuesto,
-} from '@aiw/domain/db';
+} from '@aiw/db';
 import {
   HAY_BASE_DE_DATOS,
   MOTIVO_SALTO,
   conectar,
   sembrarOrganizacion,
   type OrganizacionSembrada,
-} from '@aiw/domain/pruebas';
+} from '@aiw/db/pruebas';
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -42,6 +42,7 @@ const TABLAS_QUE_SE_VACIAN = [
   'tarea',
   'paso',
   'aprobacion',
+  'decision_aprobacion',
   'senal',
   'leccion',
   'promocion',
@@ -108,7 +109,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     expect(porTabla.get('persona')?.filas).toBe(1);
     expect(porTabla.get('entrada_auditoria')?.filas).toBe(5);
     // Una tabla por cada paso del orden de purga, más el libro.
-    expect(ficheros.length).toBeGreaterThanOrEqual(34);
+    expect(ficheros.length).toBeGreaterThanOrEqual(35);
   });
 
   it('purgar en el orden equivocado falla por el borrado restringido', async () => {
@@ -120,6 +121,8 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
   it('da de baja el agente y deja el libro intacto', async () => {
     const antes = (await leerCadena(cliente, org.tenantId)).length;
     const { borradas } = await purgarPuesto(cliente, org.tenantId, org.puestoId);
+    expect(borradas['decision_aprobacion']).toBe(1);
+    expect(borradas['aprobacion']).toBe(2);
     expect(borradas['puesto']).toBe(1);
     expect(borradas['version_puesto']).toBe(2);
     expect(borradas['tarea']).toBe(2);
