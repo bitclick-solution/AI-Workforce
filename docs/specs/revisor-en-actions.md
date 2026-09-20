@@ -40,6 +40,8 @@ Primer veredicto real, 2026-09-20 sobre `e786a0b`: el Revisor publicó su revisi
 
 Segunda ejecución con el tope nuevo (`701e745`): 40 turnos, veredicto publicado y check en verde. El resumen mostró que el servidor de Notion ni siquiera se registró: el action fusiona las configuraciones `--mcp-config` en un solo JSON y descarta las rutas de archivo. Cambio: la configuración del servidor va en línea en los tres workflows; `.github/mcp/notion.json` queda como referencia.
 
+Tercera ejecución con la configuración en línea (`6f93489`): el servidor de Notion conectó y leyó la rebanada, pero `API-create-a-comment` falló con `missing_version` porque el servidor no puso la cabecera `Notion-Version` en esa operación. Cambio: `OPENAPI_MCP_HEADERS` con `Authorization` y `Notion-Version: 2025-09-03` en los tres workflows y en el archivo de referencia.
+
 ## Fuera de alcance
 
 Cambiar el rol del Revisor (`.claude/agents/revisor.md`), la plantilla de PR o la vía primaria de las rutinas nocturnas, que ya está decidida como Rutinas de Claude Code.
