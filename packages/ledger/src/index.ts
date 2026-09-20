@@ -18,3 +18,11 @@ export type Paquete = typeof PAQUETE;
 export * from './hash.js';
 export * from './libro.js';
 export * from './db/esquema.js';
+
+// Contador de tareas v0
+// Usos reales de modelo, tarifas versionadas, puntos de escritura del contador y
+// consultas de lectura del panel. Todo lo que suma pasa por `anotar`.
+export * from './contador-esquema.js';
+export * from './contador.js';
+export * from './contador-catalogo.js';
+export * from './contador-consultas.js';

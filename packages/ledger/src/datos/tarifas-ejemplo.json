@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "nota": "Catálogo de desarrollo y de pruebas. Importes de referencia por millón de tokens, sin convertir divisa y sin descuentos. Operación carga los precios reales en cada tenant con registrarTarifa; ningún importe de este fichero llega al cálculo si no se ha dado de alta antes como dato del tenant.",
+  "tarifas": [
+    {
+      "proveedor": "anthropic",
+      "modelo": "claude-sonnet-4-5",
+      "eurosPorMillonEntrada": 3,
+      "eurosPorMillonSalida": 15,
+      "eurosPorMillonEntradaCache": 0.3,
+      "vigenteDesde": "2026-09-01T00:00:00.000Z",
+      "fuente": "lista pública (referencia de desarrollo)"
+    },
+    {
+      "proveedor": "anthropic",
+      "modelo": "claude-haiku-4-5",
+      "eurosPorMillonEntrada": 1,
+      "eurosPorMillonSalida": 5,
+      "eurosPorMillonEntradaCache": 0.1,
+      "vigenteDesde": "2026-09-01T00:00:00.000Z",
+      "fuente": "lista pública (referencia de desarrollo)"
+    },
+    {
+      "proveedor": "mistral",
+      "modelo": "mistral-large-latest",
+      "eurosPorMillonEntrada": 2,
+      "eurosPorMillonSalida": 6,
+      "eurosPorMillonEntradaCache": 0,
+      "vigenteDesde": "2026-09-01T00:00:00.000Z",
+      "fuente": "lista pública (referencia de desarrollo)"
+    },
+    {
+      "proveedor": "mistral",
+      "modelo": "mistral-small-latest",
+      "eurosPorMillonEntrada": 0.2,
+      "eurosPorMillonSalida": 0.6,
+      "eurosPorMillonEntradaCache": 0,
+      "vigenteDesde": "2026-09-01T00:00:00.000Z",
+      "fuente": "lista pública (referencia de desarrollo)"
+    },
+    {
+      "proveedor": "local",
+      "modelo": "llama-3-3-70b",
+      "eurosPorMillonEntrada": 0,
+      "eurosPorMillonSalida": 0,
+      "eurosPorMillonEntradaCache": 0,
+      "vigenteDesde": "2026-09-01T00:00:00.000Z",
+      "fuente": "autoalojado: el coste va en la factura de infraestructura, no por token"
+    }
+  ]
+}
