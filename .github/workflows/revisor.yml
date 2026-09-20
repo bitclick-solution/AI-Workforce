@@ -1,7 +1,8 @@
 name: Revisor
 
 # Dispara al Revisor (.claude/agents/revisor.md) en cada PR listo para revisión.
-# Requiere el secreto ANTHROPIC_API_KEY y, para actualizar el tablero, NOTION_TOKEN.
+# Autenticación: ANTHROPIC_API_KEY (clave de la consola de la API) o CLAUDE_CODE_OAUTH_TOKEN
+# (token de una suscripción de Claude, `claude setup-token`). Para actualizar el tablero, NOTION_TOKEN.
 
 on:
   pull_request:
@@ -27,11 +28,11 @@ jobs:
     steps:
       - id: clave
         env:
-          HAY_CLAVE: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAY_CLAVE: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
         run: |
           echo "hay_clave=$HAY_CLAVE" >> "$GITHUB_OUTPUT"
           if [ "$HAY_CLAVE" != "true" ]; then
-            echo "::notice::Sin ANTHROPIC_API_KEY: el Revisor no se ejecuta. Ver docs/runbooks/proteccion-de-rama.md."
+            echo "::notice::Sin ANTHROPIC_API_KEY ni CLAUDE_CODE_OAUTH_TOKEN: el Revisor no se ejecuta. Ver docs/runbooks/proteccion-de-rama.md."
           fi
 
   revisor:
@@ -54,13 +55,21 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         if: hashFiles('pnpm-lock.yaml') != ''
+      - name: Precargar el servidor MCP de Notion
+        # Deja el paquete en la caché de npx para que Claude Code no agote el tiempo de arranque del servidor.
+        run: npm exec --yes --package=@notionhq/notion-mcp-server -- true
       - name: Revisar el PR
+        id: revisar
         uses: anthropics/claude-code-action@v1
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           GH_TOKEN: ${{ github.token }}
+          # npx descarga el servidor MCP de Notion en el arranque; el tiempo por defecto no siempre alcanza.
+          MCP_TIMEOUT: '60000'
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Claude Code prefiere la clave de la API al token cuando recibe los dos; con token, la clave no se pasa.
+          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN == '' && secrets.ANTHROPIC_API_KEY || '' }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
           prompt: |
             Actúa como el Revisor definido en .claude/agents/revisor.md y sigue CLAUDE.md.
@@ -74,6 +83,24 @@ jobs:
             5. Si el servidor MCP de Notion está disponible, actualiza la rebanada según el rol: Demostrada si es favorable y no toca zona crítica; nota en Bloqueo si es bloqueado. Si no está disponible, dilo en el comentario.
             No modifiques archivos ni hagas commits. No fusiones.
           claude_args: |
-            --max-turns 40
+            --model ${{ vars.REVISOR_MODELO || 'claude-sonnet-5' }}
+            --max-turns 80
             --mcp-config .github/mcp/notion.json
             --allowedTools "Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh api:*),Bash(git log:*),Bash(git diff:*),Bash(pnpm lint:*),Bash(pnpm typecheck:*),Bash(pnpm test:*),Bash(pnpm evals:smoke:*),mcp__github_inline_comment__create_inline_comment,mcp__github_comment__update_claude_comment,mcp__Notion"
+      - name: Resumen de la ejecución
+        if: always() && steps.revisar.outcome != 'skipped'
+        env:
+          SALIDA: ${{ steps.revisar.outputs.execution_file || format('{0}/claude-execution-output.json', runner.temp) }}
+        run: |
+          # Solo el resultado final: tipo, error, turnos, coste, herramientas denegadas y estado de los MCP.
+          # Nunca la transcripción completa. La ruta sale del propio action (execution_file); la fija es el respaldo.
+          if [ ! -f "$SALIDA" ]; then
+            echo "No existe $SALIDA: el action falló antes de ejecutar Claude Code."
+            exit 0
+          fi
+          jq -r '
+            (if type == "array" then . else [.] end) as $m
+            | ($m[] | select(.type == "system" and .subtype == "init") | .mcp_servers // [] | .[] | "mcp \(.name): \(.status)"),
+              ($m[] | select(.type == "result")
+                | "subtype=\(.subtype) is_error=\(.is_error) turnos=\(.num_turns) coste=\(.total_cost_usd) denegadas=\((.permission_denials // []) | map(.tool_name) | unique | join(","))\nresultado: \((.result // .error // "sin mensaje") | tostring | .[0:600])")
+          ' "$SALIDA" || echo "No se pudo leer el resultado en $SALIDA."
