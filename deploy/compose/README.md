@@ -12,6 +12,7 @@ VIGENTE
 | centrifugo                         | centrifugo/centrifugo:v6.9.6            | 8000                   | Fan-out en tiempo real de la sala                                                                                    |
 | silo                               | pgsty/silo:RELEASE.2026-09-16T00-00-00Z | 9000 API, 9001 consola | Almacén de objetos S3 (fork mantenido de MinIO, ADR-012): exportaciones, habilidades, adjuntos y eventos de Langfuse |
 | silo-init                          | pgsty/silo:RELEASE.2026-09-16T00-00-00Z | sin puerto             | Crea los cubos `aiworkforce` y `langfuse` con `mcli` y termina                                                       |
+| mailpit                            | axllent/mailpit:v1.28                   | 1025 SMTP, 8025 web    | Correo de desarrollo: acepta todo, no entrega nada fuera y lo muestra en su interfaz                                 |
 | langfuse                           | langfuse/langfuse:4.38                  | 3001                   | Trazas, coste y datasets                                                                                             |
 | langfuse-worker, clickhouse, redis | dependencias de Langfuse                | sin puerto             | Solo accesibles desde la red del Compose                                                                             |
 
@@ -25,7 +26,12 @@ El mismo esquema, con imágenes propias y sin Langfuse, será la base del bundle
 - La imagen de Langfuse no trae `wget` ni `curl`: la comprobación usa `node -e "fetch(...)"` contra `/api/public/health`.
 - Redis con `--requirepass` responde `NOAUTH` a un `ping` sin contraseña y `redis-cli` sale con código 0, así que el check pasaría en vacío. Se autentica con `-a "$REDIS_PASSWORD"` y se exige `PONG`.
 - Silo se comprueba con `mcli ready local`, el cliente que trae la propia imagen; `silo-init` crea los cubos con `mcli mb --ignore-existing` y Langfuse espera a que termine con éxito (`service_completed_successfully`).
+- Mailpit tampoco trae `wget` ni `curl`, pero su propio binario responde: `/mailpit readyz`. Acepta cualquier autenticación (`MP_SMTP_AUTH_ACCEPT_ANY`) porque en desarrollo no hay credenciales que comprobar, y guarda como mucho 500 mensajes.
 - El mismo criterio vale para el bundle on-premise: comprobar por nombre de servicio y con una herramienta que la imagen tenga.
+
+## Correo en desarrollo
+
+La aprobación por correo (`apps/channels`) manda el enlace firmado por el puerto que diga `AIW_CORREO_PROVEEDOR`. Con `memoria` no sale del proceso, y es lo que usan las pruebas. Con `smtp` sale por Mailpit: `AIW_CORREO_SMTP_HOST=localhost` y `AIW_CORREO_SMTP_PUERTO=1025` desde la máquina, o `mailpit:1025` desde dentro de la red del Compose. El mensaje se lee en <http://localhost:8025>. Ningún correo de desarrollo llega a un buzón real: Mailpit no reenvía nada.
 
 ## Almacén de objetos: de MinIO a Silo
 
