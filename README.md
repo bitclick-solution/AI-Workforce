@@ -88,7 +88,7 @@ deploy/
   docker/           Dockerfiles de las aplicaciones
 docs/
   adr/              Registros de decisiones (ADR-001 en adelante)
-  prd/              Definición de producto y fichas
+  producto/         Definición de producto: fichas de departamento, Director de IA y experiencia objetivo
   specs/            Una especificación por rebanada
 ```
 

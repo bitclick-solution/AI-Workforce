@@ -1,7 +1,5 @@
-VIGENTE
+SUPERSEDED por docs/producto/README.md
 
 # Definición de producto
 
-Documento de producto, fichas de departamento (finanzas, ventas y atención, administración) y ficha del Director de IA. Una página por ficha con misión, puestos, herramientas mínimas, guardrails por clase de riesgo, niveles iniciales, indicadores y coste estimado.
-
-Llega con la rebanada "Documento de producto" del ciclo 0, redactada por el Planificador y aprobada por Jesús.
+La definición de producto vive en [`docs/producto/`](../producto/README.md): las fichas de finanzas, ventas y atención, administración y Director de IA, y la experiencia objetivo de diez minutos. La carpeta `docs/prd/` de la estructura del plan v8 se llama `docs/producto/` por decisión de la rebanada «Documento de producto» del ciclo 0. Esta página queda como puntero.
