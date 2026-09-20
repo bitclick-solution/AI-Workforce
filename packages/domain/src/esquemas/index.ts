@@ -99,20 +99,41 @@ export const cargaEventoSalida = z.object({
 /**
  * Datos referenciados por una entrada de auditoría: tipo e identificador, nunca la
  * carga completa. Así la entrada sobrevive a purgas y archivados.
+ *
+ * Los dos campos obligatorios no admiten cadena vacía: una referencia sin tipo o sin
+ * identificador no sirve para reconstruir nada, que es lo único que hace falta que
+ * sirva dentro de seis años.
  */
 export const datosReferenciados = z.array(
   z.object({
-    tipo: z.string(),
-    id: z.string(),
-    sistema: z.string().optional(),
+    tipo: z.string().min(1),
+    id: z.string().min(1),
+    sistema: z.string().min(1).optional(),
   }),
 );
+
+/**
+ * Cambio de nivel de autonomía que anota una entrada de auditoría: qué clase de
+ * acción, de qué nivel a qué nivel y por qué. El nivel de origen es nulo cuando la
+ * clase no tenía nivel asignado todavía.
+ *
+ * Lo normal es que una acción no cambie ningún nivel; entonces la columna es nula y
+ * no hay nada que validar.
+ */
+export const cambioDeNivel = z.object({
+  claseAccion: z.string().min(1),
+  de: nivelAutonomia.nullable(),
+  a: nivelAutonomia,
+  motivo: z.string().min(1).optional(),
+  propuestaOperacionId: z.string().min(1).optional(),
+});
 
 export type BrandVoice = z.infer<typeof brandVoice>;
 export type PoliticaPuesto = z.infer<typeof politicaPuesto>;
 export type BorradorOpaco = z.infer<typeof borradorOpaco>;
 export type ParametrosLeccion = z.infer<typeof parametrosLeccion>;
 export type DatosReferenciados = z.infer<typeof datosReferenciados>;
+export type CambioDeNivel = z.infer<typeof cambioDeNivel>;
 export type PlanOrganizacion = z.infer<typeof planOrganizacion>;
 export type SentidoDecision = z.infer<typeof sentidoDecision>;
 

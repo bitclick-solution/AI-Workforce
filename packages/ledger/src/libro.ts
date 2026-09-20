@@ -7,7 +7,12 @@
  *
  * La serialización por tenant la da un bloqueo consultivo de transacción: dos
  * escrituras del mismo tenant no pueden calcular el mismo número de orden.
+ *
+ * Nada llega a una columna `jsonb` sin pasar por el esquema Zod de `@aiw/domain`:
+ * lo que se guarda aquí hay que poder leerlo dentro de seis años, y una carga que
+ * no valida se rechaza antes de entrar, no al intentar interpretarla.
  */
+import { esquemas } from '@aiw/domain';
 import type postgres from 'postgres';
 
 import {
@@ -20,6 +25,9 @@ import {
   type EslabonVerificable,
   type ResultadoVerificacion,
 } from './hash.js';
+
+/** Cambio de nivel que anota la entrada, validado por el esquema de `@aiw/domain`. */
+export type CambioDeNivel = esquemas.CambioDeNivel;
 
 export interface EntradaNueva {
   actorTipo: ContenidoEntrada['actorTipo'];
@@ -37,7 +45,7 @@ export interface EntradaNueva {
   aprobadaPorPersonaId?: string | null | undefined;
   leccionAplicadaId?: string | null | undefined;
   nivelAplicado?: ContenidoEntrada['nivelAplicado'];
-  cambioDeNivel?: unknown;
+  cambioDeNivel?: CambioDeNivel | null | undefined;
 }
 
 /** Lo que suma esta acción al contador, además de la propia acción. */
@@ -77,6 +85,27 @@ export async function anotar(
     throw new Error('Una entrada de auditoría sin acción no dice nada: indica la acción.');
   }
 
+  // Las dos columnas `jsonb` de la entrada pasan por su esquema Zod de `@aiw/domain`
+  // antes de tocar la base: una carga que no valida no llega a pedir el bloqueo ni a
+  // gastar un número de orden. Se usa el valor validado para el hash y para el
+  // `insert`, no el de entrada, así que lo que se firma es exactamente lo que se
+  // guarda y con la misma forma.
+  const datosReferenciados = esquemas.validarCarga(
+    esquemas.datosReferenciados,
+    entrada.datosReferenciados ?? [],
+    'entrada_auditoria.datos_referenciados',
+  );
+  // Lo normal es que una acción no cambie ningún nivel: entonces la columna es nula
+  // y no hay carga que validar.
+  const cambioDeNivel: CambioDeNivel | null =
+    entrada.cambioDeNivel === undefined || entrada.cambioDeNivel === null
+      ? null
+      : esquemas.validarCarga(
+          esquemas.cambioDeNivel,
+          entrada.cambioDeNivel,
+          'entrada_auditoria.cambio_de_nivel',
+        );
+
   // Serializa las escrituras de este tenant durante la transacción y toma la hora
   // del reloj de la base en la misma ida y vuelta. `clock_timestamp()` avanza dentro
   // de la transacción, al contrario que `now()`: dos entradas seguidas no comparten
@@ -99,7 +128,6 @@ export async function anotar(
   const numeroOrden = ultima ? Number(ultima.numero_orden) + 1 : 1;
   const hashAnterior = ultima ? ultima.hash : HASH_GENESIS;
   const creadoEn = reloj.ahora;
-  const datosReferenciados = entrada.datosReferenciados ?? [];
   const costeEuros = entrada.costeEuros ?? 0;
   const duracionMs = entrada.duracionMs ?? 0;
 
@@ -112,7 +140,6 @@ export async function anotar(
   const aprobadaPorPersonaId: string | null = entrada.aprobadaPorPersonaId ?? null;
   const leccionAplicadaId: string | null = entrada.leccionAplicadaId ?? null;
   const nivelAplicado: ContenidoEntrada['nivelAplicado'] = entrada.nivelAplicado ?? null;
-  const cambioDeNivel: unknown = entrada.cambioDeNivel ?? null;
 
   const contenido: ContenidoEntrada = {
     tenantId,

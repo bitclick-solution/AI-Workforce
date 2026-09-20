@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@aiw/db": "workspace:*",
+    "@aiw/domain": "workspace:*",
     "drizzle-orm": "catalog:",
     "postgres": "catalog:",
     "zod": "catalog:"

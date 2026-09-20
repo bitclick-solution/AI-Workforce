@@ -133,6 +133,51 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     expect((await verificarCadenaEnBase(cliente, org.tenantId)).valida).toBe(true);
   });
 
+  it('una carga que no valida no gasta número de orden ni deja rastro', async () => {
+    const antes = await leerCadena(cliente, org.tenantId);
+    await expect(
+      conTenant(cliente, org.tenantId, (tx) =>
+        anotar(tx, org.tenantId, {
+          actorTipo: 'agente',
+          accion: 'odoo.buscar_factura',
+          resultado: 'exito',
+          datosReferenciados: [{ tipo: 'factura', id: '2026-002' }, { tipo: 'albaran' } as never],
+        }),
+      ),
+    ).rejects.toThrow(/entrada_auditoria\.datos_referenciados/);
+
+    const despues = await leerCadena(cliente, org.tenantId);
+    expect(despues.length).toBe(antes.length);
+    expect((await verificarCadenaEnBase(cliente, org.tenantId)).valida).toBe(true);
+  });
+
+  it('un cambio de nivel válido va y vuelve por su esquema', async () => {
+    const anotada = await conTenant(cliente, org.tenantId, (tx) =>
+      anotar(tx, org.tenantId, {
+        actorTipo: 'plataforma',
+        puestoId: org.puestoId,
+        accion: 'nivel.promocionado',
+        resultado: 'exito',
+        nivelAplicado: 'n2',
+        cambioDeNivel: {
+          claseAccion: 'pago.emitir',
+          de: 'n1',
+          a: 'n2',
+          motivo: 'Treinta aprobaciones seguidas sin edición',
+        },
+      }),
+    );
+    const cadena = await leerCadena(cliente, org.tenantId);
+    const eslabon = cadena.find((e) => e.numeroOrden === anotada.numeroOrden);
+    expect(eslabon?.cambioDeNivel).toEqual({
+      claseAccion: 'pago.emitir',
+      de: 'n1',
+      a: 'n2',
+      motivo: 'Treinta aprobaciones seguidas sin edición',
+    });
+    expect((await verificarCadenaEnBase(cliente, org.tenantId)).valida).toBe(true);
+  });
+
   it('el rol de aplicación no puede actualizar el libro', async () => {
     await expect(
       conTenantYRol(
