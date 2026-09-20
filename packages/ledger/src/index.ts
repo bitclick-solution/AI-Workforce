@@ -18,3 +18,7 @@ export type Paquete = typeof PAQUETE;
 export * from './hash.js';
 export * from './libro.js';
 export * from './db/esquema.js';
+
+// Aprobación por correo v0
+export * from './aprobacion.js';
+export * from './exportar.js';

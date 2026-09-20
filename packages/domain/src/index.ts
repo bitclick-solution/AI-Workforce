@@ -20,3 +20,6 @@ export type Paquete = typeof PAQUETE;
 
 export * from './enumeraciones.js';
 export * as esquemas from './esquemas/index.js';
+
+// Aprobación por correo v0
+export * from './puertos.js';
