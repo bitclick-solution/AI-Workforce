@@ -91,7 +91,7 @@ Umbrales de los indicadores de operación del [README](README.md) en el Director
 
 ## Coste estimado
 
-El Director va incluido en todos los planes, no ocupa un puesto del plan y tiene presupuesto propio, como el moderador de sala ([ADR-004](../adr/ADR-004.md)). El contador lo muestra aparte y su consumo no descuenta del cupo de tareas del cliente. Esta es la única cifra de las fichas que el plan no fija: es la pregunta abierta de la [especificación](../specs/fichas-de-producto.md).
+El Director va incluido en todos los planes, no ocupa un puesto del plan y tiene presupuesto propio, como el moderador de sala ([ADR-004](../adr/ADR-004.md)). El contador lo muestra aparte y su consumo no descuenta del cupo de tareas del cliente. Es decisión de Jesús del 2026-09-20, registrada en la [especificación](../specs/fichas-de-producto.md); el plan no la fijaba.
 
 | Actividad                      | Tareas ligeras al mes | Cómo se cuentan                                                                                                              |
 | ------------------------------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
