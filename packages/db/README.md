@@ -77,6 +77,12 @@ await cerrar();
 `set_config(..., true)` es local a la transacción: al terminar, la conexión vuelve al
 estado sin tenant y nunca arrastra el de la petición anterior.
 
+El constructor de consultas de Drizzle se pide con `crearDb()` y abre su propia
+conexión. No comparte cliente con `cliente` a propósito: `drizzle()` sustituye los
+serializadores de fecha del cliente que recibe por la identidad, porque su capa
+trabaja con cadenas, y con el cliente compartido cualquier consulta cruda que pase un
+`Date` falla con «Received an instance of Date». `cerrar()` cierra las dos.
+
 ## Quién crea organizaciones y paraguas
 
 Crear una organización es una operación de plataforma, no del inquilino: la hace el

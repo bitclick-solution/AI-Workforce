@@ -22,8 +22,21 @@ export interface OpcionesConexion {
 }
 
 export interface Conexion {
-  db: BaseDeDatos;
+  /** Cliente crudo. Por aquí van las consultas de la plataforma y `@aiw/ledger`. */
   cliente: postgres.Sql;
+  /**
+   * Constructor de consultas de Drizzle, sobre su propia conexión y creado la
+   * primera vez que se pide.
+   *
+   * No comparte cliente con `cliente` a propósito. `drizzle()` sustituye los
+   * serializadores y los analizadores de fecha del cliente que recibe por la
+   * identidad, porque su capa quiere cadenas y no objetos `Date`. Con el cliente
+   * compartido, cualquier consulta cruda que pase una fecha —el `vence_en` de una
+   * aprobación, la hora de una entrada de auditoría— falla al serializar el
+   * parámetro con «Received an instance of Date». Es una conexión más, y solo se
+   * abre si alguien usa el constructor de consultas.
+   */
+  crearDb: () => BaseDeDatos;
   cerrar: () => Promise<void>;
 }
 
@@ -34,18 +47,27 @@ export const ROL_APLICACION = 'aiw_app';
 export const ROL_MIGRADOR = 'aiw_migrador';
 
 export function crearConexion(opciones: OpcionesConexion): Conexion {
-  const cliente = postgres(opciones.url, {
+  const ajustes: postgres.Options<Record<string, never>> = {
     max: opciones.maxConexiones ?? 10,
     onnotice: () => undefined,
     ...(opciones.rolAplicacion === undefined
       ? {}
       : { connection: { role: opciones.rolAplicacion } }),
-  });
+  };
+  const cliente = postgres(opciones.url, ajustes);
+  let clienteDrizzle: postgres.Sql | undefined;
+
   return {
-    db: drizzle(cliente),
     cliente,
+    crearDb: () => {
+      clienteDrizzle ??= postgres(opciones.url, { ...ajustes, max: 5 });
+      return drizzle(clienteDrizzle);
+    },
     cerrar: async () => {
-      await cliente.end({ timeout: 5 });
+      await Promise.all([
+        cliente.end({ timeout: 5 }),
+        clienteDrizzle?.end({ timeout: 5 }) ?? Promise.resolve(),
+      ]);
     },
   };
 }
