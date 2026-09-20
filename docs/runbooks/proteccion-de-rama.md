@@ -45,10 +45,12 @@ Recomendación del Revisor y del Constructor: Rutinas de Claude Code como vía p
 
 ## Comprobación
 
-1. Abre un PR de prueba desde una rama `rebanada/<nombre>`. El workflow `Revisor` debe dejar un comentario con veredicto en menos de diez minutos. Si el job falla, el paso **Diagnóstico si el action falla** imprime en el registro el tipo de resultado, `is_error`, el número de turnos y el mensaje de error recortado. Un fallo en menos de un segundo con un turno y coste cero es de autenticación o de modelo: revisa el secreto y el acceso al modelo, no el prompt.
+1. Abre un PR de prueba desde una rama `rebanada/<nombre>`. El workflow `Revisor` debe dejar un comentario con veredicto en menos de diez minutos. El paso **Resumen de la ejecución** imprime siempre en el registro el estado de los servidores MCP, el tipo de resultado, `is_error`, el número de turnos, el coste, las herramientas denegadas y el mensaje final recortado; nunca la transcripción. Un fallo en menos de un segundo con un turno y coste cero es de autenticación o de modelo: revisa el secreto y el acceso al modelo, no el prompt.
    Errores conocidos que imprime ese paso:
    - `Credit balance is too low`: la organización de la clave `ANTHROPIC_API_KEY` no tiene crédito. Recárgalo en la consola de la API (Plans & billing) o crea el secreto `CLAUDE_CODE_OAUTH_TOKEN` con `claude setup-token` desde una cuenta con suscripción; el workflow acepta cualquiera de los dos. Fue el motivo real de la primera ejecución (PR #8, 2026-09-19).
    - `Credit balance is too low` con `CLAUDE_CODE_OAUTH_TOKEN` ya configurado: el workflow es anterior a que el token tuviera prioridad y Claude Code está usando la clave. Fusiona el PR #8 o borra el secreto `ANTHROPIC_API_KEY`; con el workflow actual no ocurre.
+   - `Claude reported a successful result after N turns, exceeding the configured maximum`: el Revisor terminó y publicó el veredicto, pero gastó más turnos de los que permite `--max-turns`; el check queda en rojo aunque haya comentario. Sube el tope o recorta las herramientas denegadas (`denegadas=` en el resumen), que consumen turnos.
+   - `mcp Notion: failed` en el resumen: el servidor MCP de Notion no arrancó; revisa `NOTION_TOKEN` y la precarga del paquete en el paso anterior.
    - Modelo no encontrado o sin permiso: la clave no tiene acceso al modelo fijado en `claude_args`. Cambia el modelo o pide acceso en la consola.
    - `authentication_error` o `invalid x-api-key`: el secreto está vacío o caducado. Vuelve a crearlo.
 2. Si la vía elegida es Actions, ejecuta **Actions > Rutinas nocturnas > Run workflow** con la rutina `cronista`. La página del ciclo en curso debe recibir un resumen de dirección nuevo.

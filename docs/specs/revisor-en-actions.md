@@ -13,13 +13,13 @@ Que el job `Revisor` termine con un veredicto en cada PR. En los PR 4 y siguient
 
 ## Paquetes tocados
 
-`.github/workflows/revisor.yml`, `.github/workflows/rutinas-nocturnas.yml` (misma autenticación, vía de respaldo apagada) y `docs/runbooks/proteccion-de-rama.md`.
+`.github/workflows/revisor.yml`, `.github/workflows/rutinas-nocturnas.yml` (misma autenticación, vía de respaldo apagada), `docs/runbooks/proteccion-de-rama.md` y `.gitignore` (ignora `.claude/worktrees/`, corrección de un descuido detectado en este mismo PR).
 
 ## Criterios de hecho
 
 1. El job `Revisor` acepta dos formas de autenticación: `ANTHROPIC_API_KEY` (clave de la consola de la API) o `CLAUDE_CODE_OAUTH_TOKEN` (token de una suscripción de Claude generado con `claude setup-token`). El job `comprobar` se omite en verde solo cuando faltan las dos.
 2. El modelo del Revisor queda fijado en `claude_args` y no depende del valor por defecto del action, que apuntaba a la variante de un millón de tokens de contexto. Esfuerzo medio según el ADR-008.
-3. Si el action falla, un paso posterior imprime solo el diagnóstico del resultado (tipo, `is_error`, número de turnos y el mensaje de error recortado), sin volcar la transcripción.
+3. Un paso posterior imprime siempre el resumen del resultado (estado de los servidores MCP, tipo, `is_error`, número de turnos, coste, herramientas denegadas y mensaje final recortado), sin volcar la transcripción.
 4. `rutinas-nocturnas.yml` acepta la misma doble autenticación.
 5. `docs/runbooks/proteccion-de-rama.md` explica los dos secretos posibles, qué debe admitir la clave y dónde leer el diagnóstico.
 6. En este mismo PR, el check `Revisor` termina con veredicto o, si sigue fallando, el paso de diagnóstico muestra el motivo real en el registro.
@@ -35,6 +35,8 @@ Que el job `Revisor` termine con un veredicto en cada PR. En los PR 4 y siguient
 El PR #8 ejecutó el workflow nuevo el 2026-09-19. El check `Revisor` falló y el paso de diagnóstico mostró el motivo real: `subtype=success is_error=true turnos=1 coste=0` y `error: Credit balance is too low`. Con `claude-sonnet-5` fijado, la causa no es el modelo: la organización de la clave no tiene crédito. El criterio 6 se cumple por su segunda rama. Que el Revisor deje veredicto en cada PR depende de una acción de Jesús: recargar crédito en la consola de la API o crear `CLAUDE_CODE_OAUTH_TOKEN` con `claude setup-token`. El runbook recoge ambas.
 
 Segunda causa, 2026-09-20: con `CLAUDE_CODE_OAUTH_TOKEN` ya configurado el job siguió fallando igual, porque el action pasaba los dos secretos y Claude Code da prioridad a `ANTHROPIC_API_KEY` sobre el token (orden de precedencia de autenticación de su documentación). Los workflows pasan ahora la clave solo cuando no hay token.
+
+Primer veredicto real, 2026-09-20 sobre `e786a0b`: el Revisor publicó su revisión con el token (47 turnos, cuatro minutos, coste equivalente 0,94 USD de cuota) y el check quedó en rojo por superar el tope de 40 turnos, con ocho herramientas denegadas y sin el servidor MCP de Notion. Cambios: tope de 80 turnos, precarga del paquete del servidor de Notion con `MCP_TIMEOUT` de 60 s, y resumen de ejecución que muestra el estado de los MCP y las herramientas denegadas.
 
 ## Fuera de alcance
 
