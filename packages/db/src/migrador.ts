@@ -26,6 +26,13 @@ export const MIGRACIONES: readonly Migracion[] = [
     ruta: fileURLToPath(new URL('../drizzle/0000_inicial.sql', import.meta.url)),
     rutaReverso: fileURLToPath(new URL('../drizzle/reverso/0000_inicial.sql', import.meta.url)),
   },
+  {
+    nombre: '0001_contador_uso_de_modelos',
+    ruta: fileURLToPath(new URL('../drizzle/0001_contador_uso_de_modelos.sql', import.meta.url)),
+    rutaReverso: fileURLToPath(
+      new URL('../drizzle/reverso/0001_contador_uso_de_modelos.sql', import.meta.url),
+    ),
+  },
 ];
 
 export function huellaDe(contenido: string): string {
