@@ -156,6 +156,9 @@ drop function if exists aiw_proteger_particion(text);
 --> statement-breakpoint
 drop function if exists aiw_libro_solo_insercion();
 --> statement-breakpoint
+-- Los disparadores de las tablas inmutables se van con sus tablas.
+drop function if exists aiw_fila_inmutable();
+--> statement-breakpoint
 drop function if exists aiw_tenant_actual();
 --> statement-breakpoint
 drop function if exists uuid_generar_v7();

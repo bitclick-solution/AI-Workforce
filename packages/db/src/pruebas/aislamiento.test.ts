@@ -9,9 +9,16 @@
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { ROL_APLICACION, conTenant, conTenantYRol, identificadorSeguro } from '../cliente.js';
+import {
+  ROL_APLICACION,
+  ROL_MIGRADOR,
+  conTenant,
+  conTenantYRol,
+  identificadorSeguro,
+} from '../cliente.js';
 import { aplicarMigraciones } from '../migrador.js';
 import { purgarOrganizacion } from '../mantenimiento.js';
+import { NOMBRES_TABLAS_INMUTABLES, NOMBRES_TABLAS_INMUTABLES_EN_BUCLE } from '../tablas.js';
 import { HAY_BASE_DE_DATOS, MOTIVO_SALTO, conectar } from './entorno.js';
 import { sembrarOrganizacion, type OrganizacionSembrada } from './semilla.js';
 
@@ -186,6 +193,73 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
         (tx) => tx`select count(*) from mensaje_defecto`,
       ),
     ).rejects.toThrow(/permission denied|permiso denegado/i);
+  });
+
+  // La inmutabilidad estaba escrita en un comentario del SQL y en una lista del
+  // código, pero el `grant` sobre todas las tablas del esquema la dejaba sin efecto.
+  // Estas tres pruebas recorren la lista: si alguien añade una tabla inmutable y no
+  // la protege en la migración, fallan aquí y no seis meses después en producción.
+  describe('las tablas inmutables lo son en la base, no solo en el comentario', () => {
+    // El disparador es por fila: sin filas no dispara y la prueba de abajo pasaría
+    // sin comprobar nada. `entrada_auditoria` queda fuera porque la semilla no
+    // escribe en el libro a propósito; su inmutabilidad la prueba `@aiw/ledger`.
+    it('las del bucle tienen filas de alfa, o la prueba del disparador no vale nada', async () => {
+      for (const tabla of NOMBRES_TABLAS_INMUTABLES_EN_BUCLE) {
+        const nombre = identificadorSeguro(tabla);
+        const filas = await conTenant(cliente, alfa.tenantId, (tx) =>
+          tx.unsafe<{ total: string }[]>(
+            `select count(*) as total from ${nombre} where tenant_id = $1`,
+            [alfa.tenantId],
+          ),
+        );
+        expect(Number(filas[0]?.total ?? 0), `${nombre} no tiene filas de alfa`).toBeGreaterThan(0);
+      }
+    });
+
+    it('el rol de aplicación no puede actualizarlas ni borrarlas', async () => {
+      for (const tabla of NOMBRES_TABLAS_INMUTABLES) {
+        const nombre = identificadorSeguro(tabla);
+        await expect(
+          conTenantYRol(cliente, alfa.tenantId, ROL_APLICACION, (tx) =>
+            tx.unsafe(`update ${nombre} set creado_en = creado_en where tenant_id = $1`, [
+              alfa.tenantId,
+            ]),
+          ),
+          `${nombre} deja al rol de aplicación actualizar`,
+        ).rejects.toThrow(/permission denied|permiso denegado/i);
+
+        await expect(
+          conTenantYRol(cliente, alfa.tenantId, ROL_APLICACION, (tx) =>
+            tx.unsafe(`delete from ${nombre} where tenant_id = $1`, [alfa.tenantId]),
+          ),
+          `${nombre} deja al rol de aplicación borrar`,
+        ).rejects.toThrow(/permission denied|permiso denegado/i);
+      }
+    });
+
+    it('ni el dueño del esquema las actualiza: el disparador lo impide', async () => {
+      for (const tabla of NOMBRES_TABLAS_INMUTABLES_EN_BUCLE) {
+        const nombre = identificadorSeguro(tabla);
+        await expect(
+          conTenantYRol(cliente, alfa.tenantId, ROL_MIGRADOR, (tx) =>
+            tx.unsafe(`update ${nombre} set creado_en = creado_en where tenant_id = $1`, [
+              alfa.tenantId,
+            ]),
+          ),
+          `${nombre} deja al dueño del esquema actualizar`,
+        ).rejects.toThrow(/es inmutable/);
+      }
+    });
+
+    it('el dueño del esquema sí las borra: la purga y la retención son de plataforma', async () => {
+      // Se comprueba sobre una organización que se tira acto seguido, para no dejar
+      // a alfa a medias. Si esto fallara, `purgarOrganizacion` no podría funcionar.
+      const efimera = await sembrarOrganizacion(cliente, `inmutables-${Date.now()}`);
+      const borradas = await purgarOrganizacion(cliente, efimera.tenantId);
+      for (const tabla of NOMBRES_TABLAS_INMUTABLES_EN_BUCLE) {
+        expect(borradas[tabla], `la purga no borró ${tabla}`).toBeGreaterThan(0);
+      }
+    });
   });
 
   it('la tabla de migraciones es del migrador, no de la aplicación', async () => {

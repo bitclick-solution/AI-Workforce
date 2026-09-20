@@ -15,6 +15,8 @@ import {
   NOMBRES_TABLAS,
   NOMBRES_TABLAS_CON_TENANT,
   NOMBRES_TABLAS_INMUTABLES,
+  NOMBRES_TABLAS_INMUTABLES_CON_DISPARADOR_PROPIO,
+  NOMBRES_TABLAS_INMUTABLES_EN_BUCLE,
   NOMBRES_TABLAS_LIBRO,
   NOMBRES_TABLAS_PARTICIONADAS,
   ORDEN_PURGA,
@@ -172,6 +174,36 @@ describe('tablas inmutables', () => {
         'actualizado_en',
       );
     }
+  });
+
+  it('la lista del código y la del bucle de la migración son la misma', () => {
+    const bloque = sql.slice(
+      sql.indexOf("v_tablas text[] := array[\n    'version_puesto'"),
+      sql.indexOf(
+        "foreach v_tabla in array v_tablas loop\n    execute format(\n      'create trigger",
+      ),
+    );
+    expect(bloque.length, 'no encuentro el bucle de tablas inmutables').toBeGreaterThan(0);
+    const enLaMigracion = [...bloque.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+    expect(enLaMigracion.sort()).toEqual([...NOMBRES_TABLAS_INMUTABLES_EN_BUCLE].sort());
+  });
+
+  it('la migración le retira UPDATE y DELETE al rol de aplicación en todas', () => {
+    for (const nombre of NOMBRES_TABLAS_INMUTABLES_CON_DISPARADOR_PROPIO) {
+      expect(sql, `${nombre} no pierde update y delete`).toContain(
+        `revoke update, delete on ${nombre} from aiw_app`,
+      );
+    }
+    // Las del bucle lo hacen con format(); el bucle es lo que se comprueba arriba.
+    expect(sql).toContain("execute format('revoke update, delete on %I from aiw_app', v_tabla)");
+  });
+
+  it('ningún UPDATE se permite, ni al dueño del esquema', () => {
+    expect(sql).toContain('create or replace function aiw_fila_inmutable()');
+    expect(sql).toContain(
+      "'create trigger %I before update on %I for each row execute function aiw_fila_inmutable()'",
+    );
+    expect(reverso).toContain('drop function if exists aiw_fila_inmutable();');
   });
 });
 

@@ -26,10 +26,10 @@ La migración inicial crea dos roles, ninguno con contraseña y ninguno con `LOG
 despliegue crea los usuarios que los asumen y les pone la contraseña desde el gestor
 de secretos.
 
-| Rol            | Para qué      | Qué puede                                                                                                                                                                                 |
-| -------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `aiw_migrador` | Migraciones   | Es el dueño del esquema: suyos son los tipos, las funciones y las tablas. Solo lo usan las migraciones                                                                                    |
-| `aiw_app`      | La aplicación | `select`, `insert`, `update` y `delete` sobre las tablas del tenant; sobre `entrada_auditoria`, solo `insert`. No tiene `BYPASSRLS` ni acceso a `migracion_aplicada` ni a las particiones |
+| Rol            | Para qué      | Qué puede                                                                                                                                                                                     |
+| -------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aiw_migrador` | Migraciones   | Es el dueño del esquema: suyos son los tipos, las funciones y las tablas. Solo lo usan las migraciones                                                                                        |
+| `aiw_app`      | La aplicación | `select`, `insert`, `update` y `delete` sobre las tablas mutables del tenant; sobre las inmutables, solo `insert`. No tiene `BYPASSRLS` ni acceso a `migracion_aplicada` ni a las particiones |
 
 ### El migrador es el dueño, no quien conecta
 
@@ -127,11 +127,37 @@ decisión es una fila propia en `decision_aprobacion`, una por aprobación (ADR-
 «Aprobación pendiente» no es un estado: es una aprobación sin fila de decisión, y así
 la busca el panel.
 
+## Filas inmutables
+
+Estas nueve tablas se insertan y no se cambian: `version_puesto`, `aprobacion`,
+`decision_aprobacion`, `leccion`, `promocion`, `paso`, `senal`, `mensaje` y
+`entrada_auditoria`. La lista vive en `src/tablas.ts` y la migración la recorre, así
+que no es una convención: es lo que impone la base.
+
+- **`UPDATE`: nadie, nunca.** Un disparador por fila lo rechaza, también para el dueño
+  del esquema. Una corrección es una fila nueva con puntero a la versión activa
+  (ADR-007). Si alguna vez hace falta tocar una de estas filas, es una migración de
+  datos con su rebanada, que puede soltar el disparador y volver a ponerlo.
+- **`DELETE`: no desde la aplicación.** `aiw_app` no lo tiene. Estas filas solo se
+  borran al purgar un tenant o al soltar una partición por retención, y las dos cosas
+  son operaciones de plataforma: `purgarOrganizacion` y `purgarPuesto` se ejecutan con
+  el rol de operación, igual que el alta de una organización, no con el rol que
+  atiende peticiones. Si `aiw_app` pudiera borrar, podría resucitar una aprobación
+  resuelta borrando su decisión.
+- **`entrada_auditoria` es más estricta**: ni `UPDATE` ni `DELETE`, para nadie. La
+  retención suelta particiones enteras; no borra filas.
+
 ## Borrado y exportación
 
 `exportarOrganizacion` escribe un JSONL por tabla y `purgarOrganizacion` vacía el
 tenant en el orden correcto; `exportarPuesto` y `purgarPuesto` hacen lo propio con un
 agente. El libro de auditoría se exporta pero no se purga.
+
+Las cuatro son operaciones de plataforma y no las puede ejecutar `aiw_app`: tocan
+tablas inmutables, donde el rol de aplicación no tiene `DELETE`. Las ejecuta el rol de
+operación (hoy `aiw_migrador` o el dueño de la base desde un runbook; el rol propio
+llega con «Identidad y organizaciones»), y el flujo durable que las invoca llega con
+«Borrado y exportación».
 
 ## Pruebas
 

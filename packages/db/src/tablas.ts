@@ -85,6 +85,11 @@ export const TABLAS_INFRAESTRUCTURA = [migracionAplicada] as const satisfies rea
 /**
  * Tablas inmutables: se insertan y no se actualizan. Las actualizaciones son inserciones
  * con puntero a la versión activa (ADR-007, «lo que afecta a la auditoría no se actualiza»).
+ *
+ * Esta lista no es documentación: la migración inicial la recorre para poner un
+ * disparador que rechaza cualquier `UPDATE`, incluso del dueño del esquema, y para
+ * retirarle `UPDATE` y `DELETE` al rol de aplicación. Si añades una tabla aquí y no
+ * allí, la prueba de esquema falla; si la añades allí y no aquí, también.
  */
 export const NOMBRES_TABLAS_INMUTABLES = [
   'version_puesto',
@@ -97,6 +102,19 @@ export const NOMBRES_TABLAS_INMUTABLES = [
   'mensaje',
   'entrada_auditoria',
 ] as const;
+
+/**
+ * El libro va aparte: ni se actualiza ni se borra nunca, y su disparador se crea con
+ * la tabla. El resto de inmutables sí se borran al purgar un tenant, que es una
+ * operación de plataforma, así que solo se les prohíbe el `UPDATE` a todo el mundo.
+ */
+export const NOMBRES_TABLAS_INMUTABLES_CON_DISPARADOR_PROPIO = ['entrada_auditoria'] as const;
+
+/** Las inmutables cuyo disparador pone el bucle de la migración. */
+export const NOMBRES_TABLAS_INMUTABLES_EN_BUCLE: readonly string[] =
+  NOMBRES_TABLAS_INMUTABLES.filter(
+    (nombre) => !NOMBRES_TABLAS_INMUTABLES_CON_DISPARADOR_PROPIO.includes(nombre as never),
+  );
 
 /** Tablas particionadas por mes. Su clave primaria incluye `creado_en`. */
 export const NOMBRES_TABLAS_PARTICIONADAS = ['entrada_auditoria', 'mensaje', 'senal'] as const;

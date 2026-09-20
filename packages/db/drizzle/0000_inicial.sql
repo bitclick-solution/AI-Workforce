@@ -1057,6 +1057,54 @@ revoke update, delete on entrada_auditoria from aiw_app;
 -- La tabla de migraciones es del migrador.
 revoke all on migracion_aplicada from aiw_app;
 --> statement-breakpoint
+
+-- ---------------------------------------------------------------------------
+-- Filas inmutables. «Lo que afecta a la auditoría no se actualiza en sitio»
+-- (ADR-007): una corrección es una fila nueva con puntero a la versión activa.
+--
+-- Hasta aquí eso era un comentario y una lista en el código. Se impone en dos
+-- capas, porque el `grant` de arriba es sobre todas las tablas del esquema:
+--   - UPDATE: prohibido a todo el mundo, incluido el dueño del esquema, con un
+--     disparador por fila. No hay ningún UPDATE legítimo sobre estas tablas.
+--   - DELETE: retirado al rol de aplicación. Estas filas solo se borran al purgar
+--     un tenant o al soltar una partición por retención, y las dos cosas son
+--     operaciones de plataforma, nunca del rol que atiende peticiones. Si `aiw_app`
+--     pudiera borrar, podría resucitar una aprobación resuelta borrando su decisión.
+--
+-- `entrada_auditoria` va aparte y es más estricta: ni se actualiza ni se borra,
+-- ni siquiera el dueño del esquema. Su disparador se crea con la tabla.
+-- ---------------------------------------------------------------------------
+create or replace function aiw_fila_inmutable() returns trigger
+language plpgsql
+as $$
+begin
+  raise exception 'La fila de % es inmutable: % no está permitido. Una corrección es una fila nueva.',
+    tg_table_name, tg_op
+    using errcode = 'insufficient_privilege';
+end;
+$$;
+--> statement-breakpoint
+
+do $$
+declare
+  v_tabla text;
+  -- Misma lista que NOMBRES_TABLAS_INMUTABLES en packages/db/src/tablas.ts, sin
+  -- entrada_auditoria, que ya tiene el suyo. Una prueba comprueba que coinciden.
+  v_tablas text[] := array[
+    'version_puesto', 'aprobacion', 'decision_aprobacion', 'leccion', 'promocion',
+    'paso', 'senal', 'mensaje'
+  ];
+begin
+  foreach v_tabla in array v_tablas loop
+    execute format(
+      'create trigger %I before update on %I for each row execute function aiw_fila_inmutable()',
+      v_tabla || '_sin_actualizar', v_tabla
+    );
+    execute format('revoke update, delete on %I from aiw_app', v_tabla);
+  end loop;
+end
+$$;
+--> statement-breakpoint
 -- Las particiones no se tocan directamente: todo pasa por la tabla padre.
 do $$
 declare
