@@ -7,6 +7,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsx watch src/main.ts",
+    "demo:contador": "tsx src/demo-contador.ts",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",

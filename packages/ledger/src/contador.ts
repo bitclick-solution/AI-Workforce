@@ -66,6 +66,22 @@ function exigirPrecio(valor: number, campo: string): number {
   return valor;
 }
 
+/**
+ * Las fechas viajan a la base como texto ISO 8601 y se convierten en SQL, nunca
+ * como `Date`.
+ *
+ * No es manía: el driver de Drizzle sustituye los serializadores de fecha del
+ * cliente de `postgres` que comparte (`drizzle-orm/postgres-js` pone uno
+ * transparente para los tipos 1082, 1083, 1114 y 1184), así que un `Date` pasado
+ * como parámetro llega al socket sin convertir y `postgres` lo rechaza con
+ * `ERR_INVALID_ARG_TYPE`. Con el cliente crudo de las pruebas funcionaría, y el
+ * fallo aparecería solo en la aplicación, que es el peor sitio para descubrirlo.
+ */
+function comoIso(valor: Date, campo: string): string {
+  if (Number.isNaN(valor.getTime())) throw new Error(`${campo} no es una fecha válida.`);
+  return valor.toISOString();
+}
+
 /** Tarifa aplicable a un uso, tal como sale de `tarifa_modelo`. */
 export interface Tarifa {
   id: string;
@@ -389,7 +405,7 @@ export async function registrarUsoDeModelo(
       ${tenantId}, ${uso.tareaId}, ${tareaRaizId}, ${uso.pasoId ?? null},
       ${uso.puestoId}, ${uso.versionPuestoId}, ${proveedor}, ${modelo},
       ${tokens.entrada}, ${tokens.salida}, ${tokens.entradaCache ?? 0},
-      ${llamadas}, ${tarifa.id}, ${normalizarImporte(costeEuros)}, ${clave}, ${momento}
+      ${llamadas}, ${tarifa.id}, ${normalizarImporte(costeEuros)}, ${clave}, ${comoIso(momento, 'momento')}::timestamptz
     )
     returning id
   `;
@@ -447,7 +463,7 @@ export async function tarifaVigente(
     where tenant_id = ${tenantId}
       and proveedor = ${proveedor}
       and modelo = ${modelo}
-      and vigente_desde <= ${momento}
+      and vigente_desde <= ${comoIso(momento, 'momento')}::timestamptz
     order by vigente_desde desc
     limit 1
   `;
@@ -497,7 +513,7 @@ export async function registrarTarifa(
       euros_por_millon_entrada_cache, vigente_desde, fuente
     ) values (
       ${tenantId}, ${proveedor}, ${modelo}, ${entradaPrecio}, ${salidaPrecio},
-      ${cachePrecio}, ${tarifa.vigenteDesde}, ${fuente}
+      ${cachePrecio}, ${comoIso(tarifa.vigenteDesde, 'vigenteDesde')}::timestamptz, ${fuente}
     )
     returning id
   `;

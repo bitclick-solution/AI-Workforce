@@ -10,12 +10,14 @@ import {
   aplicarMigraciones,
   conTenant,
   conTenantYRol,
+  crearConexion,
   purgarOrganizacion,
   uuidV7,
 } from '@aiw/db';
 import {
   HAY_BASE_DE_DATOS,
   MOTIVO_SALTO,
+  URL_BASE_DE_DATOS,
   conectar,
   sembrarOrganizacion,
   type OrganizacionSembrada,
@@ -545,6 +547,44 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
           ),
           `${tabla} deja al dueño del esquema actualizar`,
         ).rejects.toThrow(/es inmutable/);
+      }
+    });
+
+    it('se escribe igual con el cliente de la aplicación, que no serializa fechas', async () => {
+      // Regresión: `crearConexion` monta Drizzle sobre el cliente de `postgres`, y
+      // Drizzle sustituye los serializadores de los tipos de fecha por uno
+      // transparente. Pasar un `Date` como parámetro reventaba con
+      // ERR_INVALID_ARG_TYPE solo por este camino —el de la aplicación—, mientras
+      // el resto de estas pruebas, con el cliente crudo, pasaban.
+      const aplicacion = crearConexion({
+        url: URL_BASE_DE_DATOS ?? '',
+        rolAplicacion: ROL_APLICACION,
+      });
+      try {
+        const resultado = await conTenant(aplicacion.cliente, org.tenantId, async (tx) => {
+          await registrarTarifa(tx, org.tenantId, {
+            proveedor: PROVEEDOR,
+            modelo: 'modelo-por-el-cliente-de-la-aplicacion',
+            eurosPorMillonEntrada: 1,
+            eurosPorMillonSalida: 5,
+            vigenteDesde: new Date('2026-02-01T00:00:00.000Z'),
+            fuente: 'prueba con el cliente de la aplicación',
+          });
+          return registrarUsoDeModelo(tx, org.tenantId, {
+            tareaId: org.tareaId,
+            puestoId: org.puestoId,
+            versionPuestoId: org.versionPuestoId,
+            proveedor: PROVEEDOR,
+            modelo: 'modelo-por-el-cliente-de-la-aplicacion',
+            tokens: { entrada: 100_000, salida: 10_000 },
+            claveIdempotencia: 'peticion-por-la-aplicacion',
+            momento: new Date('2026-09-15T10:00:00.000Z'),
+          });
+        });
+        expect(resultado.yaEstaba).toBe(false);
+        expect(resultado.costeEuros).toBeCloseTo(0.15, 4);
+      } finally {
+        await aplicacion.cerrar();
       }
     });
 
