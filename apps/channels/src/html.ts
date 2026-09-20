@@ -41,7 +41,7 @@ export const ESTILO = [
   'footer{margin-top:1.5rem;font-size:.85rem;color:#6b6b66}',
 ].join('');
 
-/** Envuelve el contenido en un documento completo. El título ya viene escapado. */
+/** Envuelve el contenido en un documento completo. El título se escapa aquí; el contenido llega ya escapado. */
 export function documento(titulo: string, contenido: string): string {
   return [
     '<!doctype html>',
@@ -51,7 +51,7 @@ export function documento(titulo: string, contenido: string): string {
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
     '<meta name="referrer" content="no-referrer">',
     '<meta name="robots" content="noindex,nofollow">',
-    `<title>${titulo}</title>`,
+    `<title>${escaparHtml(titulo)}</title>`,
     `<style>${ESTILO}</style>`,
     '</head>',
     '<body><main>',
