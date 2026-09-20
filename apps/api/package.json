@@ -13,9 +13,11 @@
     "clean": "rm -rf dist coverage .turbo"
   },
   "dependencies": {
+    "@aiw/db": "workspace:*",
     "@aiw/domain": "workspace:*",
     "@aiw/ledger": "workspace:*",
-    "@aiw/mcp-gateway": "workspace:*"
+    "@aiw/mcp-gateway": "workspace:*",
+    "postgres": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

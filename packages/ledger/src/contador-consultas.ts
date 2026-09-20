@@ -9,6 +9,14 @@
  * El coste de una tarea se agrega desde `uso_modelo` por tarea raíz, así que el
  * consumo de una delegación aparece en la tarea que la pidió (ADR-003) sin que nadie
  * mantenga un acumulado a mano.
+ *
+ * Las marcas de tiempo salen de la base ya en ISO 8601 con `to_char`, y no como
+ * `Date` que luego se formatea aquí. El motivo no es estético: el driver de Drizzle
+ * sustituye los intérpretes de fecha del cliente de `postgres` que comparte
+ * (`drizzle-orm/postgres-js` pone un intérprete transparente para 1082, 1083, 1114
+ * y 1184), así que el mismo `select now()` devuelve `Date` con un cliente crudo y
+ * una cadena con el cliente de `crearConexion`. Formatear en SQL hace que la
+ * respuesta del panel no dependa de por dónde llegó la conexión.
  */
 import type postgres from 'postgres';
 
@@ -48,7 +56,7 @@ export async function consumoDelPeriodo(
       coste_euros: string;
       coste_modelos_euros: string;
       ultima_anotacion: string;
-      momento: Date;
+      momento: string;
     }[]
   >`
     with periodo as (select date_trunc('month', now())::date as dia)
@@ -69,7 +77,7 @@ export async function consumoDelPeriodo(
         from entrada_auditoria e
         where e.tenant_id = ${tenantId}
       ), 0)::text as ultima_anotacion,
-      now() as momento
+      to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as momento
     from periodo
     left join contador_consumo c
       on c.tenant_id = ${tenantId} and c.periodo = (select dia from periodo)
@@ -84,7 +92,7 @@ export async function consumoDelPeriodo(
     costeEuros: Number(fila.coste_euros),
     costeModelosEuros: Number(fila.coste_modelos_euros),
     ultimaAnotacion: Number(fila.ultima_anotacion),
-    momento: fila.momento.toISOString(),
+    momento: fila.momento,
   };
 }
 
@@ -129,7 +137,7 @@ export async function tareasDelPeriodo(
       puesto: string;
       estado: string;
       origen: string;
-      creado_en: Date;
+      creado_en: string;
       coste_modelos_euros: string;
       usos: string;
       delegaciones: string;
@@ -141,7 +149,7 @@ export async function tareasDelPeriodo(
       p.nombre as puesto,
       t.estado::text as estado,
       t.origen::text as origen,
-      t.creado_en,
+      to_char(t.creado_en at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as creado_en,
       coalesce(u.coste, 0)::text as coste_modelos_euros,
       coalesce(u.usos, 0)::text as usos,
       coalesce(d.hijas, 0)::text as delegaciones
@@ -188,7 +196,7 @@ export async function tareasDelPeriodo(
       puesto: fila.puesto,
       estado: fila.estado,
       origen: fila.origen,
-      creadoEn: fila.creado_en.toISOString(),
+      creadoEn: fila.creado_en,
       costeModelosEuros: Number(fila.coste_modelos_euros),
       usos: Number(fila.usos),
       delegaciones: Number(fila.delegaciones),

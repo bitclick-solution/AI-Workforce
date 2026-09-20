@@ -360,9 +360,15 @@ export async function registrarUsoDeModelo(
     };
   }
 
-  const [reloj] = await tx<{ ahora: Date }[]>`select clock_timestamp() as ahora`;
+  // La hora la pone la base, y la pide en ISO 8601 y no como marca de tiempo: el
+  // driver de Drizzle sustituye los intérpretes de fecha del cliente que comparte,
+  // así que el mismo `select` devuelve `Date` o cadena según por dónde llegó la
+  // conexión. Con texto y `new Date()`, aquí siempre hay una fecha de verdad.
+  const [reloj] = await tx<{ ahora: string }[]>`
+    select to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as ahora
+  `;
   if (!reloj) throw new Error('La base no devolvió la hora del uso.');
-  const momento = uso.momento ?? reloj.ahora;
+  const momento = uso.momento ?? new Date(reloj.ahora);
 
   const tarifa = await tarifaVigente(tx, tenantId, proveedor, modelo, momento);
   if (!tarifa) {
