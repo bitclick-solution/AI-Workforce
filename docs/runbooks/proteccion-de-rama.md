@@ -24,10 +24,12 @@ Ajustes de GitHub que Jesús configura una vez para que la fábrica funcione. Ni
    - Autenticación de Claude para el Revisor y las rutinas, una de las dos:
      - `ANTHROPIC_API_KEY`: clave de la consola de la API de Anthropic. La organización de la clave debe tener acceso al modelo que fija `claude_args` en los workflows (`claude-sonnet-5`) y crédito disponible.
      - `CLAUDE_CODE_OAUTH_TOKEN`: token de una suscripción de Claude, generado en tu equipo con `claude setup-token`. Úsalo si no tienes clave de la API.
+       **Precaución:** es una credencial personal de larga duración ligada a la cuenta de Jesús. Guárdala solo como secreto del repositorio, rótala si cambia la suscripción o la cuenta, y ten en cuenta que su uso en automatización queda sujeto a las condiciones de la suscripción de Claude. Con la clave de la API el coste es medible por PR; con el token se descuenta del límite de la suscripción y puede agotar la cuota que usan las sesiones de trabajo.
    - `NOTION_TOKEN`: token de la integración interna de Notion, con permisos de lectura y escritura sobre la página **AI Workforce**.
 2. Comparte la página **AI Workforce** con la integración desde Notion (**Conexiones** en el menú de la página).
 3. Solo si eliges GitHub Actions como vía de las rutinas nocturnas (ver la sección siguiente), crea la variable `RUTINAS_NOCTURNAS` con el valor `true` y el secreto `CRONISTA_TOKEN`: un token de acceso personal de grano fino con permisos de contenido y de pull requests sobre este repositorio, o un token de GitHub App. Sin `CRONISTA_TOKEN`, el Cronista usa `GITHUB_TOKEN` y los PR que abre no disparan la CI ni al Revisor, así que no se podrían fusionar con el ruleset.
-4. Si quieres que el Revisor pueda emitir aprobaciones formales además de comentarios, activa **Settings > Actions > General > Allow GitHub Actions to create and approve pull requests**. Sin este ajuste, el Revisor deja el veredicto como comentario de revisión y pide cambios cuando bloquea.
+4. Opcional: la variable de repositorio `REVISOR_MODELO` fija el modelo del Revisor y de las rutinas de respaldo sin tocar los workflows (zona crítica). Sin la variable, los workflows usan `claude-sonnet-5`.
+5. Si quieres que el Revisor pueda emitir aprobaciones formales además de comentarios, activa **Settings > Actions > General > Allow GitHub Actions to create and approve pull requests**. Sin este ajuste, el Revisor deja el veredicto como comentario de revisión y pide cambios cuando bloquea.
 
 ## Vía de ejecución de las rutinas nocturnas
 

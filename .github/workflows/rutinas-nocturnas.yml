@@ -74,7 +74,7 @@ jobs:
           github_token: ${{ github.token }}
           prompt: Lee .claude/routines/evaluador.md y ejecuta el bloque de prompt que contiene, tal cual.
           claude_args: |
-            --model claude-sonnet-5
+            --model ${{ vars.REVISOR_MODELO || 'claude-sonnet-5' }}
             --max-turns 50
             --mcp-config .github/mcp/notion.json
             --allowedTools "Read,Grep,Glob,Bash(pnpm:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(git log:*),mcp__Notion"
@@ -107,7 +107,7 @@ jobs:
           github_token: ${{ secrets.CRONISTA_TOKEN || github.token }}
           prompt: Lee .claude/routines/cronista.md y ejecuta el bloque de prompt que contiene, tal cual.
           claude_args: |
-            --model claude-sonnet-5
+            --model ${{ vars.REVISOR_MODELO || 'claude-sonnet-5' }}
             --max-turns 40
             --mcp-config .github/mcp/notion.json
             --allowedTools "Read,Grep,Glob,Write,Edit,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(git checkout:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git log:*),Bash(git status:*),mcp__Notion"

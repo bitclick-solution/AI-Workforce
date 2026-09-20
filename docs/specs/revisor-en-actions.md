@@ -2,7 +2,7 @@ VIGENTE
 
 # Especificación · Revisor en GitHub Actions: primera ejecución real y modelo del action
 
-- Rebanada: [Notion](https://app.notion.com/p/3e053066189881649484fc0c378c0852) · Ciclo 0 · Tipo Operación · Paquetes deploy, docs · P1
+- Rebanada: [Notion](https://app.notion.com/p/3e053066189881649484fc0c378c0852) · Ciclo 0 · Tipo Operación · Paquetes `.github` (workflows) y docs; el tablero no tiene opción para `.github` y la rebanada figura como docs · P1
 - Rama: `rebanada/revisor-en-actions`
 - Plan de referencia: _Cómo llevarlo a cabo_ ("Cada PR dispara al Revisor desde GitHub Actions"; "nivel de esfuerzo medio para el Revisor") y ADR-008.
 - Zona crítica: sí. Toca `.github/workflows/`; requiere la aprobación de Jesús.
