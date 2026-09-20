@@ -89,6 +89,8 @@ describe('correo de solicitud', () => {
   it('el asunto es una línea y se recorta', () => {
     const largo = 'a'.repeat(200);
     expect(asuntoDelCorreo(datos(`${largo}\nsegunda línea`))).not.toContain('\n');
+    expect(asuntoDelCorreo(datos('primera\rsegunda'))).not.toContain('\r');
+    expect(asuntoDelCorreo(datos('primera\r\nsegunda'))).toMatch(/primera$/);
     expect(asuntoDelCorreo(datos(largo)).length).toBeLessThan(130);
   });
 

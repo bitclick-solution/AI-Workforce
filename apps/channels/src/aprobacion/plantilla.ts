@@ -38,9 +38,9 @@ export function asuntoDelCorreo(datos: DatosDelCorreo): string {
   return `${prefijo}Aprobación pendiente: ${primeraLinea(datos.resumenLegible)}`;
 }
 
-/** El asunto es una línea: el resumen puede traer saltos y se recorta. */
+/** El asunto es una línea: el resumen puede traer saltos (\n, \r\n o \r suelto) y se recorta. */
 function primeraLinea(texto: string, maximo = 90): string {
-  const linea = texto.split('\n')[0]?.trim() ?? '';
+  const linea = texto.split(/\r\n|\r|\n/)[0]?.trim() ?? '';
   return linea.length <= maximo ? linea : `${linea.slice(0, maximo - 1)}…`;
 }
 
