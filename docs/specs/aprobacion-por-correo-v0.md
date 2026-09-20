@@ -5,7 +5,7 @@ VIGENTE
 - Rebanada: [Notion](https://app.notion.com/p/3e053066189881d5abb0e56f66720bd8) · Ciclo 0 (Fase 0 · Definir y validar) · Tipo Plataforma · Paquetes `channels`, `ledger` · P0
 - Rama: `rebanada/aprobacion-por-correo-v0`
 - Plan de referencia: secciones sobre aprobación con borrador, niveles N0 a N3 y libro de auditoría del [plan v8](https://claude.ai/artifact/Mf7PeYbaXCnp5wFhQu3XWn); ADR-001 (borrador de aprobación con carga opaca e interfaz de aprobación genérica), ADR-003 (tarea y contador), ADR-005 (niveles y versiones inmutables), ADR-007 (modelo de datos, libro append-only con hash encadenado), ADR-010 (exportación en CSV y JSON y verificador de cadena de hashes).
-- Zona crítica: sí: `packages/ledger` (libro de auditoría y contador), `packages/domain` (esquemas compartidos) y `.github/workflows/ci.yml` (una línea en el filtro del job «Base de datos»). «Revisión humana obligatoria» marcada en la rebanada. Sin migración: el modelo v1 ya cubre el caso.
+- Zona crítica: sí: `packages/ledger` (libro de auditoría y contador), `packages/domain` (esquemas compartidos), `packages/db` (una corrección en el cliente, sin tocar el esquema) y `.github/workflows/ci.yml` (una línea en el filtro del job «Base de datos»). «Revisión humana obligatoria» marcada en la rebanada. Sin migración: el modelo v1 ya cubre el caso.
 
 ## Objetivo
 
@@ -16,6 +16,7 @@ Una persona recibe un correo con el resumen legible de lo que un agente quiere h
 - `apps/channels` (`@aiw/channels`): configuración, firma y verificación del enlace, plantilla del correo, páginas genéricas, servidor HTTP, adaptadores de correo y de señal, y reintentos. Su responsabilidad declarada ya era «WhatsApp, correo y enlaces de aprobación firmados de un solo uso»; ahora la cumple. Pasa a depender de `@aiw/db` y `@aiw/ledger`.
 - `packages/ledger`: `src/aprobacion.ts` (solicitar aprobación, registrar decisión, vencer, y las anotaciones con nombre de acción fijo) y `src/exportar.ts` (exportación en CSV, JSON y JSON por líneas con verificación de rango de la cadena). Ficheros nuevos; `libro.ts` y `hash.ts` no se tocan.
 - `packages/domain`: `src/puertos.ts`, un fichero nuevo con los contratos puros `PuertoDeCorreo` y `PuertoDeSenal` y el esquema Zod de la carga de la señal. Sigue sin depender de ningún paquete del monorepo.
+- `packages/db`: una corrección en `src/cliente.ts` y su prueba de regresión. No se toca el esquema ni hay migración.
 - `deploy/compose`, `.env.example`, `scripts`: servicio Mailpit de desarrollo con healthcheck y las variables de entorno de la rebanada.
 - `.github/workflows/ci.yml`: una línea, `--filter @aiw/channels` en el job «Base de datos».
 
@@ -34,7 +35,9 @@ Una persona recibe un correo con el resumen legible de lo que un agente quiere h
 11. **La exportación con la cadena rota falla, salvo que se pida lo contrario.** Por defecto `exportarLibro` lanza si la verificación no pasa: entregar evidencia alterada sin decirlo es peor que no entregarla. Con `exigirCadenaValida: false` exporta igual y deja el veredicto en la cabecera, porque un auditor que investiga una manipulación necesita justo esas filas.
 12. **El CSV neutraliza fórmulas; el JSON es la evidencia fiel.** Un valor que empieza por `=`, `+`, `-`, `@`, tabulador o retorno de carro se exporta con un apóstrofo delante: `datos_referenciados` puede contener identificadores de sistemas externos, y una hoja de cálculo los ejecutaría. El CSV es para personas; el JSON y el JSON por líneas no tocan ningún valor y son los que se verifican.
 13. **Las páginas son genéricas y no revelan si la aprobación existe.** ADR-001: interfaz de aprobación genérica. Token inválido, aprobación de otro tenant y aprobación inexistente producen la misma página y el mismo mensaje. El resumen legible se escapa antes de pintarlo y antes de meterlo en el correo: lo escribe un agente y ninguna de las dos salidas se fía de él. El borrador opaco no se muestra nunca: la página lo trata como carga que no interpreta.
-14. **Mailpit entra en el Compose de desarrollo.** No había servidor de correo y sin uno la demo no se puede reproducir en la máquina de Jesús. `axllent/mailpit` con SMTP en 1025, interfaz en 8025 y healthcheck `mailpit readyz`. El job «Compose de desarrollo arranca» lo levantará porque el cambio toca `deploy/`.
+14. **`crearConexion` de `@aiw/db` devolvía un cliente que no sabía mandar fechas.** No es una decisión, es un fallo que esta rebanada ha encontrado por ser la primera que escribe en el libro desde una aplicación. `drizzle()` sustituye los serializadores de fecha del cliente de postgres.js que recibe por la identidad, porque su capa trabaja con cadenas; como `crearConexion` le pasaba el mismo cliente que devuelve para las consultas crudas, cualquier `${new Date()}` —el `vence_en` de una aprobación, la hora de una entrada de auditoría— fallaba con «Received an instance of Date». Las pruebas no lo veían porque usan el cliente de `@aiw/db/pruebas`, que no pasa por Drizzle. El arreglo es mínimo: el constructor de consultas se pide con `crearDb()` y abre su propia conexión, y una prueba de regresión en `packages/db/src/pruebas/conexion.test.ts` manda un `Date` y lo recupera. Nadie más usaba `Conexion.db`, así que el cambio de API no rompe nada.
+15. **La demo es un guion, no una secuencia de pasos a mano.** `pnpm --filter @aiw/channels demo:aprobacion` siembra una organización, pide un permiso, manda el correo, arranca el servidor y escribe el enlace por pantalla. Con `AIW_CORREO_PROVEEDOR=smtp` el correo sale hacia Mailpit y se lee en su interfaz. Una demo que se reproduce con un comando se repite; una lista de doce pasos, no.
+16. **Mailpit entra en el Compose de desarrollo.** No había servidor de correo y sin uno la demo no se puede reproducir en la máquina de Jesús. `axllent/mailpit` con SMTP en 1025, interfaz en 8025 y healthcheck `mailpit readyz`. El job «Compose de desarrollo arranca» lo levantará porque el cambio toca `deploy/`.
 
 ## Endpoints, flujos y datos
 
@@ -98,6 +101,7 @@ Cabeceras de toda respuesta HTML: `Cache-Control: no-store`, `Referrer-Policy: n
 7. Con la bandera `AIW_APROBACION_CORREO` apagada no se abre puerto ni se envía correo, y el proceso de `apps/channels` termina como antes de esta rebanada. Una prueba comprueba que la configuración con la bandera apagada no exige clave de firma.
 8. `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, `pnpm build` y `pnpm evals:smoke` pasan. El job «Base de datos» de la CI ejecuta además las pruebas de `@aiw/channels`, y sin `DATABASE_URL` esas pruebas se saltan con el mensaje de `@aiw/db/pruebas`.
 9. `pnpm dev:up` levanta Mailpit sano y el correo de la demo se ve en su interfaz; el fichero del Compose valida con `docker compose config`.
+10. `pnpm --filter @aiw/channels demo:aprobacion` con `DATABASE_URL` y la bandera encendida deja un enlace abierto en el navegador; abrirlo muestra el resumen, aprobar registra la decisión y volver a enviar el formulario dice que ya se usó. Una prueba de regresión en `@aiw/db` comprueba que el cliente de `crearConexion` manda y recibe fechas.
 
 ## Casos de prueba y de eval
 
