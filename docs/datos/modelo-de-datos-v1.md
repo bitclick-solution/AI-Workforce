@@ -109,6 +109,12 @@ purgas y archivados.
 | Entrada de auditoría                      | `entrada_auditoria`                                    | Quién, qué, con qué, coste, duración, versión y hash encadenado            | Append-only, particionada por mes, sin `UPDATE` ni `DELETE`              |
 | Contador de consumo                       | `contador_consumo`                                     | Tareas, pasos, acciones y coste por periodo                                | Toda acción del libro suma aquí, en la misma transacción                 |
 
+Donde la tabla dice «fila inmutable», la base lo impone y no solo el comentario: un
+disparador por fila rechaza cualquier `UPDATE`, incluso del dueño del esquema, y el
+rol de aplicación no tiene `UPDATE` ni `DELETE`. Borrar esas filas solo ocurre al
+purgar un tenant o al soltar una partición, y las dos son operaciones de plataforma.
+La lista está en `packages/db/src/tablas.ts` y la recorre la migración.
+
 ## Índices que importan
 
 - Todos los de tenant empiezan por `tenant_id`: sin eso, la seguridad de fila filtra
