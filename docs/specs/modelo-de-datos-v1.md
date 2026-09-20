@@ -13,7 +13,7 @@ Cuando esta rebanada está hecha, el equipo tiene un esquema PostgreSQL versiona
 
 ## Paquetes tocados
 
-- `packages/db` (nuevo, `@aiw/db`): esquema Drizzle, migraciones SQL versionadas con su reverso, políticas RLS, roles de base de datos, cliente con `withTenant`, scripts de carga, exportación y purga. Depende solo de `@aiw/domain`.
+- `packages/db` (nuevo, `@aiw/db`, decidido por Jesús el 20-9-2026): esquema Drizzle, migraciones SQL versionadas con su reverso, políticas RLS, roles de base de datos, cliente con `withTenant`, scripts de carga, exportación y purga. Depende solo de `@aiw/domain`.
 - `packages/domain`: enumeraciones y esquemas Zod de las entidades (estados de agente y de tarea, roles humanos, niveles N0 a N3, ámbitos de memoria, tipos de lección) que el esquema reutiliza. Sin lógica.
 - `packages/ledger`: solo el contrato de escritura del libro (`anotar(entrada)`) y la función de hash encadenado sobre la tabla; el camino completo de escritura llega con la rebanada «Aprobación y auditoría v0».
 - `.github/workflows/ci.yml`: job «Base de datos» con un servicio `pgvector/pgvector:pg16` que aplica las migraciones y ejecuta las pruebas de aislamiento, permisos y carga reducida.
@@ -65,4 +65,4 @@ Presupuesto: 60 €. Consumo real: se registra en la rebanada al abrir el PR. Su
 
 ## Pregunta abierta
 
-El plan fija Drizzle y los principios, pero no dónde vive el esquema. Esta especificación propone el paquete nuevo `packages/db`, del que dependen `ledger` y las aplicaciones, y deja `domain` para tipos y Zod. Si prefieres el esquema dentro de `packages/domain`, dilo antes del lunes; el resto no cambia.
+Ninguna. Decisión de Jesús del 20-9-2026: el esquema vive en el paquete nuevo `packages/db`, del que dependen `ledger` y las aplicaciones; `packages/domain` conserva solo tipos y esquemas Zod y sigue sin depender de ningún otro paquete.
