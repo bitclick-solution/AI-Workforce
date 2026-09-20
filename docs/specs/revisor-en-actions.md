@@ -38,6 +38,8 @@ Segunda causa, 2026-09-20: con `CLAUDE_CODE_OAUTH_TOKEN` ya configurado el job s
 
 Primer veredicto real, 2026-09-20 sobre `e786a0b`: el Revisor publicó su revisión con el token (47 turnos, cuatro minutos, coste equivalente 0,94 USD de cuota) y el check quedó en rojo por superar el tope de 40 turnos, con ocho herramientas denegadas y sin el servidor MCP de Notion. Cambios: tope de 80 turnos, precarga del paquete del servidor de Notion con `MCP_TIMEOUT` de 60 s, y resumen de ejecución que muestra el estado de los MCP y las herramientas denegadas.
 
+Segunda ejecución con el tope nuevo (`701e745`): 40 turnos, veredicto publicado y check en verde. El resumen mostró que el servidor de Notion ni siquiera se registró: el action fusiona las configuraciones `--mcp-config` en un solo JSON y descarta las rutas de archivo. Cambio: la configuración del servidor va en línea en los tres workflows; `.github/mcp/notion.json` queda como referencia.
+
 ## Fuera de alcance
 
 Cambiar el rol del Revisor (`.claude/agents/revisor.md`), la plantilla de PR o la vía primaria de las rutinas nocturnas, que ya está decidida como Rutinas de Claude Code.

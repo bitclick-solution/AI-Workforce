@@ -82,10 +82,12 @@ jobs:
             4. Publica un único comentario de revisión con `gh pr review ${{ github.event.pull_request.number }} --comment --body "<contenido>"` (o `--request-changes` si el veredicto es bloqueado). No tienes herramienta para escribir un archivo aparte: construye el cuerpo del comentario como el argumento de `--body`. El comentario termina con una línea `Veredicto: favorable | favorable con cambios menores | bloqueado` y con la firma "— Revisor (agente)".
             5. Si el servidor MCP de Notion está disponible, actualiza la rebanada según el rol: Demostrada si es favorable y no toca zona crítica; nota en Bloqueo si es bloqueado. Si no está disponible, dilo en el comentario.
             No modifiques archivos ni hagas commits. No fusiones.
+          # El action fusiona los --mcp-config como un solo JSON y no carga rutas de archivo: la configuración
+          # de Notion va en línea (misma que .github/mcp/notion.json). El servidor hereda NOTION_TOKEN del entorno.
           claude_args: |
             --model ${{ vars.REVISOR_MODELO || 'claude-sonnet-5' }}
             --max-turns 80
-            --mcp-config .github/mcp/notion.json
+            --mcp-config '{"mcpServers":{"Notion":{"command":"npx","args":["-y","@notionhq/notion-mcp-server"]}}}'
             --allowedTools "Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh api:*),Bash(git log:*),Bash(git diff:*),Bash(pnpm lint:*),Bash(pnpm typecheck:*),Bash(pnpm test:*),Bash(pnpm evals:smoke:*),mcp__github_inline_comment__create_inline_comment,mcp__github_comment__update_claude_comment,mcp__Notion"
       - name: Resumen de la ejecución
         if: always() && steps.revisar.outcome != 'skipped'
