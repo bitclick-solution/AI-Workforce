@@ -1,30 +1,38 @@
 {
-  "name": "@aiw/ledger",
+  "name": "@aiw/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Libro de auditoría append-only con hash encadenado y contador de tareas.",
+  "description": "Esquema de PostgreSQL con Drizzle, migraciones versionadas, cliente con tenant y utilidades de carga, exportación y purga.",
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./pruebas": {
+      "types": "./src/pruebas/index.ts",
+      "default": "./src/pruebas/index.ts"
     }
   },
   "files": [
-    "src"
+    "src",
+    "drizzle"
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
+    "db:migrar": "tsx src/cli.ts migrar",
+    "db:revertir": "tsx src/cli.ts revertir",
     "clean": "rm -rf dist coverage .turbo"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "drizzle-kit": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@aiw/db": "workspace:*",
     "@aiw/domain": "workspace:*",
     "drizzle-orm": "catalog:",
     "postgres": "catalog:",

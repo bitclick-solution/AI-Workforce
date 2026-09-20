@@ -4,6 +4,9 @@
 
 # Identidad y permisos; motor de políticas y niveles de autonomía
 /packages/domain/                 @3rChuss
+
+# Esquema de datos y migraciones: toda la base pasa por aquí
+/packages/db/                     @3rChuss
 /apps/api/src/auth/               @3rChuss
 **/auth/**                        @3rChuss
 **/permisos/**                    @3rChuss

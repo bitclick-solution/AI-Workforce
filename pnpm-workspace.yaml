@@ -9,8 +9,11 @@ catalog:
   '@types/react': ^19.3.0
   '@types/react-dom': ^19.3.0
   '@tailwindcss/postcss': ^4.3.3
+  drizzle-kit: ^0.31.10
+  drizzle-orm: ^0.45.2
   next: ^16.3.5
   postcss: ^8.5.6
+  postgres: ^3.4.9
   react: ^19.3.0
   react-dom: ^19.3.0
   tailwindcss: ^4.3.3

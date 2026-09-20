@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./esquemas": {
+      "types": "./src/esquemas/index.ts",
+      "default": "./src/esquemas/index.ts"
     }
   },
   "files": [
