@@ -3,8 +3,9 @@ VIGENTE
 # Modelo de datos v1 · diagrama de entidades
 
 Anexo del [ADR-007](../adr/ADR-007.md) y de la [especificación de la rebanada](../specs/modelo-de-datos-v1.md).
-El esquema tipado vive en `packages/domain/src/db` y en `packages/ledger/src/db`; la
-migración que lo crea, en `packages/domain/drizzle/0000_inicial.sql`.
+El esquema tipado vive en `packages/db/src` y en `packages/ledger/src/db`; la
+migración que lo crea, en `packages/db/drizzle/0000_inicial.sql`. Son 37 tablas de
+entidad, más `migracion_aplicada` y las particiones mensuales.
 
 Cualquier cambio posterior del modelo es una migración con su propia rebanada y la
 revisión de Jesús: este documento se actualiza en la misma rebanada que el cambio.
@@ -33,7 +34,9 @@ erDiagram
     VERSION_PUESTO ||--o{ PASO : "con la que se ejecuto"
     TAREA ||--o{ DELEGACION : origina
     TAREA ||--o{ APROBACION : exige
-    PERSONA ||--o{ APROBACION : decide
+    PERSONA ||--o{ APROBACION : "a quien se le pide"
+    APROBACION ||--o| DECISION_APROBACION : resuelve
+    PERSONA ||--o{ DECISION_APROBACION : decide
     PUESTO ||--o{ DISPARADOR : activa
 
     APROBACION ||--o{ SENAL : genera
@@ -86,7 +89,8 @@ purgas y archivados.
 | Tarea                                     | `tarea`                                                | Origen, puesto, estado, coste, resultado y jerarquía                       | El estado es una proyección de Temporal, reconstruible                   |
 | Paso                                      | `paso`                                                 | Tipo, herramienta, entrada, salida, coste y duración                       | Referencia la versión de puesto con la que se ejecutó                    |
 | Delegación                                | `delegacion`                                           | Encargo, plazo, presupuesto y formato                                      | Flujo hijo; marca si cruza departamento                                  |
-| Aprobación                                | `aprobacion`                                           | Borrador opaco, resumen legible, decisión, motivo y edición previa         | Fila inmutable; es la señal de aprendizaje más valiosa                   |
+| Aprobación                                | `aprobacion`                                           | Borrador opaco, resumen legible, clase de acción, nivel exigido y plazo    | Fila inmutable; resolverla no la actualiza                               |
+| Decisión de aprobación                    | `decision_aprobacion`                                  | Sentido, motivo, quién decidió y qué había antes de editarlo               | Una fila por aprobación; «pendiente» es no tener fila aquí               |
 | Disparador                                | `disparador`                                           | Tipo, puesto, propietario, nivel y presupuesto                             | Activarlo o pausarlo es una operación de organización                    |
 | Señal                                     | `senal`                                                | Origen, tipo, contenido y evaluación                                       | Particionada por mes; se referencia por identificador                    |
 | Lección                                   | `leccion`                                              | Contenido y parámetros acotados                                            | Fila inmutable, trazable hasta sus señales                               |
@@ -116,8 +120,11 @@ purgas y archivados.
 - `memoria` y `fragmento_conocimiento`: HNSW sobre el vector, más
   `(tenant_id, ambito, ambito_id)` para acotar antes de buscar.
 - `entidad`: índice GIN sobre `identificadores`, que es donde vive el mapeo con cada sistema.
+- `decision_aprobacion`: única sobre `(tenant_id, aprobacion_id)`. Además de impedir
+  dos decisiones para la misma aprobación, es la que resuelve con un `Index Only Scan`
+  el anti-join de «aprobaciones sin decisión» del panel.
 
 ## Medidas
 
 El informe de carga con un millón de entradas de auditoría y cien mil mensajes está
-en [`packages/domain/bench/informe.md`](../../packages/domain/bench/informe.md).
+en [`packages/db/bench/informe.md`](../../packages/db/bench/informe.md).
