@@ -3,7 +3,7 @@ name: Rutinas nocturnas
 # Vía de respaldo en GitHub Actions para el Evaluador (01:00 UTC) y el Cronista (02:00 UTC).
 # La vía primaria recomendada son las Rutinas de Claude Code; nunca las dos a la vez.
 # Ver docs/runbooks/proteccion-de-rama.md. Desactivadas hasta que exista la variable de repositorio
-# RUTINAS_NOCTURNAS=true. Requieren los secretos ANTHROPIC_API_KEY y NOTION_TOKEN; el Cronista
+# RUTINAS_NOCTURNAS=true. Requieren ANTHROPIC_API_KEY o CLAUDE_CODE_OAUTH_TOKEN, más NOTION_TOKEN; el Cronista
 # necesita además CRONISTA_TOKEN, porque los PR abiertos con GITHUB_TOKEN no disparan la CI ni al Revisor.
 
 on:
@@ -30,12 +30,12 @@ jobs:
     steps:
       - id: clave
         env:
-          HAY_CLAVE: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAY_CLAVE: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
           HAY_TOKEN_CRONISTA: ${{ secrets.CRONISTA_TOKEN != '' }}
         run: |
           echo "hay_clave=$HAY_CLAVE" >> "$GITHUB_OUTPUT"
           if [ "$HAY_CLAVE" != "true" ]; then
-            echo "::error::RUTINAS_NOCTURNAS está activa pero falta ANTHROPIC_API_KEY."
+            echo "::error::RUTINAS_NOCTURNAS está activa pero faltan ANTHROPIC_API_KEY y CLAUDE_CODE_OAUTH_TOKEN."
             exit 1
           fi
           if [ "$HAY_TOKEN_CRONISTA" != "true" ]; then
@@ -69,10 +69,13 @@ jobs:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           GH_TOKEN: ${{ github.token }}
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Claude Code prefiere la clave de la API al token cuando recibe los dos; con token, la clave no se pasa.
+          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN == '' && secrets.ANTHROPIC_API_KEY || '' }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
           prompt: Lee .claude/routines/evaluador.md y ejecuta el bloque de prompt que contiene, tal cual.
           claude_args: |
+            --model ${{ vars.REVISOR_MODELO || 'claude-sonnet-5' }}
             --max-turns 50
             --mcp-config .github/mcp/notion.json
             --allowedTools "Read,Grep,Glob,Bash(pnpm:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(git log:*),mcp__Notion"
@@ -100,10 +103,13 @@ jobs:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           GH_TOKEN: ${{ secrets.CRONISTA_TOKEN || github.token }}
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Claude Code prefiere la clave de la API al token cuando recibe los dos; con token, la clave no se pasa.
+          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN == '' && secrets.ANTHROPIC_API_KEY || '' }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.CRONISTA_TOKEN || github.token }}
           prompt: Lee .claude/routines/cronista.md y ejecuta el bloque de prompt que contiene, tal cual.
           claude_args: |
+            --model ${{ vars.REVISOR_MODELO || 'claude-sonnet-5' }}
             --max-turns 40
             --mcp-config .github/mcp/notion.json
             --allowedTools "Read,Grep,Glob,Write,Edit,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(git checkout:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git log:*),Bash(git status:*),mcp__Notion"

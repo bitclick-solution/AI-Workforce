@@ -21,11 +21,16 @@ Ajustes de GitHub que Jesús configura una vez para que la fábrica funcione. Ni
 ## Secretos y variables
 
 1. En **Settings > Secrets and variables > Actions**, crea los secretos:
-   - `ANTHROPIC_API_KEY`: clave para el Revisor y las rutinas nocturnas.
+   - Autenticación de Claude para el Revisor y las rutinas, una de las dos:
+     - `ANTHROPIC_API_KEY`: clave de la consola de la API de Anthropic. La organización de la clave debe tener acceso al modelo que fija `claude_args` en los workflows (`claude-sonnet-5`) y crédito disponible.
+     - `CLAUDE_CODE_OAUTH_TOKEN`: token de una suscripción de Claude, generado en tu equipo con `claude setup-token`. Úsalo si no tienes clave de la API.
+       **Precaución:** es una credencial personal de larga duración ligada a la cuenta de Jesús. Guárdala solo como secreto del repositorio, rótala si cambia la suscripción o la cuenta, y ten en cuenta que su uso en automatización queda sujeto a las condiciones de la suscripción de Claude. Con la clave de la API el coste es medible por PR; con el token se descuenta del límite de la suscripción y puede agotar la cuota que usan las sesiones de trabajo.
+       Si existen los dos secretos, el token manda: los workflows dejan de pasar la clave de la API cuando hay token, porque Claude Code, si recibe los dos, usa siempre la clave y nunca el token, y una clave sin crédito bloquea al Revisor aunque el token sea válido.
    - `NOTION_TOKEN`: token de la integración interna de Notion, con permisos de lectura y escritura sobre la página **AI Workforce**.
 2. Comparte la página **AI Workforce** con la integración desde Notion (**Conexiones** en el menú de la página).
 3. Solo si eliges GitHub Actions como vía de las rutinas nocturnas (ver la sección siguiente), crea la variable `RUTINAS_NOCTURNAS` con el valor `true` y el secreto `CRONISTA_TOKEN`: un token de acceso personal de grano fino con permisos de contenido y de pull requests sobre este repositorio, o un token de GitHub App. Sin `CRONISTA_TOKEN`, el Cronista usa `GITHUB_TOKEN` y los PR que abre no disparan la CI ni al Revisor, así que no se podrían fusionar con el ruleset.
-4. Si quieres que el Revisor pueda emitir aprobaciones formales además de comentarios, activa **Settings > Actions > General > Allow GitHub Actions to create and approve pull requests**. Sin este ajuste, el Revisor deja el veredicto como comentario de revisión y pide cambios cuando bloquea.
+4. Opcional: la variable de repositorio `REVISOR_MODELO` fija el modelo del Revisor y de las rutinas de respaldo sin tocar los workflows (zona crítica). Sin la variable, los workflows usan `claude-sonnet-5`.
+5. Si quieres que el Revisor pueda emitir aprobaciones formales además de comentarios, activa **Settings > Actions > General > Allow GitHub Actions to create and approve pull requests**. Sin este ajuste, el Revisor deja el veredicto como comentario de revisión y pide cambios cuando bloquea.
 
 ## Vía de ejecución de las rutinas nocturnas
 
@@ -40,7 +45,14 @@ Recomendación del Revisor y del Constructor: Rutinas de Claude Code como vía p
 
 ## Comprobación
 
-1. Abre un PR de prueba desde una rama `rebanada/<nombre>`. El workflow `Revisor` debe dejar un comentario con veredicto en menos de diez minutos.
+1. Abre un PR de prueba desde una rama `rebanada/<nombre>`. El workflow `Revisor` debe dejar un comentario con veredicto en menos de diez minutos. El paso **Resumen de la ejecución** imprime siempre en el registro el estado de los servidores MCP, el tipo de resultado, `is_error`, el número de turnos, el coste, las herramientas denegadas y el mensaje final recortado; nunca la transcripción. Un fallo en menos de un segundo con un turno y coste cero es de autenticación o de modelo: revisa el secreto y el acceso al modelo, no el prompt.
+   Errores conocidos que imprime ese paso:
+   - `Credit balance is too low`: la organización de la clave `ANTHROPIC_API_KEY` no tiene crédito. Recárgalo en la consola de la API (Plans & billing) o crea el secreto `CLAUDE_CODE_OAUTH_TOKEN` con `claude setup-token` desde una cuenta con suscripción; el workflow acepta cualquiera de los dos. Fue el motivo real de la primera ejecución (PR #8, 2026-09-19).
+   - `Credit balance is too low` con `CLAUDE_CODE_OAUTH_TOKEN` ya configurado: el workflow es anterior a que el token tuviera prioridad y Claude Code está usando la clave. Fusiona el PR #8 o borra el secreto `ANTHROPIC_API_KEY`; con el workflow actual no ocurre.
+   - `Claude reported a successful result after N turns, exceeding the configured maximum`: el Revisor terminó y publicó el veredicto, pero gastó más turnos de los que permite `--max-turns`; el check queda en rojo aunque haya comentario. Sube el tope o recorta las herramientas denegadas (`denegadas=` en el resumen), que consumen turnos.
+   - `mcp Notion: failed` en el resumen: el servidor MCP de Notion no arrancó; revisa `NOTION_TOKEN` y la precarga del paquete en el paso anterior.
+   - Modelo no encontrado o sin permiso: la clave no tiene acceso al modelo fijado en `claude_args`. Cambia el modelo o pide acceso en la consola.
+   - `authentication_error` o `invalid x-api-key`: el secreto está vacío o caducado. Vuelve a crearlo.
 2. Si la vía elegida es Actions, ejecuta **Actions > Rutinas nocturnas > Run workflow** con la rutina `cronista`. La página del ciclo en curso debe recibir un resumen de dirección nuevo.
 
 **Precaución:** Los secretos no se copian nunca al repositorio, a `.env.example`, a los prompts ni a los registros de los workflows.
