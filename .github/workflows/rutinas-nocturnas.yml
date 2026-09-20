@@ -74,10 +74,12 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
           prompt: Lee .claude/routines/evaluador.md y ejecuta el bloque de prompt que contiene, tal cual.
+          # El action fusiona los --mcp-config como un solo JSON y no carga rutas de archivo: la configuración
+          # de Notion va en línea (misma que .github/mcp/notion.json), con NOTION_TOKEN declarado de forma explícita.
           claude_args: |
             --model ${{ vars.REVISOR_MODELO || 'claude-sonnet-5' }}
             --max-turns 50
-            --mcp-config .github/mcp/notion.json
+            --mcp-config '{"mcpServers":{"Notion":{"command":"npx","args":["-y","@notionhq/notion-mcp-server"],"env":{"NOTION_TOKEN":"${NOTION_TOKEN}","OPENAPI_MCP_HEADERS":"{\"Authorization\":\"Bearer ${NOTION_TOKEN}\",\"Notion-Version\":\"2025-09-03\"}"}}}}'
             --allowedTools "Read,Grep,Glob,Bash(pnpm:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(git log:*),mcp__Notion"
 
   cronista:
@@ -108,8 +110,10 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.CRONISTA_TOKEN || github.token }}
           prompt: Lee .claude/routines/cronista.md y ejecuta el bloque de prompt que contiene, tal cual.
+          # El action fusiona los --mcp-config como un solo JSON y no carga rutas de archivo: la configuración
+          # de Notion va en línea (misma que .github/mcp/notion.json), con NOTION_TOKEN declarado de forma explícita.
           claude_args: |
             --model ${{ vars.REVISOR_MODELO || 'claude-sonnet-5' }}
             --max-turns 40
-            --mcp-config .github/mcp/notion.json
+            --mcp-config '{"mcpServers":{"Notion":{"command":"npx","args":["-y","@notionhq/notion-mcp-server"],"env":{"NOTION_TOKEN":"${NOTION_TOKEN}","OPENAPI_MCP_HEADERS":"{\"Authorization\":\"Bearer ${NOTION_TOKEN}\",\"Notion-Version\":\"2025-09-03\"}"}}}}'
             --allowedTools "Read,Grep,Glob,Write,Edit,Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(git checkout:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git log:*),Bash(git status:*),mcp__Notion"
