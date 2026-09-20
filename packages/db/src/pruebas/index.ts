@@ -3,4 +3,5 @@
  * `@aiw/ledger`. No entran en el camino de producción.
  */
 export * from './entorno.js';
+export * from './secretos.js';
 export * from './semilla.js';
