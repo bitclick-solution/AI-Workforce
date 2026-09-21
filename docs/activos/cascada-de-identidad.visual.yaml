@@ -1,0 +1,50 @@
+# REGISTRO HISTÓRICO · copia de bitclick-solution/iagent-platform@fbb3f37 brand/org/visual.yaml, cosechada el 2026-09-20 por la rebanada «Cosecha del prototipo IAGENT-COMPANY». No se edita.
+# Guía visual de Bitclick — nivel `org` (v1)
+#
+# Los tokens viajan por la MISMA cascada que la voz (§16), pero se resuelven
+# clave a clave: un nivel de abajo solo sobreescribe la clave que cambia, no el
+# fichero entero. Cambiar cualquier cosa de aquí es una propuesta firmada (D11).
+#
+# Quién consume los tokens resueltos, los tres a la vez: los prompts de
+# generación, la composición determinista de la pieza y la rúbrica «brand» del
+# Crítico. Si en un canal el accent es naranja, el Crítico exige naranja en ese
+# canal. La coherencia se mide, no se confía.
+
+palette:
+  ground: '#000000' # void-black
+  primary: '#00FF66' # terminal-green
+  accent: '#FFDE00' # cyber-yellow
+
+image_style: 'minimal flat vector, thin neon lines on pure black, isometric nodes'
+
+# -----------------------------------------------------------------------------
+# La regla de sutileza, escrita como allowlist (§16)
+# -----------------------------------------------------------------------------
+# «Un override de canal solo puede tocar claves permitidas por el nivel
+# superior (`accent` sí; `ground` y `primary` de la organización, no sin
+# propuesta firmada). Así "sutilmente naranja en IG" no puede degenerar en
+# "otra marca en IG".»
+#
+# Esto NO es documentación: el compilador (`libs/iagent_packs`) lo lee y
+# revienta con `SutilezaViolada` si un fichero de nivel inferior escribe una
+# clave que no está en su lista. Ni warning ni «se ignora»: error de
+# compilación, y el worker no arranca con una marca a medias.
+#
+# Se declaran RUTAS DE CLAVE completas, con punto (`palette.accent`), porque es
+# como se nombra el conflicto cuando ocurre.
+#
+# `ground` y `primary` no aparecen en ninguna lista, y esa ausencia es la
+# decisión: el negro y el verde son la organización. Para cambiarlos se firma
+# una propuesta que enseña a quién impacta antes de aprobarse.
+overridable:
+  # El departamento ajusta el TONO del estilo (más cálido, más sobrio), no la
+  # paleta. Es la clave que existe para que un departamento pueda matizar sin
+  # tocar un color.
+  department:
+    - tone_adjustments
+  # El canal es el único que puede virar el acento, y además elige su propio
+  # descriptor de imagen: una pieza de Instagram y una de LinkedIn no se
+  # componen igual aunque compartan la marca.
+  channel:
+    - palette.accent
+    - image_style

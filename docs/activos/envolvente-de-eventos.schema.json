@@ -1,0 +1,467 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.bitclick.solutions/iagent/events.schema.json",
+  "title": "IAGENT bus event (Redis Streams) — v1",
+  "description": "Envolvente comun de todo evento del bus mas los tipos v1 con payload tipado. Un evento = un hecho de negocio; la telemetria va a Langfuse, no aqui.",
+
+  "type": "object",
+  "unevaluatedProperties": false,
+
+  "allOf": [
+    { "$ref": "#/$defs/envelope" },
+    { "$ref": "#/$defs/request_fields_rule" },
+    { "$ref": "#/$defs/kinds" }
+  ],
+
+  "$defs": {
+    "envelope": {
+      "title": "Envolvente comun",
+      "type": "object",
+      "required": [
+        "event_id",
+        "worker",
+        "tenant",
+        "department",
+        "kind",
+        "ts",
+        "severity",
+        "summary",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "description": "UUID del evento. Clave de idempotencia: un consumidor que ya lo vio debe descartarlo.",
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "worker": {
+          "$ref": "#/$defs/key",
+          "description": "Key del worker emisor, tal como figura en mc_worker."
+        },
+        "tenant": {
+          "$ref": "#/$defs/key",
+          "description": "Key del tenant (cliente) al que pertenece el hecho."
+        },
+        "department": {
+          "$ref": "#/$defs/key",
+          "description": "Key del departamento del worker emisor."
+        },
+        "kind": {
+          "$ref": "#/$defs/kind",
+          "description": "Tipo de evento, en forma dominio.accion_en_pasado."
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Instante del hecho en RFC3339, con zona horaria explicita."
+        },
+        "severity": { "enum": ["info", "warn", "error"] },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280,
+          "description": "Frase legible para el feed de Mission Control, en idioma de negocio."
+        },
+        "payload": { "type": "object", "description": "Cuerpo tipado segun kind." },
+        "ttl_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2592000,
+          "description": "Solo en peticiones agente->agente: cuanto tiempo tiene sentido esta peticion. Nadie espera para siempre (plataforma.md §14)."
+        },
+        "fallback_policy": {
+          "enum": ["continue_without", "park", "escalate_human"],
+          "description": "Solo en peticiones agente->agente: que hace el emisor si el destinatario no responde dentro del TTL."
+        }
+      }
+    },
+
+    "request_fields_rule": {
+      "title": "ttl_seconds y fallback_policy: obligatorios en peticiones, ausentes en eventos de dominio",
+      "if": { "properties": { "kind": { "$ref": "#/$defs/request_kind" } }, "required": ["kind"] },
+      "then": { "required": ["ttl_seconds", "fallback_policy"] },
+      "else": {
+        "allOf": [
+          { "not": { "required": ["ttl_seconds"] } },
+          { "not": { "required": ["fallback_policy"] } }
+        ]
+      }
+    },
+
+    "kinds": {
+      "title": "Tipos v1 (discriminador: kind)",
+      "oneOf": [
+        { "$ref": "#/$defs/event_worker_status_changed" },
+        { "$ref": "#/$defs/event_lead_qualified" },
+        { "$ref": "#/$defs/event_post_published" },
+        { "$ref": "#/$defs/event_task_completed" },
+        { "$ref": "#/$defs/event_meeting_booked" },
+        { "$ref": "#/$defs/event_worker_error" },
+        { "$ref": "#/$defs/event_worker_stalled" },
+        { "$ref": "#/$defs/event_tool_broken" },
+        { "$ref": "#/$defs/event_tool_missing" },
+        { "$ref": "#/$defs/event_gdpr_erasure_requested" },
+        { "$ref": "#/$defs/event_report_published" },
+        { "$ref": "#/$defs/request_generic" }
+      ]
+    },
+
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "description": "Identificador estable en minusculas (a-z, 0-9, _ y -)."
+    },
+
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+      "description": "Convencion dominio.accion en pasado, p.ej. lead.qualified. El prefijo request. marca peticion agente->agente."
+    },
+
+    "request_kind": {
+      "type": "string",
+      "pattern": "^request\\.[a-z][a-z0-9_]*$"
+    },
+
+    "ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Referencia opaca a un objeto de otro sistema (n8n, CRM, canal...)."
+    },
+
+    "event_worker_status_changed": {
+      "title": "worker.status_changed — el worker cambio de estado en el ciclo de pausa (§14)",
+      "properties": {
+        "kind": { "const": "worker.status_changed" },
+        "payload": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["status", "previous", "by", "worker_ref"],
+          "properties": {
+            "worker_ref": {
+              "$ref": "#/$defs/worker_ref",
+              "description": "Worker AFECTADO por el cambio, cualificado 'tenant/key'. Obligatorio: este kind lo emite mission_control, que rellena la envolvente con SU propia identidad, asi que sin este campo no hay forma de saber de quien habla el evento."
+            },
+            "status": { "$ref": "#/$defs/worker_status", "description": "Estado nuevo." },
+            "previous": { "$ref": "#/$defs/worker_status", "description": "Estado anterior." },
+            "by": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Quien lo cambio: usuario, supervisor o politica."
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 512,
+              "description": "Motivo declarado; obligatorio de facto para la auditoria."
+            }
+          }
+        }
+      },
+      "required": ["kind"]
+    },
+
+    "worker_status": { "enum": ["active", "draining", "paused", "disabled"] },
+
+    "worker_ref": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$",
+      "description": "Identidad completa de un worker, cualificada con su tenant: 'bitclick/bionica'. Las claves de worker solo son unicas POR TENANT, asi que fuera de mc_worker toda referencia va cualificada."
+    },
+
+    "event_lead_qualified": {
+      "title": "lead.qualified — un lead fue cualificado y puntuado",
+      "properties": {
+        "kind": { "const": "lead.qualified" },
+        "payload": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["lead_id", "score", "band", "source"],
+          "properties": {
+            "lead_id": { "$ref": "#/$defs/ref" },
+            "score": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "Puntuacion normalizada 0-100."
+            },
+            "band": { "enum": ["HOT", "COLD"] },
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Canal u origen del lead (web_form, instagram, linkedin...)."
+            }
+          }
+        }
+      },
+      "required": ["kind"]
+    },
+
+    "event_post_published": {
+      "title": "post.published — se publico contenido en un canal",
+      "properties": {
+        "kind": { "const": "post.published" },
+        "payload": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["channel", "post_ref"],
+          "properties": {
+            "channel": {
+              "type": "string",
+              "minLength": 1,
+              "description": "instagram, linkedin, tiktok, blog..."
+            },
+            "post_ref": { "$ref": "#/$defs/ref", "description": "Id del post en el canal." },
+            "permalink": {
+              "type": "string",
+              "format": "uri",
+              "description": "URL publica, si el canal la expone."
+            }
+          }
+        }
+      },
+      "required": ["kind"]
+    },
+
+    "event_task_completed": {
+      "title": "task.completed — una tarea de back office quedo cerrada con un desenlace",
+      "properties": {
+        "kind": { "const": "task.completed" },
+        "payload": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["task_kind", "outcome"],
+          "properties": {
+            "task_kind": {
+              "type": "string",
+              "pattern": "^[a-z0-9_.]{2,64}$",
+              "description": "Que clase de tarea era, en clave estable (factura_registrada, cita_agendada...). Clave, no prosa: el payload no admite texto libre."
+            },
+            "outcome": {
+              "enum": ["done", "skipped", "needs_human"],
+              "description": "Desenlace: hecha, omitida deliberadamente, o parada a la espera de una persona."
+            },
+            "ref": {
+              "$ref": "#/$defs/ref",
+              "description": "Referencia INTERNA al objeto tocado (id de fila, de documento o de ejecucion). Nunca datos del interesado: la casilla GDPR del contrato prohibe texto libre aqui (EVENTS.md regla 4, B19)."
+            }
+          }
+        }
+      },
+      "required": ["kind"]
+    },
+
+    "event_meeting_booked": {
+      "title": "meeting.booked — se agendo una cita con un lead",
+      "properties": {
+        "kind": { "const": "meeting.booked" },
+        "payload": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["lead_id", "when"],
+          "properties": {
+            "lead_id": { "$ref": "#/$defs/ref" },
+            "when": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Inicio de la cita en RFC3339."
+            }
+          }
+        }
+      },
+      "required": ["kind"]
+    },
+
+    "event_worker_error": {
+      "title": "worker.error — una ejecucion del worker fallo",
+      "properties": {
+        "kind": { "const": "worker.error" },
+        "severity": { "enum": ["warn", "error"] },
+        "payload": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["execution_ref", "message"],
+          "properties": {
+            "execution_ref": {
+              "$ref": "#/$defs/ref",
+              "description": "Id de ejecucion n8n o de la traza equivalente."
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "description": "Error legible, sin datos personales ni secretos."
+            }
+          }
+        }
+      },
+      "required": ["kind"]
+    },
+
+    "event_worker_stalled": {
+      "title": "worker.stalled — el worker lleva callado mas de lo que su politica de latido admite (§5 nivel Latido, §12)",
+      "description": "Lo emite el motor de latido del plano de control (mission_control), no el worker: un worker que ha dejado de ejecutar no puede avisar de su propio silencio. El motor lo publica UNA vez por episodio y vuelve a publicar solo si el worker dio senales despues del aviso y volvio a callarse.",
+      "properties": {
+        "kind": { "const": "worker.stalled" },
+        "severity": {
+          "const": "warn",
+          "description": "Un latido perdido es una anomalia, no un fallo observado: nadie ha visto romperse nada. El error, cuando lo haya, viaja en worker.error."
+        },
+        "payload": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["worker_ref", "expected_max_silence_minutes", "overdue_minutes"],
+          "properties": {
+            "worker_ref": {
+              "$ref": "#/$defs/worker_ref",
+              "description": "Worker CALLADO, cualificado 'tenant/key'. Obligatorio por la misma razon que en worker.status_changed: lo emite mission_control, que rellena la envolvente con SU propia identidad, asi que sin este campo el evento dice 'alguien lleva dias callado'."
+            },
+            "expected_max_silence_minutes": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Silencio maximo que su politica local declara (mc_worker.heartbeat_minutes). Es el umbral que se ha superado, y viaja en el evento para que quien lo lea no tenga que consultar el registro."
+            },
+            "overdue_minutes": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Minutos de retraso sobre ese umbral en el momento del aviso. Es una COTA INFERIOR: el motor mira una ventana acotada del stream, y si no encuentra nada suyo dentro de ella cuenta el silencio desde donde llego a mirar."
+            },
+            "last_event_ts": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Instante del ultimo evento suyo que el motor llego a ver. Ausente cuando no encontro ninguno en la ventana mirada: no haberlo visto no es haber probado que no existe."
+            }
+          }
+        }
+      },
+      "required": ["kind"]
+    },
+
+    "event_tool_broken": {
+      "title": "tool.broken — una herramienta existente dejo de funcionar (§10, ticket de Forja)",
+      "properties": {
+        "kind": { "const": "tool.broken" },
+        "severity": { "enum": ["warn", "error"] },
+        "payload": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["tool", "api", "error"],
+          "properties": {
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Herramienta MCP o nodo afectado (bitclick-odoo, factusol...)."
+            },
+            "api": {
+              "type": "string",
+              "minLength": 1,
+              "description": "API o endpoint remoto detras de la herramienta."
+            },
+            "error": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "description": "Sintoma observado, sin secretos."
+            }
+          }
+        }
+      },
+      "required": ["kind"]
+    },
+
+    "event_tool_missing": {
+      "title": "tool.missing — falta una capacidad que ningun conector cubre (§10, ticket de Forja)",
+      "properties": {
+        "kind": { "const": "tool.missing" },
+        "payload": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["capability", "requested_by"],
+          "properties": {
+            "capability": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Capacidad necesaria, en lenguaje de caso de uso."
+            },
+            "requested_by": {
+              "$ref": "#/$defs/key",
+              "description": "Key del worker o supervisor que la necesita."
+            }
+          }
+        }
+      },
+      "required": ["kind"]
+    },
+
+    "event_gdpr_erasure_requested": {
+      "title": "gdpr.erasure_requested — borrado solicitado; TODO departamento esta obligado a consumirlo (§15.2)",
+      "properties": {
+        "kind": { "const": "gdpr.erasure_requested" },
+        "payload": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["subject_ref", "scope"],
+          "properties": {
+            "subject_ref": {
+              "$ref": "#/$defs/ref",
+              "description": "Referencia seudonimizada al interesado; nunca el dato personal en claro."
+            },
+            "scope": {
+              "enum": ["tenant", "department", "worker"],
+              "description": "Alcance del barrido: todo el tenant, solo el departamento indicado en la envolvente, o solo el worker indicado."
+            }
+          }
+        }
+      },
+      "required": ["kind"]
+    },
+
+    "event_report_published": {
+      "title": "report.published — un informe periodico quedo compuesto y publicado (ADR-014 §8)",
+      "properties": {
+        "kind": { "const": "report.published" },
+        "payload": {
+          "type": "object",
+          "unevaluatedProperties": false,
+          "required": ["report", "period_start", "period_end", "channel", "delivered"],
+          "properties": {
+            "report": {
+              "enum": ["daily_digest"],
+              "description": "Que informe es. v1 solo tiene el digest diario del jefe de gabinete (§12); anadir un valor a este enum exige version nueva del tipo (EVENTS.md regla 7)."
+            },
+            "period_start": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Inicio del periodo cubierto por el informe, RFC3339 con zona."
+            },
+            "period_end": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Fin del periodo cubierto, RFC3339 con zona."
+            },
+            "channel": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Canal por el que se entrego el informe ('telegram'), o 'none' cuando la autonomia shadow lo genera y no lo envia a nadie (ADR-014 §3). Nunca el destinatario: un chat_id es dato de contacto y no viaja por el bus."
+            },
+            "delivered": {
+              "type": "boolean",
+              "description": "Si el informe llego de verdad a su canal. false en shadow y tambien cuando el envio fallo: el hecho 'el informe existe' se publica igual."
+            }
+          }
+        }
+      },
+      "required": ["kind"]
+    },
+
+    "request_generic": {
+      "title": "request.* — peticion agente->agente (TTL y fallback obligatorios)",
+      "description": "Punto de extension: en v1 no hay peticiones tipadas; la envolvente ya fija sus reglas.",
+      "properties": {
+        "kind": { "$ref": "#/$defs/request_kind" }
+      },
+      "required": ["kind", "ttl_seconds", "fallback_policy"]
+    }
+  }
+}
