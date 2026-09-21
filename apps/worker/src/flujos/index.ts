@@ -252,7 +252,9 @@ export async function tareaAgente(entrada: EntradaTareaAgente): Promise<Resultad
             tareaId: abierta.tareaDestinoId,
             delegacionId: abierta.delegacionId,
             tareaOrigenId: entrada.tareaId,
-            contrato,
+            // El presupuesto que va al hijo es el acotado por la actividad, no el
+            // pedido: el hijo no debe saber más de lo que la base le concedió.
+            contrato: { ...contrato, presupuestoEuros: abierta.presupuestoEuros },
           },
         ],
         // El hijo hereda el registro y el consumo, pero no la vida del padre: si el

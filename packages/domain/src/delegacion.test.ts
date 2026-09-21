@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { contratoDelegacion, resolverRespaldo, type ContratoDelegacion } from './delegacion.js';
+import {
+  acotarPresupuesto,
+  contratoDelegacion,
+  resolverRespaldo,
+  type ContratoDelegacion,
+} from './delegacion.js';
 
 const valido: ContratoDelegacion = {
   encargo: 'Concilia la factura F-2026-0001 con el extracto bancario.',
@@ -51,5 +56,27 @@ describe('política de respaldo', () => {
 
   it('escalar a persona no continúa y pide decisión', () => {
     expect(resolverRespaldo('escalar_a_persona')).toMatchObject({ continua: false, escala: true });
+  });
+});
+
+describe('cota del presupuesto del hijo · ADR-004', () => {
+  it('sin límite en el padre no acota', () => {
+    expect(acotarPresupuesto(2, null)).toBe(2);
+  });
+
+  it('respeta lo pedido cuando cabe en el restante', () => {
+    expect(acotarPresupuesto(0.2, 0.5)).toBe(0.2);
+  });
+
+  it('recorta al restante cuando se pide más', () => {
+    expect(acotarPresupuesto(2, 0.5)).toBe(0.5);
+  });
+
+  it('un padre que ya se pasó deja al hijo en cero: «no gastes»', () => {
+    expect(acotarPresupuesto(0.2, -0.1)).toBe(0);
+  });
+
+  it('redondea el restante a la diezmilésima de euro', () => {
+    expect(acotarPresupuesto(1, 0.1 + 0.2)).toBe(0.3);
   });
 });

@@ -175,6 +175,11 @@ export interface DelegacionAbierta {
   tareaDestinoId: string;
   puestoDestinoId: string;
   versionPuestoDestinoId: string;
+  /**
+   * Presupuesto del hijo ya acotado al restante del padre. Es el que se escribió en
+   * `tarea` y en `delegacion`, y el que va en el contrato que recibe el flujo hijo.
+   */
+  presupuestoEuros: number;
   /** Plazo absoluto en ISO 8601, calculado por la actividad con el reloj de la base. */
   plazo: string;
   yaEstaba: boolean;

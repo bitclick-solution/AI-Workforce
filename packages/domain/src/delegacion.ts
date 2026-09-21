@@ -82,6 +82,24 @@ export interface Respaldo {
  * que la política se aplique «y se registre como hecho»: con un solo sitio que la
  * traduzca, el motivo que se anota es siempre el mismo texto.
  */
+/**
+ * Acota el presupuesto que pide un contrato al restante del padre (ADR-004).
+ *
+ * El padre no puede dar más de lo que le queda: si pide más, el hijo recibe el
+ * restante; si el padre ya se pasó, el hijo recibe cero, que es «no gastes». Un
+ * padre sin límite (`null`) no acota. El restante se redondea a la diezmilésima de
+ * euro, que es la precisión con la que se cobra el uso de los modelos, para que una
+ * resta en coma flotante no deje un presupuesto de 0,30000000000000004 €.
+ */
+export function acotarPresupuesto(
+  pedidoEuros: number,
+  restanteDelPadreEuros: number | null,
+): number {
+  if (restanteDelPadreEuros === null) return pedidoEuros;
+  const cota = Math.max(0, Math.round(restanteDelPadreEuros * 10_000) / 10_000);
+  return Math.min(pedidoEuros, cota);
+}
+
 export function resolverRespaldo(politica: PoliticaRespaldo): Respaldo {
   switch (politica) {
     case 'seguir_sin_ello':

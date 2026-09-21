@@ -10,7 +10,7 @@
  * plazo vencido y espera de señal— está en `flujos.test.ts`.
  */
 import { conTenant } from '@aiw/db';
-import { HAY_BASE_DE_DATOS, MOTIVO_SALTO } from '@aiw/db/pruebas';
+import { HAY_BASE_DE_DATOS, MOTIVO_SALTO, PUESTO_CONCILIACION } from '@aiw/db/pruebas';
 import { HERRAMIENTA_NOTA } from '@aiw/connector-demo';
 import { leerCadena, verificarCadenaEnBase } from '@aiw/ledger';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -385,6 +385,80 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('bucle del agente · contra la base y el lib
     expect(arranque?.datosReferenciados).toEqual(
       expect.arrayContaining([{ tipo: 'tarea_padre', id: montaje.tareaId }]),
     );
+  });
+
+  it('la delegación se abre con el presupuesto acotado al restante del padre', async () => {
+    const montaje = await montarParaPruebas({
+      nombre: `Bucle cota ${Date.now()}`,
+      presupuestoTareaEuros: 0.5,
+    });
+    montajes.push(montaje);
+    const tenantId = montaje.semilla.tenantId;
+    const identidad = {
+      tenantId,
+      puestoId: montaje.semilla.cobros.puestoId,
+      versionPuestoId: montaje.semilla.cobros.versionPuestoId,
+      tareaId: montaje.tareaId,
+    };
+    await montaje.actividades.arrancarTarea({
+      ...identidad,
+      flujoTemporalId: `prueba-${montaje.tareaId}`,
+      ejecucionTemporalId: 'sin-temporal',
+    });
+
+    const contrato = {
+      encargo: 'Concilia la factura F-2026-0001 con el extracto bancario.',
+      plazoSegundos: 120,
+      // Más de lo que le queda al padre: 0,5 € y nada gastado todavía.
+      presupuestoEuros: 2,
+      formato: { formato: 'json' as const, criteriosAceptacion: ['Indica el asiento propuesto'] },
+      caducidadSegundos: 600,
+      politicaRespaldo: 'seguir_sin_ello' as const,
+    };
+
+    const abierta = await montaje.actividades.abrirDelegacion({
+      ...identidad,
+      puestoDestinoNombre: PUESTO_CONCILIACION,
+      contrato,
+    });
+    expect(abierta.yaEstaba).toBe(false);
+    expect(abierta.presupuestoEuros).toBe(0.5);
+
+    // Lo acotado es lo que queda escrito: es lo que leerá el bucle del hijo.
+    const escrito = await conTenant(montaje.cliente, tenantId, async (tx) => {
+      const [hija] = await tx<{ presupuesto_euros: string }[]>`
+        select presupuesto_euros from tarea
+        where tenant_id = ${tenantId} and id = ${abierta.tareaDestinoId}
+      `;
+      const [delegacion] = await tx<{ presupuesto_euros: string }[]>`
+        select presupuesto_euros from delegacion
+        where tenant_id = ${tenantId} and id = ${abierta.delegacionId}
+      `;
+      return {
+        hija: Number(hija?.presupuesto_euros),
+        delegacion: Number(delegacion?.presupuesto_euros),
+      };
+    });
+    expect(escrito).toEqual({ hija: 0.5, delegacion: 0.5 });
+
+    // El libro dice lo que se concedió y lo que se pidió.
+    const cadena = await conTenant(montaje.cliente, tenantId, (tx) => leerCadena(tx, tenantId));
+    const apertura = cadena.find((entrada) => entrada.accion === 'delegacion.abierta');
+    expect(apertura?.datosReferenciados).toEqual(
+      expect.arrayContaining([
+        { tipo: 'presupuesto_euros', id: '0.5' },
+        { tipo: 'presupuesto_pedido_euros', id: '2' },
+      ]),
+    );
+
+    // Reabrir la misma delegación devuelve el mismo presupuesto acotado.
+    const repetida = await montaje.actividades.abrirDelegacion({
+      ...identidad,
+      puestoDestinoNombre: PUESTO_CONCILIACION,
+      contrato,
+    });
+    expect(repetida.yaEstaba).toBe(true);
+    expect(repetida.presupuestoEuros).toBe(0.5);
   });
 
   it('un guardia de salida tapa lo que tenga forma de credencial', async () => {

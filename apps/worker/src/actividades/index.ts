@@ -19,7 +19,7 @@
  *    texto al flujo, que es lo que acaba en el historial de Temporal.
  */
 import { uuidV7 } from '@aiw/db';
-import { contratoDelegacion, esquemas, type Nivel } from '@aiw/domain';
+import { acotarPresupuesto, contratoDelegacion, esquemas, type Nivel } from '@aiw/domain';
 import {
   cargaDeSenal,
   leerAprobacion,
@@ -786,9 +786,14 @@ export function crearActividades(contexto: ContextoDeActividades) {
         }
 
         const [previa] = await tx<
-          { id: string; tarea_destino_id: string | null; plazo: Date | null }[]
+          {
+            id: string;
+            tarea_destino_id: string | null;
+            plazo: Date | null;
+            presupuesto_euros: string;
+          }[]
         >`
-          select id, tarea_destino_id, plazo from delegacion
+          select id, tarea_destino_id, plazo, presupuesto_euros from delegacion
           where tenant_id = ${peticion.tenantId}
             and tarea_origen_id = ${peticion.tareaId}
             and puesto_destino_id = ${destino.id}
@@ -803,18 +808,34 @@ export function crearActividades(contexto: ContextoDeActividades) {
             tareaDestinoId: previa.tarea_destino_id,
             puestoDestinoId: destino.id,
             versionPuestoDestinoId: versionPrevia?.version_puesto_id ?? destino.version_activa_id,
+            presupuestoEuros: Number(previa.presupuesto_euros),
             plazo: (previa.plazo ?? new Date()).toISOString(),
             yaEstaba: true,
           };
         }
 
-        const [raiz] = await tx<{ raiz: string; departamento: string }[]>`
-          select coalesce(t.tarea_raiz_id, t.id) as raiz, p.departamento_id as departamento
+        const [raiz] = await tx<
+          { raiz: string; departamento: string; presupuesto: string | null }[]
+        >`
+          select coalesce(t.tarea_raiz_id, t.id) as raiz, p.departamento_id as departamento,
+            t.presupuesto_euros as presupuesto
           from tarea t
           join puesto p on p.tenant_id = t.tenant_id and p.id = t.puesto_id
           where t.tenant_id = ${peticion.tenantId} and t.id = ${peticion.tareaId}
         `;
         if (!raiz) throw new Error(`La tarea ${peticion.tareaId} no existe en este tenant.`);
+
+        // La cota del ADR-004: el hijo no puede tener más de lo que le queda al padre.
+        // Se calcula aquí, con el gasto real del árbol del padre, y no en el flujo,
+        // que no tiene base. Lo acotado es lo que se escribe y lo que recibe el hijo;
+        // lo pedido queda en el libro para que la diferencia se vea. Un padre sin
+        // límite (columna nula) no acota.
+        const limitePadre = raiz.presupuesto === null ? Number.NaN : Number(raiz.presupuesto);
+        const restanteDelPadre = Number.isFinite(limitePadre)
+          ? limitePadre - (await costeDeLaTarea(tx, peticion.tenantId, peticion.tareaId))
+          : null;
+        const presupuestoPedido = contrato.data.presupuestoEuros;
+        const presupuestoHijo = acotarPresupuesto(presupuestoPedido, restanteDelPadre);
 
         const [hija] = await tx<{ id: string }[]>`
           insert into tarea (
@@ -823,7 +844,7 @@ export function crearActividades(contexto: ContextoDeActividades) {
           ) values (
             ${peticion.tenantId}, ${raiz.raiz}, ${peticion.tareaId}, ${destino.id},
             ${destino.version_activa_id}, 'delegacion', 'pendiente',
-            ${peticion.contrato.presupuestoEuros}
+            ${presupuestoHijo}
           )
           returning id
         `;
@@ -844,7 +865,7 @@ export function crearActividades(contexto: ContextoDeActividades) {
             ${peticion.tenantId}, ${peticion.tareaId}, ${hija.id}, ${peticion.puestoId},
             ${destino.id}, ${peticion.contrato.encargo},
             clock_timestamp() + make_interval(secs => ${peticion.contrato.plazoSegundos}),
-            ${peticion.contrato.presupuestoEuros},
+            ${presupuestoHijo},
             ${JSON.stringify(formato)}::text::jsonb,
             ${raiz.departamento !== destino.departamento_id}
           )
@@ -863,6 +884,10 @@ export function crearActividades(contexto: ContextoDeActividades) {
             { tipo: 'tarea', id: hija.id },
             { tipo: 'puesto', id: destino.id },
             { tipo: 'politica_respaldo', id: peticion.contrato.politicaRespaldo },
+            { tipo: 'presupuesto_euros', id: String(presupuestoHijo) },
+            ...(presupuestoHijo === presupuestoPedido
+              ? []
+              : [{ tipo: 'presupuesto_pedido_euros', id: String(presupuestoPedido) }]),
           ],
           resultado: 'exito',
         });
@@ -872,6 +897,7 @@ export function crearActividades(contexto: ContextoDeActividades) {
           tareaDestinoId: hija.id,
           puestoDestinoId: destino.id,
           versionPuestoDestinoId: destino.version_activa_id,
+          presupuestoEuros: presupuestoHijo,
           plazo: creada.plazo.toISOString(),
           yaEstaba: false,
         };
