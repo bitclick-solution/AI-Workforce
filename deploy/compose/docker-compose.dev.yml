@@ -151,6 +151,27 @@ services:
         mcli mb --ignore-existing silo/aiworkforce silo/langfuse &&
         mcli ls silo
 
+  mailpit:
+    # Servidor de correo de desarrollo: acepta cualquier mensaje, no entrega ninguno
+    # fuera y los muestra en su interfaz. La aprobación por correo lo necesita para
+    # que la demo se pueda reproducir sin mandar correo de verdad a nadie.
+    image: axllent/mailpit:v1.28
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: '1'
+      MP_SMTP_AUTH_ALLOW_INSECURE: '1'
+      MP_MAX_MESSAGES: '500'
+      TZ: UTC
+    ports:
+      - '127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025'
+      - '127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025'
+    healthcheck:
+      # La imagen no trae wget ni curl: el propio binario sabe decir si está listo.
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped

@@ -26,3 +26,7 @@ export * from './contador-esquema.js';
 export * from './contador.js';
 export * from './contador-catalogo.js';
 export * from './contador-consultas.js';
+
+// Aprobación por correo v0
+export * from './aprobacion.js';
+export * from './exportar.js';
