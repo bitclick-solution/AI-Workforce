@@ -5,6 +5,7 @@ packages:
 
 # Versiones únicas para todo el workspace. Los paquetes las referencian con "catalog:".
 catalog:
+  '@ai-sdk/provider': ^4.0.17
   '@modelcontextprotocol/sdk': ^1.30.0
   '@temporalio/activity': ^1.24.0
   '@temporalio/client': ^1.24.0
