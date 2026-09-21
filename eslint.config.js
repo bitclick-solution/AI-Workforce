@@ -34,7 +34,9 @@ export default tseslint.config(
   },
   {
     // Scripts de operación y ficheros de configuración pueden escribir en consola.
-    files: ['scripts/**', '*.config.{js,ts,mjs}', 'apps/*/src/main.ts'],
+    // Los guiones de demostración (`demo-*.ts`) también: su salida por consola es
+    // justo lo que se demuestra, y viven junto al código que enseñan.
+    files: ['scripts/**', '*.config.{js,ts,mjs}', 'apps/*/src/main.ts', 'apps/*/src/demo-*.ts'],
     languageOptions: { globals: globals.node },
     rules: { 'no-console': 'off' },
   },

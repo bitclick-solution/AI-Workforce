@@ -69,8 +69,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
-      - name: Migración, aislamiento, inmutabilidad, purga, aprobación y carga reducida
-        run: pnpm --filter @aiw/db --filter @aiw/ledger --filter @aiw/channels test
+      - name: Migración, aislamiento, inmutabilidad, purga, contador, aprobación y carga reducida
+        # Concurrencia 1 a propósito: los cuatro paquetes comparten una sola base y
+        # alguna suite vacía el libro de auditoría al terminar.
+        run: pnpm --workspace-concurrency=1 --filter @aiw/db --filter @aiw/ledger --filter @aiw/api --filter @aiw/channels test
 
   # Un millón de filas tarda lo suyo: solo corre si el PR toca el esquema, y a mano
   # desde la pestaña de acciones cuando alguien quiera volver a medir.
