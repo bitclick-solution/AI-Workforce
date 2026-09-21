@@ -19,7 +19,7 @@ Demostrar en una semana de trabajo que el stack elegido sostiene lo que diferenc
 - `packages/mcp-gateway`: registro de servidores MCP por conector, descubrimiento de herramientas, lista blanca y nivel por clase de acción desde `autorizacion_herramientas`, inyección de credenciales desde `conector.referencia_secreto`, registro de cada llamada.
 - `packages/domain`: motor mínimo de políticas: decide por clase de acción (lectura o escritura) y nivel N0 a N3 si un paso ejecuta, pide aprobación o se simula; presupuesto y parada al 100 %.
 - `packages/evals`: primer caso dorado por puesto (`puestos/cobros`).
-- Conector de demostración: un servidor MCP en `connectors/demo` con las dos herramientas de Odoo (`listar_facturas_vencidas`, `crear_nota_seguimiento`) sobre datos de prueba y un fallo inyectable, para que la prueba y la CI no dependan del acceso a Odoo.
+- `connectors/demo`: un servidor MCP con las dos herramientas de Odoo (`listar_facturas_vencidas`, `crear_nota_seguimiento`) sobre datos de prueba y un fallo inyectable, para que la prueba y la CI no dependan del acceso a Odoo.
 
 Toca cuatro paquetes y una aplicación. Se acepta porque es una prueba de integración cuyas partes no tienen valor por separado; el Revisor revisa el PR paquete a paquete.
 
@@ -49,6 +49,19 @@ Sin endpoints nuevos. Dos puestos de Finanzas sembrados por script, no por la sa
 ## Fuera de alcance
 
 Sala y contratación desde una frase (Sala v0); lección y promoción (Aprendizaje v0); aprobación por correo con enlaces firmados (rebanada en curso; aquí solo la espera y la decisión); conector Odoo real (Conector Odoo v0; el conector de demostración expone las mismas dos herramientas); guardias de entrada y salida con detección de datos personales (servicio `pii`); motor de políticas completo con rangos del Director de IA; panel; agentes de plataforma.
+
+## Lo que se aprendió al construirlo
+
+Se escribe aquí y no se corrige el objetivo ni los criterios de hecho: la especificación sigue siendo el contrato y estas son las cosas que el contrato no podía saber.
+
+- **La fila de `paso` es inmutable por disparador de la base.** Un paso no se abre y se cierra: se hace el trabajo y se escribe entero cuando ya se sabe qué pasó. La única `(tenant, tarea, numero)` es la clave de idempotencia y la comprobación de «no repetir una llamada ya hecha». En `aprobacion` el orden se invierte, porque `aprobacion.paso_id` tiene clave foránea: ahí el paso va primero y su `salida` queda vacía.
+- **La clase de acción del motor mínimo es el tipo de la herramienta**: `lectura` o `escritura`, tal como el servidor MCP las declara con `annotations.readOnlyHint`. El nivel efectivo de una clase es el menor entre lo que concede `autorizacion_herramientas` y lo que permite `version_puesto.politica`: los dos tienen que decir sí.
+- **N0 y N1 piden permiso los dos, y no son lo mismo.** N1 ejecuta tras la aprobación; N0 es manual, así que un N0 aprobado se queda en simulado y lo ejecuta la persona. Un puesto `degradado` aplica techo N1 a todo (ADR-005, bajada por incidente).
+- **La delegación vuelve por el resultado del flujo hijo, no por una señal.** El mango del hijo ya es un canal durable que sobrevive a una caída; una señal encima duplicaría el mecanismo sin añadir nada. El plazo se corre con `Promise.race` contra un temporizador del reloj de Temporal, y la caducidad del ADR-014 es el tope de vida del hijo.
+- **Las señales se prueban con `createLocal()` y los plazos con `createTimeSkipping()`.** Con salto de tiempo, el reloj se adelanta en cuanto nadie tiene trabajo, así que una prueba que intenta pulsar un enlace mientras el flujo espera llega siempre tarde.
+- **El guardia «ningún secreto en la salida» no recibe ningún secreto.** El gateway los guarda en objetos que no saben imprimirse y solo los revela al construir el transporte, así que el guardia reconoce la forma de una credencial —`sk-`, `Bearer`, cadena de conexión con contraseña, bloque PEM— y no su valor. Quien comprueba que el valor no sale es una prueba que lo rastrea por los mensajes, las trazas, el libro y los pasos.
+- **Queda una ventana de repetición de herramienta** entre la llamada al conector y la escritura de la fila del paso. No se cierra sin que el conector acepte claves de idempotencia; está en el runbook y el identificador del paso va en la entrada de auditoría para que una repetición se vea.
+- **Runbook**: `docs/runbooks/prueba-tecnica-del-stack.md`.
 
 ## Presupuesto de tokens
 
