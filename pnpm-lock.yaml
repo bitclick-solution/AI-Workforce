@@ -140,6 +140,9 @@ importers:
       '@aiw/mcp-gateway':
         specifier: workspace:*
         version: link:../../packages/mcp-gateway
+      '@modelcontextprotocol/sdk':
+        specifier: 'catalog:'
+        version: 1.30.0(zod@4.6.5)
       postgres:
         specifier: 'catalog:'
         version: 3.4.9

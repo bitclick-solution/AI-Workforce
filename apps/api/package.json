@@ -18,6 +18,7 @@
     "@aiw/domain": "workspace:*",
     "@aiw/ledger": "workspace:*",
     "@aiw/mcp-gateway": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
     "postgres": "catalog:"
   },
   "devDependencies": {
