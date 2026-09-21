@@ -1,4 +1,4 @@
-import { APLICACION } from './index.js';
+import { APLICACION } from './aplicacion.js';
 import { BANDERA, leerConfiguracion, queFalta } from './configuracion.js';
 
 /**

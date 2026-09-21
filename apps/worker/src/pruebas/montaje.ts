@@ -28,12 +28,14 @@ import {
 import { crearTareaRaiz, sembrarDemostracion, type SemillaDeDemostracion } from '../semilla.js';
 
 /**
- * Secreto del conector para las pruebas. Se genera en el proceso y no sale de él.
+ * Secreto del conector para las pruebas.
  *
- * No hay ninguna credencial escrita en el repositorio, ni siquiera de juguete: lo
- * que se escribe aquí es un identificador aleatorio de esta ejecución.
+ * Sale del entorno cuando lo hay —el job «Flujos durables» de la integración
+ * continua lo genera por ejecución— y, si no, de un identificador aleatorio de este
+ * proceso. En los dos casos es un valor que nace y muere con la ejecución: no hay
+ * ninguna credencial escrita en el repositorio, ni siquiera de juguete.
  */
-export const SECRETO_DE_PRUEBA = `demo-${uuidV7()}`;
+export const SECRETO_DE_PRUEBA = process.env[VARIABLE_SECRETO_DEMO] ?? `demo-${uuidV7()}`;
 
 export const ENTORNO_DE_PRUEBA = { [VARIABLE_SECRETO_DEMO]: SECRETO_DE_PRUEBA };
 
@@ -59,9 +61,12 @@ export async function montarParaPruebas(opciones: OpcionesMontaje): Promise<Mont
   const trazas = new TrazasEnMemoria();
   const contexto = crearContextoDeActividades({
     urlBaseDeDatos: URL_BASE_DE_DATOS ?? '',
-    registro: registroConDemostracion(
-      opciones.fallosIniciales === undefined ? {} : { fallosIniciales: opciones.fallosIniciales },
-    ),
+    registro: registroConDemostracion({
+      credencialEsperada: SECRETO_DE_PRUEBA,
+      ...(opciones.fallosIniciales === undefined
+        ? {}
+        : { fallosIniciales: opciones.fallosIniciales }),
+    }),
     enrutador: enrutadorDeCobros(),
     secretos: resolvedorDeEntorno(ENTORNO_DE_PRUEBA),
     trazas,

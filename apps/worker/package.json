@@ -15,6 +15,7 @@
     "clean": "rm -rf dist coverage .turbo"
   },
   "dependencies": {
+    "@ai-sdk/provider": "catalog:",
     "@aiw/connector-demo": "workspace:*",
     "@aiw/db": "workspace:*",
     "@aiw/domain": "workspace:*",
@@ -23,10 +24,13 @@
     "@aiw/ledger": "workspace:*",
     "@aiw/mcp-gateway": "workspace:*",
     "@aiw/models": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
     "@temporalio/activity": "catalog:",
     "@temporalio/client": "catalog:",
     "@temporalio/worker": "catalog:",
     "@temporalio/workflow": "catalog:",
+    "ai": "catalog:",
+    "drizzle-orm": "catalog:",
     "postgres": "catalog:",
     "zod": "catalog:"
   },

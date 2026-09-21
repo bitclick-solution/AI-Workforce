@@ -58,11 +58,22 @@ export interface ContextoDeActividades {
  * resolvedor a esta función y ahí se queda. Ni el gateway ni el bucle lo ven.
  */
 export function registroConDemostracion(
-  opciones: { fallosIniciales?: number | undefined } = {},
+  opciones: {
+    fallosIniciales?: number | undefined;
+    /**
+     * Credencial que el servidor espera. Sin valor, la del entorno del proceso,
+     * que es de donde saldría en el Compose. Las pruebas la pasan explícita para
+     * no depender de lo que haya en el entorno del runner.
+     */
+    credencialEsperada?: string | undefined;
+  } = {},
 ): RegistroDeServidores {
   return new RegistroDeServidores().registrar(NOMBRE_CONECTOR_DEMO, async (secreto) => {
     const { transporte } = await montarDemoEnMemoria({
       credencial: secreto?.revelar() ?? '',
+      ...(opciones.credencialEsperada === undefined
+        ? {}
+        : { credencialEsperada: opciones.credencialEsperada }),
       ...(opciones.fallosIniciales === undefined
         ? {}
         : { fallosIniciales: opciones.fallosIniciales }),
