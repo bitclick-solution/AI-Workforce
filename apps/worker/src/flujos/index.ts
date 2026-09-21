@@ -7,10 +7,12 @@
  * que tenga efectos está detrás de un proxy de actividad.
  *
  * Los reintentos se declaran por actividad y no por flujo. El criterio: lo que
- * habla con un sistema de fuera reintenta con espera creciente y tope de intentos
- * —cuatro fallos seguidos del conector significan que el conector está roto, no que
- * haya que insistir—; lo que solo escribe en nuestra base reintenta sin tope,
- * porque una base que no responde vuelve, y perder el paso sería peor.
+ * habla con un sistema de fuera reintenta con espera creciente y tope corto —cuatro
+ * fallos seguidos del conector significan que el conector está roto, no que haya que
+ * insistir—; lo que solo escribe en nuestra base reintenta mucho más, porque una
+ * base que no responde vuelve y perder el paso sería peor, pero también con tope. Y
+ * lo que es un error de datos y no una caída se marca como no reintentable en la
+ * actividad, así que no espera ni un segundo.
  */
 import {
   ApplicationFailure,
@@ -64,11 +66,24 @@ const REINTENTOS_EXTERNOS = {
   maximumAttempts: 4,
 } as const;
 
-/** Reintentos de lo que solo escribe en nuestra base. Sin tope. */
+/**
+ * Reintentos de lo que solo escribe en nuestra base.
+ *
+ * Mucho más generoso que el de fuera —una base que no responde vuelve, y perder el
+ * paso sería peor— pero con tope. El tope existe por una lección de la integración
+ * continua: una carga que la base rechaza siempre no mejora por insistir, y sin tope
+ * una actividad así se reintenta durante horas y se come el trabajador. Veinte
+ * minutos es tiempo de sobra para una caída de PostgreSQL y bastante poco para no
+ * dejar un flujo girando en vacío.
+ *
+ * Lo que sí es un error de datos y no una caída se marca como no reintentable en la
+ * propia actividad, y entonces no espera ni un segundo.
+ */
 const REINTENTOS_INTERNOS = {
   initialInterval: '500 milliseconds',
   backoffCoefficient: 2,
   maximumInterval: '10 seconds',
+  maximumAttempts: 120,
 } as const;
 
 const externas = proxyActivities<Pick<Actividades, 'pasoModelo' | 'pasoHerramienta'>>({
@@ -103,6 +118,16 @@ const internas = proxyActivities<
  * decisión se recupera de la base y no se espera a nadie.
  */
 export async function tareaAgente(entrada: EntradaTareaAgente): Promise<ResultadoTareaAgente> {
+  // El contrato de la delegación se valida al entrar y no al abrirla. Es la
+  // diferencia entre un flujo que falla en su primer milisegundo diciendo qué campo
+  // falta y uno que ejecuta la tarea entera para tropezar al final con una carga que
+  // la base rechaza. Lo aprendí de la integración continua: un contrato sin
+  // `politicaRespaldo` llegaba hasta `anotar`, que lo rechazaba, y la actividad se
+  // reintentaba sesenta veces.
+  const contratoDeLaDelegacion = entrada.delegacion
+    ? contratoDelegacion.parse(entrada.delegacion.contrato)
+    : undefined;
+
   const info = workflowInfo();
   const decisiones = new Map<string, CargaSenalDecision>();
   let pasosDados = 0;
@@ -214,8 +239,8 @@ export async function tareaAgente(entrada: EntradaTareaAgente): Promise<Resultad
      * política de respaldo del ADR-014.
      */
     async esperarDelegacion(abierta: DelegacionAbierta, plazoSegundos: number) {
-      if (!entrada.delegacion) return null;
-      const contrato = contratoDelegacion.parse(entrada.delegacion.contrato);
+      if (!entrada.delegacion || !contratoDeLaDelegacion) return null;
+      const contrato = contratoDeLaDelegacion;
 
       const hijo: ChildWorkflowHandle<typeof delegacion> = await startChild(delegacion, {
         workflowId: `delegacion-${abierta.delegacionId}`,

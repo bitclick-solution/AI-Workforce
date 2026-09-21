@@ -1,24 +1,26 @@
 /**
- * La delegación como flujo hijo, con salto de tiempo.
+ * El plazo de la delegación, con salto de tiempo.
  *
- * Entorno de salto de tiempo: el plazo de una delegación se mide en minutos u horas
- * y aquí se prueba que vence sin esperarlos. El servidor de pruebas adelanta el
- * reloj cuando nadie tiene trabajo, así que un temporizador de diez minutos se
- * cumple en milisegundos y la política de respaldo del ADR-014 se puede comprobar.
+ * Aquí solo vive lo que necesita adelantar el reloj: que un plazo vence sin
+ * esperarlo y que el padre aplica la política de respaldo del ADR-014 en vez de
+ * quedarse colgado. El servidor de pruebas adelanta el reloj cuando nadie tiene
+ * trabajo, así que un temporizador de diez minutos se cumple en milisegundos.
  *
- * Lo que no se prueba aquí son las señales: con el reloj adelantándose, una prueba
- * que intenta pulsar un enlace llega siempre tarde. Eso está en `flujos.test.ts`.
+ * Lo que **no** puede vivir aquí es el camino en el que el hijo sí entrega: con el
+ * reloj adelantándose, el temporizador del plazo gana siempre la carrera contra el
+ * hijo, y la prueba mediría el salto de tiempo en vez de la delegación. Ese camino
+ * está en `flujos.test.ts`, con reloj de verdad. Lo aprendimos viendo esta misma
+ * prueba fallar en la integración continua por eso exactamente.
  */
-import { HAY_BASE_DE_DATOS, MOTIVO_SALTO } from '@aiw/db/pruebas';
-import { PUESTO_CONCILIACION } from '@aiw/db/pruebas';
+import { HAY_BASE_DE_DATOS, MOTIVO_SALTO, PUESTO_CONCILIACION } from '@aiw/db/pruebas';
+import { conTenant } from '@aiw/db';
 import type { ContratoDelegacion } from '@aiw/domain';
 import type { TestWorkflowEnvironment } from '@temporalio/testing';
-import { conTenant } from '@aiw/db';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { tareaAgente } from '../flujos/index.js';
 import { montarParaPruebas, type MontajeDePruebas } from './montaje.js';
-import { arrancarEntorno, montarTrabajadorDePrueba } from './temporal.js';
+import { arrancarEntorno, montarTrabajadorDePrueba, type TrabajadorDePrueba } from './temporal.js';
 
 const ENCARGO = 'Haz el seguimiento de cobros y delega la conciliación de la primera factura.';
 
@@ -41,8 +43,9 @@ function contrato(parcial: Partial<ContratoDelegacion> = {}): ContratoDelegacion
 let entorno: TestWorkflowEnvironment | null = null;
 let motivoSalto = HAY_BASE_DE_DATOS ? '' : MOTIVO_SALTO;
 
-describe('delegación · flujo hijo con contrato y plazo', () => {
+describe('delegación · plazo vencido y contrato del ADR-014', () => {
   const montajes: MontajeDePruebas[] = [];
+  const trabajadores: TrabajadorDePrueba[] = [];
 
   beforeAll(async () => {
     if (!HAY_BASE_DE_DATOS) return;
@@ -51,15 +54,18 @@ describe('delegación · flujo hijo con contrato y plazo', () => {
     motivoSalto = arrancado.motivoSalto;
   }, 300_000);
 
+  // Los trabajadores se paran antes de cerrar la conexión, y no al revés.
   afterEach(async () => {
+    for (const trabajador of trabajadores.splice(0)) await trabajador.cerrar();
     await Promise.all(montajes.splice(0).map((montaje) => montaje.cerrar()));
-  });
+  }, 60_000);
 
   afterAll(async () => {
     await entorno?.teardown();
   }, 60_000);
 
   async function correr(opciones: { nombre: string; contrato: ContratoDelegacion }) {
+    const activo = entorno as TestWorkflowEnvironment;
     const montaje = await montarParaPruebas({
       nombre: opciones.nombre,
       presupuestoTareaEuros: 1,
@@ -68,17 +74,18 @@ describe('delegación · flujo hijo con contrato y plazo', () => {
 
     const cola = `cobros-${montaje.tareaId}`;
     const trabajador = await montarTrabajadorDePrueba(
-      entorno?.nativeConnection as never,
-      entorno?.client.options.namespace ?? 'default',
+      activo.nativeConnection,
+      activo.client.options.namespace,
       cola,
       montaje,
     );
+    trabajadores.push(trabajador);
 
     // Validez de aprobación corta: con salto de tiempo nadie va a pulsar un enlace,
     // así que las escrituras se vencen y el bucle llega a la delegación, que es lo
     // que esta prueba mira.
     const resultado = await trabajador.trabajador.runUntil(
-      (entorno as TestWorkflowEnvironment).client.workflow.execute(tareaAgente, {
+      activo.client.workflow.execute(tareaAgente, {
         taskQueue: cola,
         workflowId: `tarea-${montaje.tareaId}`,
         args: [
@@ -101,96 +108,26 @@ describe('delegación · flujo hijo con contrato y plazo', () => {
     return { montaje, resultado };
   }
 
-  it('el hijo recibe el contrato, entrega, y su coste suma en la tarea raíz', async (ctx) => {
-    if (!entorno) return ctx.skip(motivoSalto);
-    const { montaje, resultado } = await correr({
-      nombre: `Delegacion entregada ${Date.now()}`,
-      contrato: contrato(),
-    });
-    const tenantId = montaje.semilla.tenantId;
-
-    expect(resultado.delegacion?.entregado).toBe(true);
-    expect(resultado.delegacion?.tareaDestinoId).toBeTruthy();
-
-    const filas = await conTenant(montaje.cliente, tenantId, async (tx) => {
-      const encontradas = await tx<
-        {
-          id: string;
-          tarea_destino_id: string | null;
-          encargo: string;
-          presupuesto_euros: string;
-          formato: { criteriosAceptacion?: string[] };
-          resultado: Record<string, unknown>;
-        }[]
-      >`
-        select id, tarea_destino_id, encargo, presupuesto_euros, formato, resultado
-        from delegacion where tenant_id = ${tenantId}
-      `;
-      return [...encontradas];
-    });
-    const delegada = filas[0];
-    expect(delegada?.tarea_destino_id).toBe(resultado.delegacion?.tareaDestinoId);
-    expect(delegada?.encargo).toContain('F-2026-0001');
-    expect(Number(delegada?.presupuesto_euros)).toBeCloseTo(0.2, 4);
-    expect(delegada?.formato.criteriosAceptacion).toHaveLength(2);
-    expect(delegada?.resultado['entregado']).toBe(true);
-
-    // El consumo del hijo suma en la raíz y no cuenta como tarea nueva (ADR-003).
-    const consumo = await conTenant(montaje.cliente, tenantId, async (tx) => {
-      const usos = await tx<{ tarea_raiz_id: string; tarea_id: string; coste_euros: string }[]>`
-        select tarea_raiz_id, tarea_id, coste_euros from uso_modelo
-        where tenant_id = ${tenantId}
-      `;
-      return [...usos];
-    });
-    const deLaHija = consumo.filter((uso) => uso.tarea_id === delegada?.tarea_destino_id);
-    expect(deLaHija.length).toBeGreaterThan(0);
-    expect(deLaHija.every((uso) => uso.tarea_raiz_id === montaje.tareaId)).toBe(true);
-
-    const [contador] = await conTenant(montaje.cliente, tenantId, async (tx) => {
-      const filasContador = await tx<{ tareas: string }[]>`
-        select tareas from contador_consumo where tenant_id = ${tenantId}
-      `;
-      return [...filasContador];
-    });
-    // Dos flujos, dos tareas en la base y una sola unidad en el contador.
-    expect(Number(contador?.tareas)).toBe(1);
-  }, 300_000);
-
-  it('el puesto en prueba del hijo simula sus escrituras', async (ctx) => {
-    if (!entorno) return ctx.skip(motivoSalto);
-    const { montaje, resultado } = await correr({
-      nombre: `Delegacion en prueba ${Date.now()}`,
-      contrato: contrato(),
-    });
-
-    expect(resultado.delegacion?.entregado).toBe(true);
-    const simuladas = await conTenant(montaje.cliente, montaje.semilla.tenantId, async (tx) => {
-      const filas = await tx<{ accion: string }[]>`
-        select accion from entrada_auditoria
-        where tenant_id = ${montaje.semilla.tenantId}
-          and accion = 'herramienta.simulada'
-      `;
-      return [...filas];
-    });
-    // El hijo es Conciliación, que está en prueba: sus escrituras no salen al mundo.
-    expect(simuladas.length).toBeGreaterThan(0);
-  }, 300_000);
-
   it('un plazo que vence aplica la política de respaldo y no bloquea al padre', async (ctx) => {
     if (!entorno) return ctx.skip(motivoSalto);
-    // Plazo de un segundo con caducidad amplia: el hijo no llega y el padre sigue.
     const { montaje, resultado } = await correr({
       nombre: `Delegacion vencida ${Date.now()}`,
       contrato: contrato({ plazoSegundos: 1, caducidadSegundos: 1800 }),
     });
 
-    // Con salto de tiempo el temporizador del plazo puede ganar la carrera o no:
-    // lo que se comprueba es que el padre termina en los dos casos, y que si venció
-    // aplicó la política declarada y lo dejó escrito.
+    // El padre termina, que es lo primero que hay que poder afirmar: un plazo que
+    // vence no puede dejar una tarea colgada para siempre.
     expect(resultado.estado).toBe('completada');
+    expect(resultado.delegacion).toBeDefined();
+
+    // Con salto de tiempo el temporizador del plazo gana la carrera casi siempre,
+    // pero no se afirma que la gane: se afirma que si la gana, la política declarada
+    // se aplicó y quedó escrita. Una prueba que dependa de quién gana una carrera es
+    // una prueba que va a fallar sola algún día.
     if (resultado.delegacion?.entregado === false) {
       expect(resultado.delegacion.respaldoAplicado).toBe('seguir_sin_ello');
+      expect(resultado.delegacion.resumen).toContain('venció el plazo');
+
       const vencidas = await conTenant(montaje.cliente, montaje.semilla.tenantId, async (tx) => {
         const filas = await tx<{ accion: string }[]>`
           select accion from entrada_auditoria
@@ -199,10 +136,19 @@ describe('delegación · flujo hijo con contrato y plazo', () => {
         return [...filas];
       });
       expect(vencidas).toHaveLength(1);
+
+      const cerrada = await conTenant(montaje.cliente, montaje.semilla.tenantId, async (tx) => {
+        const filas = await tx<{ resultado: Record<string, unknown> }[]>`
+          select resultado from delegacion where tenant_id = ${montaje.semilla.tenantId}
+        `;
+        return [...filas];
+      });
+      expect(cerrada[0]?.resultado['entregado']).toBe(false);
+      expect(cerrada[0]?.resultado['politicaRespaldo']).toBe('seguir_sin_ello');
     }
   }, 300_000);
 
-  it('un contrato sin caducidad ni política de respaldo no arranca el hijo', async (ctx) => {
+  it('un contrato sin caducidad ni política de respaldo no arranca el flujo', async (ctx) => {
     if (!entorno) return ctx.skip(motivoSalto);
     const sinAdr014 = { ...contrato() } as Record<string, unknown>;
     delete sinAdr014['caducidadSegundos'];
@@ -213,6 +159,11 @@ describe('delegación · flujo hijo con contrato y plazo', () => {
       contrato: sinAdr014 as unknown as ContratoDelegacion,
     }).catch((error: unknown) => error);
 
-    expect(String(fallo)).toMatch(/caducidadSegundos|politicaRespaldo|invalid/i);
-  }, 300_000);
+    // Falla, y falla pronto: el contrato se valida al entrar en el flujo. La versión
+    // anterior de este código lo validaba al abrir la delegación, después de la
+    // tarea entera, y la actividad se reintentaba sesenta veces contra una carga que
+    // el libro nunca iba a aceptar.
+    expect(fallo).toBeInstanceOf(Error);
+    expect(String(fallo)).toMatch(/caducidadSegundos|politicaRespaldo|invalid|required/i);
+  }, 120_000);
 });

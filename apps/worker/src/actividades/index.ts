@@ -19,7 +19,7 @@
  *    texto al flujo, que es lo que acaba en el historial de Temporal.
  */
 import { uuidV7 } from '@aiw/db';
-import { esquemas, type Nivel } from '@aiw/domain';
+import { contratoDelegacion, esquemas, type Nivel } from '@aiw/domain';
 import {
   cargaDeSenal,
   leerAprobacion,
@@ -710,6 +710,23 @@ export function crearActividades(contexto: ContextoDeActividades) {
      * esperar a que el hijo termine.
      */
     async abrirDelegacion(peticion: PeticionAbrirDelegacion): Promise<DelegacionAbierta> {
+      // Segunda cerradura de la misma puerta: el flujo ya validó el contrato al
+      // entrar, y aquí se vuelve a validar porque esta actividad escribe en el libro
+      // y una carga que el libro rechaza no mejora por reintentarla. Falla no
+      // reintentable, así que el flujo lo ve en el primer intento.
+      const contrato = contratoDelegacion.safeParse(peticion.contrato);
+      if (!contrato.success) {
+        throw ApplicationFailure.create({
+          message:
+            'El contrato de la delegación no cumple el ADR-014: ' +
+            contrato.error.issues
+              .map((problema) => `${problema.path.join('.') || '(raíz)'}: ${problema.message}`)
+              .join('; '),
+          type: 'ContratoDeDelegacionNoValido',
+          nonRetryable: true,
+        });
+      }
+
       return enTenant(contexto, peticion.tenantId, async (tx) => {
         const [destino] = await tx<
           { id: string; version_activa_id: string | null; departamento_id: string }[]

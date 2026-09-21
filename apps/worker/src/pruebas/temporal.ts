@@ -53,6 +53,14 @@ export async function arrancarEntorno(clase: ClaseDeEntorno): Promise<EntornoDeP
 
 export interface TrabajadorDePrueba {
   trabajador: Worker;
+  /**
+   * Para el trabajador y espera a que termine de parar.
+   *
+   * Hay que llamarlo aunque la prueba falle. Un trabajador que sigue vivo cuando la
+   * prueba ya cerró su conexión a la base reintenta actividades contra un socket
+   * cerrado, se come el pool del servidor de pruebas y hace fallar por tiempo a las
+   * pruebas siguientes. Se aprendió mirando el registro de la integración continua.
+   */
   cerrar: () => Promise<void>;
 }
 
@@ -73,7 +81,22 @@ export async function montarTrabajadorDePrueba(
     stickyQueueScheduleToStartTimeout: '1 second',
     shutdownGraceTime: '1 second',
   });
-  return { trabajador, cerrar: async () => trabajador.shutdown() };
+  return {
+    trabajador,
+    cerrar: async () => {
+      try {
+        trabajador.shutdown();
+      } catch {
+        // Ya estaba parado: `runUntil` lo para cuando su promesa se resuelve.
+      }
+      // Se espera a que pare de verdad, no a que le hayamos pedido parar: hasta que
+      // no está en `STOPPED` puede seguir ejecutando una actividad.
+      const hasta = Date.now() + 10_000;
+      while (trabajador.getState() !== 'STOPPED' && Date.now() < hasta) {
+        await new Promise((listo) => setTimeout(listo, 50));
+      }
+    },
+  };
 }
 
 /**
