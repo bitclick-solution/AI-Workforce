@@ -11,7 +11,7 @@
  */
 import { conTenant } from '@aiw/db';
 import { HAY_BASE_DE_DATOS, MOTIVO_SALTO, PUESTO_CONCILIACION } from '@aiw/db/pruebas';
-import { HERRAMIENTA_NOTA } from '@aiw/connector-demo';
+import { HERRAMIENTA_LISTAR, HERRAMIENTA_NOTA } from '@aiw/connector-demo';
 import { leerCadena, verificarCadenaEnBase } from '@aiw/ledger';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -325,6 +325,67 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('bucle del agente · contra la base y el lib
     });
   });
 
+  it('los argumentos de una herramienta y el resumen de una aprobación se guardan sin credenciales', async () => {
+    const montaje = await montarParaPruebas({ nombre: `Bucle argumentos ${Date.now()}` });
+    montajes.push(montaje);
+    const { REDACTADO } = await import('../bucle/guardias.js');
+    const identidad = {
+      tenantId: montaje.semilla.tenantId,
+      puestoId: montaje.semilla.cobros.puestoId,
+      versionPuestoId: montaje.semilla.cobros.versionPuestoId,
+      tareaId: montaje.tareaId,
+    };
+    const clave = 'sk-abcdefghijklmnopqrstuv';
+
+    // Una lectura N3 con un argumento de más que parece una clave: el conector lo
+    // ignora, pero la fila del paso, que no se borra, lo guardaría para siempre. Al
+    // conector llega tal cual y la fila lo recibe revisado.
+    const salida = await montaje.actividades.pasoHerramienta({
+      ...identidad,
+      herramienta: HERRAMIENTA_LISTAR,
+      argumentos: { limite: 1, comentario: `token ${clave}` },
+      numeroPaso: 1,
+      claveIdempotencia: `${montaje.tareaId}:1:prueba`,
+      nivelAplicado: 'n3',
+      guardiasEntrada: [],
+      guardiasSalida: ['sin_secretos'],
+      presupuestoEuros: 1,
+      gastadoEuros: 0,
+    });
+    expect(salida.texto).toContain('F-2026-0001');
+
+    // Y el resumen de una aprobación, que es lo que la persona lee en el correo.
+    const aprobacion = await montaje.actividades.pedirAprobacion({
+      ...identidad,
+      claseAccion: 'escritura',
+      nivelExigido: 'n1',
+      borradorOpaco: { tipo: 'herramienta.prueba', carga: { argumentos: { texto: 'nota' } } },
+      resumenLegible: `Crear nota — texto: ${clave}`,
+      guardiasSalida: ['sin_secretos'],
+      numeroPaso: 2,
+      validezSegundos: 60,
+    });
+
+    const guardado = await conTenant(montaje.cliente, identidad.tenantId, async (tx) => {
+      const pasos = await tx<{ numero: number; entrada: Record<string, unknown> }[]>`
+        select numero, entrada from paso
+        where tenant_id = ${identidad.tenantId} and tarea_id = ${identidad.tareaId}
+        order by numero
+      `;
+      const [fila] = await tx<{ resumen_legible: string }[]>`
+        select resumen_legible from aprobacion
+        where tenant_id = ${identidad.tenantId} and id = ${aprobacion.aprobacionId}
+      `;
+      return { pasos: [...pasos], resumen: fila?.resumen_legible ?? '' };
+    });
+
+    expect(guardado.pasos[0]?.entrada).toEqual({
+      argumentos: { limite: 1, comentario: `token ${REDACTADO}` },
+    });
+    expect(guardado.resumen).toBe(`Crear nota — texto: ${REDACTADO}`);
+    expect(JSON.stringify(guardado)).not.toContain(clave);
+  });
+
   it('una tarea hija no suma otra unidad al contador: cuenta dentro de su raíz', async () => {
     const montaje = await montarParaPruebas({ nombre: `Bucle hija ${Date.now()}` });
     montajes.push(montaje);
@@ -483,6 +544,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('bucle del agente · contra la base y el lib
         nivelExigido: 'n1',
         borradorOpaco: { tipo: 'nota_seguimiento', carga: { factura_id: 'F-2026-0001' } },
         resumenLegible: 'Nota de seguimiento a la factura F-2026-0001',
+        guardiasSalida: ['sin_secretos'],
         numeroPaso,
         validezSegundos,
       });
@@ -552,6 +614,24 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('bucle del agente · contra la base y el lib
     expect(revisado.texto).not.toContain('contrasenamuylarga');
     expect(revisado.texto).not.toContain('sk-abcdefghijklmnopqrst');
     expect(revisado.texto).toContain(REDACTADO);
+    expect(revisado.hallazgos).toHaveLength(2);
+  });
+
+  it('los guardias recorren una estructura y tapan solo las cadenas con forma de credencial', async () => {
+    const { crearGuardias, revisarArgumentos, REDACTADO } = await import('../bucle/guardias.js');
+    const revisado = revisarArgumentos(crearGuardias(['sin_secretos']), {
+      factura_id: 'inv-0001',
+      limite: 3,
+      texto: 'Usa Bearer abcdefghijklmnopqrstuvwxyz para entrar',
+      anidado: { claves: ['sk-abcdefghijklmnopqrstuv', 'normal'], activo: true, nada: null },
+    });
+
+    expect(revisado.argumentos).toEqual({
+      factura_id: 'inv-0001',
+      limite: 3,
+      texto: `Usa ${REDACTADO} para entrar`,
+      anidado: { claves: [REDACTADO, 'normal'], activo: true, nada: null },
+    });
     expect(revisado.hallazgos).toHaveLength(2);
   });
 

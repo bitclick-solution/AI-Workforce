@@ -83,13 +83,17 @@ export interface VeredictoPolitica {
    * agente propone y la persona actúa, así que un N0 aprobado se queda en simulado.
    */
   ejecutaTrasAprobacion: boolean;
-  /** Cierto a partir del 80 % del presupuesto consumido. El aviso no detiene nada. */
+  /**
+   * Cierto cuando lo gastado más lo que va a costar el paso llega al 80 %: avisa el
+   * paso que cruza el umbral, no el siguiente. El aviso no detiene nada.
+   */
   avisoPresupuesto: boolean;
 }
 
 export interface EstadoPresupuesto {
   /** Entre 0 y 1 con límite declarado; 0 sin límite, porque no hay nada que consumir. */
   fraccionConsumida: number;
+  /** Con el coste estimado del paso contado, igual que `agotado`. */
   avisar: boolean;
   agotado: boolean;
 }
@@ -113,7 +117,7 @@ export function evaluarPresupuesto(
   const proyectado = gastado + Math.max(0, costeEstimadoEuros);
   return {
     fraccionConsumida: gastado / limite,
-    avisar: gastado / limite >= FRACCION_AVISO,
+    avisar: proyectado / limite >= FRACCION_AVISO,
     agotado: gastado >= limite || proyectado > limite,
   };
 }

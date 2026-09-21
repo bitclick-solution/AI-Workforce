@@ -135,3 +135,45 @@ export function revisarTodo(guardias: readonly Guardia[], texto: string): Result
   }
   return { pasa: hallazgos.length === 0, texto: actual, hallazgos };
 }
+
+/**
+ * Pasa por los guardias cada cadena de una estructura sin cambiar su forma.
+ *
+ * Es para lo que se escribe donde no se borra: los argumentos de una herramienta en
+ * la fila del paso y el resumen que lee quien aprueba. El guardia mira texto; una
+ * estructura se recorre y se revisa cadena a cadena, y los números, los booleanos y
+ * los nulos pasan tal cual, que no tienen forma de credencial.
+ */
+export function revisarEstructura(
+  guardias: readonly Guardia[],
+  valor: unknown,
+): { valor: unknown; hallazgos: Hallazgo[] } {
+  const hallazgos: Hallazgo[] = [];
+  const recorrer = (actual: unknown): unknown => {
+    if (typeof actual === 'string') {
+      const resultado = revisarTodo(guardias, actual);
+      hallazgos.push(...resultado.hallazgos);
+      return resultado.texto;
+    }
+    if (Array.isArray(actual)) return actual.map(recorrer);
+    if (actual !== null && typeof actual === 'object') {
+      return Object.fromEntries(
+        Object.entries(actual as Record<string, unknown>).map(([clave, anidado]) => [
+          clave,
+          recorrer(anidado),
+        ]),
+      );
+    }
+    return actual;
+  };
+  return { valor: recorrer(valor), hallazgos };
+}
+
+/** `revisarEstructura` para los argumentos de una herramienta, que son un objeto. */
+export function revisarArgumentos(
+  guardias: readonly Guardia[],
+  argumentos: Record<string, unknown>,
+): { argumentos: Record<string, unknown>; hallazgos: Hallazgo[] } {
+  const { valor, hallazgos } = revisarEstructura(guardias, argumentos);
+  return { argumentos: valor as Record<string, unknown>, hallazgos };
+}

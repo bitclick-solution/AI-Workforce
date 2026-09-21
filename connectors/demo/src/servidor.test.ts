@@ -335,6 +335,35 @@ describe('contrato · errores con code, message y datos.motivo', () => {
     await cliente.close();
   });
 
+  it('no_autorizado cuando la credencial se revoca con la conexión abierta, y no guarda nada', async () => {
+    const { demo, cliente } = await conectar();
+    const antes = await cliente.callTool({ name: HERRAMIENTA_LISTAR, arguments: {} });
+    expect(antes.isError).toBeFalsy();
+
+    // Es lo que pasa cuando alguien invalida la clave de API en el sistema de
+    // gestión con el conector ya conectado: la conexión sigue viva y cada llamada
+    // vuelve con `no_autorizado`, que la plataforma no reintenta.
+    demo.revocarCredencial();
+
+    const lista = await cliente.callTool({ name: HERRAMIENTA_LISTAR, arguments: {} });
+    const nota = await cliente.callTool({
+      name: HERRAMIENTA_NOTA,
+      arguments: { factura_id: 'inv-0001', texto: 'Llamada de seguimiento.' },
+    });
+    for (const resultado of [lista, nota]) {
+      expect(resultado.isError).toBe(true);
+      const cuerpo = cargaDe<{ code: string; message: string; datos: { motivo: string } }>(
+        resultado,
+      );
+      expect(cuerpo.code).toBe(CODIGOS_DEMO.no_autorizado);
+      expect(cuerpo.datos.motivo).toBe('no_autorizado');
+      expect(motivoDelError(textoDe(resultado))).toBe('no_autorizado');
+    }
+    expect(demo.notas).toHaveLength(0);
+    expect(demo.llamadas.get(HERRAMIENTA_LISTAR)).toBe(2);
+    await cliente.close();
+  });
+
   it('un motivo que no es del contrato no se interpreta', () => {
     expect(motivoDelError('vaya, se ha roto')).toBeUndefined();
     expect(motivoDelError(JSON.stringify({ datos: { motivo: 'vete_a_saber' } }))).toBeUndefined();

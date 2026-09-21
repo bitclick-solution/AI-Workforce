@@ -63,7 +63,10 @@ export async function conexionPorProcesoHijo(
     env: entorno,
     ...(opciones.directorio === undefined ? {} : { cwd: opciones.directorio }),
     // El conector escribe sus trazas en el error estándar; se heredan para que
-    // salgan en los registros del trabajador y no se pierdan.
+    // salgan en los registros del trabajador y no se pierdan. El gateway no filtra
+    // ese flujo: lo que un conector vuelque ahí sale en claro, así que un conector
+    // no escribe en él ni su entorno ni su credencial. Está en el runbook como
+    // responsabilidad del conector.
     stderr: 'inherit',
   });
 

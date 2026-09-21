@@ -147,6 +147,7 @@ export async function ejecutarBucle(
     const paso = siguientePaso();
     const aprobacion = await operaciones.pedirAprobacion({
       ...identidad,
+      guardiasSalida: contexto.guardiasSalida,
       claseAccion: CLASE_AMPLIACION,
       nivelExigido: 'n0',
       borradorOpaco: {
@@ -233,6 +234,7 @@ export async function ejecutarBucle(
         const paso = siguientePaso();
         await operaciones.anotarPaso({
           ...identidad,
+          guardiasSalida: contexto.guardiasSalida,
           numeroPaso: paso,
           tipo: 'herramienta_inventada',
           herramienta: llamada.herramienta,
@@ -317,6 +319,7 @@ export async function ejecutarBucle(
       const paso = siguientePaso();
       await operaciones.anotarPaso({
         ...identidad,
+        guardiasSalida: contexto.guardiasSalida,
         numeroPaso: paso,
         tipo: 'herramienta_rechazada',
         herramienta: herramienta.nombre,
@@ -334,6 +337,7 @@ export async function ejecutarBucle(
       const paso = siguientePaso();
       await operaciones.anotarPaso({
         ...identidad,
+        guardiasSalida: contexto.guardiasSalida,
         numeroPaso: paso,
         tipo: 'herramienta_simulada',
         herramienta: herramienta.nombre,
@@ -358,6 +362,7 @@ export async function ejecutarBucle(
       const pasoAprobacion = siguientePaso();
       const aprobacion = await operaciones.pedirAprobacion({
         ...identidad,
+        guardiasSalida: contexto.guardiasSalida,
         claseAccion: herramienta.claseAccion,
         nivelExigido: veredicto.nivelAplicado ?? 'n0',
         borradorOpaco: {
@@ -377,6 +382,7 @@ export async function ejecutarBucle(
         const paso = siguientePaso();
         await operaciones.anotarPaso({
           ...identidad,
+          guardiasSalida: contexto.guardiasSalida,
           numeroPaso: paso,
           tipo: 'herramienta_saltada',
           herramienta: herramienta.nombre,
@@ -423,6 +429,7 @@ export async function ejecutarBucle(
         const paso = siguientePaso();
         await operaciones.anotarPaso({
           ...identidad,
+          guardiasSalida: contexto.guardiasSalida,
           numeroPaso: paso,
           tipo: 'herramienta_simulada',
           herramienta: herramienta.nombre,
@@ -447,6 +454,7 @@ export async function ejecutarBucle(
       claveIdempotencia: clave(pasoHerramienta, herramienta.nombre),
       nivelAplicado: nivel,
       guardiasEntrada: contexto.guardiasEntrada,
+      guardiasSalida: contexto.guardiasSalida,
       presupuestoEuros: contexto.presupuestoEuros,
       gastadoEuros: gastado,
       ...(aprobacionId === undefined ? {} : { aprobacionId }),
@@ -481,6 +489,7 @@ export async function ejecutarBucle(
       const paso = siguientePaso();
       await operaciones.anotarPaso({
         ...identidad,
+        guardiasSalida: contexto.guardiasSalida,
         numeroPaso: paso,
         tipo: 'delegacion_vencida',
         accion: 'delegacion.vencida',

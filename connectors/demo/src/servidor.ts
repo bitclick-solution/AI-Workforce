@@ -141,6 +141,12 @@ export interface ServidorDemo {
   readonly notas: readonly NotaGuardada[];
   /** Cuántas veces se ha llamado a cada herramienta, incluidos los fallos. */
   readonly llamadas: ReadonlyMap<string, number>;
+  /**
+   * Invalida la credencial con la conexión abierta. Desde ese momento las dos
+   * herramientas devuelven `no_autorizado`: es lo que hace un sistema de gestión
+   * cuando alguien revoca la clave de API mientras el conector sigue conectado.
+   */
+  revocarCredencial(): void;
 }
 
 export class CredencialDemoNoValida extends Error {
@@ -177,10 +183,22 @@ export function crearServidorDemo(opciones: OpcionesServidorDemo): ServidorDemo 
   const porClave = new Map<string, NotaGuardada>();
   const llamadas = new Map<string, number>();
   let fallosPendientes = opciones.fallosIniciales ?? 0;
+  let credencialRevocada = false;
 
-  /** Cuenta la llamada y devuelve el error temporal si toca fallar. */
+  /**
+   * Cuenta la llamada y devuelve el error que toque: `no_autorizado` si la
+   * credencial se revocó, `temporal` mientras queden fallos inyectados. Nada, si
+   * toca responder.
+   */
   function fallarSiToca(herramienta: string) {
     llamadas.set(herramienta, (llamadas.get(herramienta) ?? 0) + 1);
+    if (credencialRevocada) {
+      return errorDeHerramienta(
+        'no_autorizado',
+        'La credencial del conector ya no vale: la han revocado en el sistema de ' +
+          'gestión. Hace falta una nueva; insistir no ayuda.',
+      );
+    }
     if (fallosPendientes <= 0) return undefined;
     fallosPendientes -= 1;
     return errorDeHerramienta(
@@ -318,5 +336,12 @@ export function crearServidorDemo(opciones: OpcionesServidorDemo): ServidorDemo 
     },
   );
 
-  return { servidor, notas, llamadas };
+  return {
+    servidor,
+    notas,
+    llamadas,
+    revocarCredencial() {
+      credencialRevocada = true;
+    },
+  };
 }

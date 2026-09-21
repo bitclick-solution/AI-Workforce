@@ -77,6 +77,7 @@ El contador cuadra por construcción: `anotar` suma una acción por entrada en l
 
 ## Límites conocidos
 
+- **El error estándar del conector no se filtra.** Un conector servido por entrada estándar hereda el `stderr` del trabajador, y el gateway no pasa ese flujo por ningún guardia. Un conector que volcara su entorno o su credencial en `stderr` los dejaría en claro en los registros del trabajador. Es responsabilidad del conector no hacerlo: el de demostración no escribe nada ahí, y la revisión de cualquier conector nuevo tiene que mirarlo.
 - **Ventana de repetición de una herramienta.** Si el proceso muere entre la llamada al conector y la escritura de la fila del paso, un reintento vuelve a llamar. No se puede cerrar sin que el conector acepte claves de idempotencia. El identificador del paso va en la entrada de auditoría, así que una repetición se ve en el libro.
 - **Profundidad de delegación uno.** Un flujo hijo no delega. El ADR-004 prevé profundidad configurable; esta rebanada no la implementa.
 - **Un hijo no espera decisiones humanas.** Si la política del puesto destino exige aprobación, la petición queda registrada y se resuelve por vencimiento en vez de bloquear al padre más allá de su plazo.

@@ -93,6 +93,11 @@ export interface PeticionPasoHerramienta extends IdentidadDeEjecucion {
   claveIdempotencia: string;
   nivelAplicado: Nivel | null;
   guardiasEntrada: string[];
+  /**
+   * Guardias de salida para lo que se escribe donde no se borra: los argumentos van
+   * a la fila del paso ya revisados. Al conector llegan tal cual.
+   */
+  guardiasSalida: string[];
   presupuestoEuros: number | null;
   gastadoEuros: number;
   /** Aprobación decidida que desbloquea un paso supervisado. */
@@ -112,6 +117,8 @@ export interface PeticionDeAprobacion extends IdentidadDeEjecucion {
   /** Carga opaca (ADR-001): el plano de control no la interpreta. */
   borradorOpaco: { tipo: string; carga: unknown };
   resumenLegible: string;
+  /** El resumen pasa por estos guardias antes de guardarse: lo lee una persona en un correo. */
+  guardiasSalida: string[];
   numeroPaso: number;
   /** Validez de la aprobación en segundos. Al vencer, la resuelve la plataforma. */
   validezSegundos: number;
@@ -142,6 +149,8 @@ export interface PeticionAnotarPaso extends IdentidadDeEjecucion {
   nivelAplicado?: Nivel | null | undefined;
   motivo: string;
   entrada?: Record<string, unknown> | undefined;
+  /** Guardias de salida para `entrada`: los argumentos se escriben revisados. */
+  guardiasSalida: string[];
   salida?: Record<string, unknown> | undefined;
   duracionMs?: number | undefined;
 }

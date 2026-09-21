@@ -65,7 +65,14 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
   });
 
   /** Siembra Finanzas, crea la tarea y devuelve el gateway ya cableado. */
-  async function montar(opciones: { fallosIniciales?: number; listaBlanca?: string[] } = {}) {
+  async function montar(
+    opciones: {
+      fallosIniciales?: number;
+      listaBlanca?: string[];
+      /** La primera apertura del conector falla; las siguientes, no. */
+      fallarPrimeraApertura?: boolean;
+    } = {},
+  ) {
     const sembrado = await sembrarFinanzas(cliente, {
       nombre: `Prueba gateway ${uuidV7()}`,
       conector: NOMBRE_CONECTOR_DEMO,
@@ -74,7 +81,12 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
     });
 
     const montados: Awaited<ReturnType<typeof montarDemoEnMemoria>>[] = [];
+    let aperturasFallidas = 0;
     const registro = new RegistroDeServidores().registrar(NOMBRE_CONECTOR_DEMO, async (secreto) => {
+      if (opciones.fallarPrimeraApertura && aperturasFallidas === 0) {
+        aperturasFallidas += 1;
+        throw new Error('El conector no arranca (fallo inyectado en la apertura).');
+      }
       const montado = await montarDemoEnMemoria({
         credencial: secreto?.revelar() ?? '',
         credencialEsperada: SECRETO,
@@ -320,6 +332,44 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
         presupuesto: PRESUPUESTO,
       }),
     ).rejects.toBeInstanceOf(HerramientaNoAutorizada);
+  });
+
+  it('dos llamadas a la vez al mismo conector abren una conexión y anotan un descubrimiento', async () => {
+    const { gateway, crearTarea, sembrado, montados } = await montar();
+    const una = await crearTarea(sembrado.cobros);
+    const otra = await crearTarea(sembrado.cobros);
+
+    // Es lo que pasa en producción: dos actividades del mismo trabajador, para el
+    // mismo tenant y el mismo conector, en el mismo instante. Antes de memorizar la
+    // promesa de apertura, la segunda pisaba a la primera y dejaba una conexión
+    // huérfana con su proceso o su socket.
+    const [primero, segundo] = await Promise.all([
+      gateway.herramientasPara(una),
+      gateway.herramientasPara(otra),
+    ]);
+
+    expect(primero.herramientas.map((h) => h.nombre)).toEqual(
+      segundo.herramientas.map((h) => h.nombre),
+    );
+    expect(montados).toHaveLength(1);
+
+    const cadena = await conTenant(cliente, sembrado.tenantId, (tx) =>
+      leerCadena(tx, sembrado.tenantId),
+    );
+    expect(cadena.filter((e) => e.accion === ACCIONES.descubiertas)).toHaveLength(1);
+  });
+
+  it('una apertura que falla no se queda en la caché: la siguiente llamada lo reintenta', async () => {
+    const { gateway, crearTarea, sembrado, montados } = await montar({
+      fallarPrimeraApertura: true,
+    });
+    const contexto = await crearTarea(sembrado.cobros);
+
+    await expect(gateway.herramientasPara(contexto)).rejects.toThrow('fallo inyectado');
+
+    const catalogo = await gateway.herramientasPara(contexto);
+    expect(catalogo.herramientas.length).toBeGreaterThan(0);
+    expect(montados).toHaveLength(1);
   });
 
   it('el valor del secreto no aparece en el catálogo, ni en el resultado, ni en el libro', async () => {

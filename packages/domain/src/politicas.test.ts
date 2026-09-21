@@ -135,6 +135,13 @@ describe('motor mínimo de políticas · presupuesto y parada', () => {
     expect(veredicto.avisoPresupuesto).toBe(true);
   });
 
+  it('avisa en el paso que cruza el 80 %, no en el siguiente', () => {
+    const cruza = evaluarPresupuesto({ limiteEuros: 10, gastadoEuros: 7 }, 1.5);
+    expect(cruza.avisar).toBe(true);
+    expect(cruza.agotado).toBe(false);
+    expect(evaluarPresupuesto({ limiteEuros: 10, gastadoEuros: 7 }, 0.5).avisar).toBe(false);
+  });
+
   it('un límite de cero euros significa que esta tarea no gasta', () => {
     expect(evaluarPresupuesto({ limiteEuros: 0, gastadoEuros: 0 }).agotado).toBe(true);
   });

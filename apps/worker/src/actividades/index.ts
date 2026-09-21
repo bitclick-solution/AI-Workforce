@@ -41,7 +41,7 @@ import type postgres from 'postgres';
 import { HerramientaFallo } from '@aiw/mcp-gateway';
 import { ApplicationFailure } from '@temporalio/activity';
 
-import { crearGuardias, revisarTodo } from '../bucle/guardias.js';
+import { crearGuardias, revisarArgumentos, revisarTodo } from '../bucle/guardias.js';
 import type {
   AprobacionCreada,
   ContextoDeEjecucion,
@@ -517,6 +517,12 @@ export function crearActividades(contexto: ContextoDeActividades) {
       // por los guardias antes de entrar en el historial.
       const guardias = crearGuardias(peticion.guardiasEntrada);
       const revisado = revisarTodo(guardias, llamada.texto);
+      // Los argumentos van a una fila que no se borra: se escriben revisados por los
+      // guardias de salida. Al conector ya llegaron tal cual, que es lo que tocaba.
+      const { argumentos } = revisarArgumentos(
+        crearGuardias(peticion.guardiasSalida),
+        peticion.argumentos,
+      );
 
       const escrito = await enTenant(contexto, peticion.tenantId, (tx) =>
         escribirPaso(tx, {
@@ -527,7 +533,7 @@ export function crearActividades(contexto: ContextoDeActividades) {
           numero: peticion.numeroPaso,
           tipo: 'herramienta',
           herramienta: peticion.herramienta,
-          entrada: { argumentos: peticion.argumentos },
+          entrada: { argumentos },
           salida: { texto: revisado.texto, conector: llamada.conector },
           resultado: 'exito',
           duracionMs: llamada.duracionMs,
@@ -581,6 +587,13 @@ export function crearActividades(contexto: ContextoDeActividades) {
           limit 1
         `;
 
+        // El resumen lo lee una persona en un correo: pasa por los guardias de salida
+        // antes de guardarse. El borrador opaco no: es lo que se ejecuta si se aprueba.
+        const resumenLegible = revisarTodo(
+          crearGuardias(peticion.guardiasSalida),
+          peticion.resumenLegible,
+        ).texto;
+
         const solicitada = await solicitarAprobacion(tx, peticion.tenantId, {
           tareaId: peticion.tareaId,
           pasoId,
@@ -588,7 +601,7 @@ export function crearActividades(contexto: ContextoDeActividades) {
           claseAccion: peticion.claseAccion,
           nivelExigido: peticion.nivelExigido,
           borradorOpaco: peticion.borradorOpaco,
-          resumenLegible: peticion.resumenLegible,
+          resumenLegible,
           venceEn: new Date(Date.now() + peticion.validezSegundos * 1000),
         });
         return { aprobacionId: solicitada.id, yaEstaba: false };
@@ -707,7 +720,13 @@ export function crearActividades(contexto: ContextoDeActividades) {
           numero: peticion.numeroPaso,
           tipo: peticion.tipo,
           herramienta: peticion.herramienta ?? null,
-          entrada: peticion.entrada,
+          // Lo que se escribe en la fila del paso no se borra: los argumentos van
+          // revisados por los guardias de salida.
+          entrada:
+            peticion.entrada === undefined
+              ? undefined
+              : revisarArgumentos(crearGuardias(peticion.guardiasSalida), peticion.entrada)
+                  .argumentos,
           salida: { motivo: peticion.motivo, ...(peticion.salida ?? {}) },
           resultado: peticion.resultado,
           duracionMs: peticion.duracionMs,

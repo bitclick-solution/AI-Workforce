@@ -176,7 +176,13 @@ export class Gateway {
   readonly #cliente: postgres.Sql;
   readonly #registro: RegistroDeServidores;
   readonly #secretos: ResolvedorDeSecretos;
-  readonly #abiertas = new Map<string, ConexionAbierta>();
+  /**
+   * Conexiones abiertas o abriéndose, por tenant y conector. Se guarda la promesa y
+   * no el resultado: dos actividades del mismo proceso que piden el mismo conector a
+   * la vez esperan a la misma apertura, en vez de abrir dos conexiones y dejar una
+   * huérfana con su proceso hijo o su socket.
+   */
+  readonly #abiertas = new Map<string, Promise<ConexionAbierta>>();
 
   constructor(opciones: OpcionesGateway) {
     this.#cliente = opciones.cliente;
@@ -324,49 +330,18 @@ export class Gateway {
     };
   }
 
-  /**
-   * Anota una escritura que no se ejecuta porque el puesto está en prueba.
-   *
-   * El paso existe y se audita: lo que no existe es el efecto. `parcial` es el
-   * resultado que el modelo de datos reserva para esto —la acción se intentó y no
-   * llegó a completarse—, y el motivo lo dice la propia acción del libro.
-   */
-  async simular(
-    contexto: ContextoDeLlamada,
-    herramienta: HerramientaDescubierta,
-    nivelAplicado: Nivel | null,
-    motivo: string,
-  ): Promise<EntradaAnotada> {
-    return conTenant(this.#cliente, contexto.tenantId, (tx) =>
-      anotar(tx, contexto.tenantId, {
-        actorTipo: 'agente',
-        puestoId: contexto.puestoId,
-        versionPuestoId: contexto.versionPuestoId,
-        tareaId: contexto.tareaId,
-        pasoId: contexto.pasoId ?? null,
-        accion: ACCIONES.simulada,
-        herramienta: herramienta.nombre,
-        datosReferenciados: [
-          { tipo: 'conector', id: herramienta.conector },
-          { tipo: 'clase_accion', id: herramienta.claseAccion },
-          { tipo: 'motivo', id: motivo },
-        ],
-        resultado: 'parcial',
-        ...(nivelAplicado ? { nivelAplicado } : {}),
-      }),
-    );
-  }
-
   /** Cierra todas las conexiones abiertas. Lo llama el trabajador al apagarse. */
   async cerrar(): Promise<void> {
     const abiertas = [...this.#abiertas.values()];
     this.#abiertas.clear();
     await Promise.all(
-      abiertas.map(async (abierta) => {
+      abiertas.map(async (pendiente) => {
         try {
+          const abierta = await pendiente;
           await abierta.conexion.cerrar();
         } catch {
-          // Cerrar una conexión ya caída no es un problema del que informar.
+          // Cerrar una conexión ya caída, o una que no llegó a abrirse, no es un
+          // problema del que informar.
         }
       }),
     );
@@ -392,6 +367,22 @@ export class Gateway {
     const ya = this.#abiertas.get(llave);
     if (ya) return ya;
 
+    // Se apunta la promesa antes de esperar nada: entre resolver el secreto, abrir
+    // el conector y listar sus herramientas hay tres esperas, y una segunda llamada
+    // que entrara por en medio abriría otra conexión. Si la apertura falla se olvida,
+    // para que la siguiente llamada lo vuelva a intentar en vez de heredar el fallo.
+    const apertura = this.#abrirYDescubrir(contexto, autorizacion);
+    this.#abiertas.set(llave, apertura);
+    apertura.catch(() => {
+      if (this.#abiertas.get(llave) === apertura) this.#abiertas.delete(llave);
+    });
+    return apertura;
+  }
+
+  async #abrirYDescubrir(
+    contexto: ContextoDeLlamada,
+    autorizacion: AutorizacionDePuesto,
+  ): Promise<ConexionAbierta> {
     // El secreto se resuelve aquí, se entrega a la fábrica del transporte y no se
     // guarda en ninguna parte de este objeto.
     const secreto =
@@ -400,27 +391,33 @@ export class Gateway {
         : await this.#secretos.resolver(autorizacion.referenciaSecreto);
 
     const conexion = await this.#registro.abrir(autorizacion.conectorNombre, secreto);
-    const herramientas = await conexion.listar();
-    const abierta: ConexionAbierta = { conexion, herramientas, autorizacion };
-    this.#abiertas.set(llave, abierta);
+    try {
+      const herramientas = await conexion.listar();
+      const abierta: ConexionAbierta = { conexion, herramientas, autorizacion };
 
-    await conTenant(this.#cliente, contexto.tenantId, (tx) =>
-      anotar(tx, contexto.tenantId, {
-        actorTipo: 'plataforma',
-        puestoId: contexto.puestoId,
-        versionPuestoId: contexto.versionPuestoId,
-        tareaId: contexto.tareaId,
-        accion: ACCIONES.descubiertas,
-        herramienta: autorizacion.conectorNombre,
-        datosReferenciados: [
-          { tipo: 'conector', id: autorizacion.conectorId },
-          ...herramientas.map((h) => ({ tipo: 'herramienta', id: h.nombre })),
-        ],
-        resultado: 'exito',
-      }),
-    );
+      await conTenant(this.#cliente, contexto.tenantId, (tx) =>
+        anotar(tx, contexto.tenantId, {
+          actorTipo: 'plataforma',
+          puestoId: contexto.puestoId,
+          versionPuestoId: contexto.versionPuestoId,
+          tareaId: contexto.tareaId,
+          accion: ACCIONES.descubiertas,
+          herramienta: autorizacion.conectorNombre,
+          datosReferenciados: [
+            { tipo: 'conector', id: autorizacion.conectorId },
+            ...herramientas.map((h) => ({ tipo: 'herramienta', id: h.nombre })),
+          ],
+          resultado: 'exito',
+        }),
+      );
 
-    return abierta;
+      return abierta;
+    } catch (error) {
+      // Una conexión que se abrió y no llegó a quedar registrada se cierra: si no,
+      // el proceso hijo o el socket sobreviven sin que nadie los tenga.
+      await conexion.cerrar().catch(() => undefined);
+      throw error;
+    }
   }
 
   async #anotarRechazo(
