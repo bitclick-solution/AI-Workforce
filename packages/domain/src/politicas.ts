@@ -15,7 +15,7 @@
  * Director de IA, ventana de deshacer de N2, muestreo de N3 y ascensos por
  * expediente. Lo que sí hace queda cerrado por la tabla de este módulo.
  */
-import { ESTADOS_PUESTO, NIVELES, type Nivel } from './enumeraciones.js';
+import { NIVELES, type EstadoPuesto, type Nivel } from './enumeraciones.js';
 import type { PoliticaPuesto } from './esquemas/index.js';
 
 /**
@@ -66,7 +66,7 @@ export interface PresupuestoTarea {
 
 export interface ContextoPolitica {
   /** Estado del puesto en el momento del paso, no cuando arrancó la tarea. */
-  estadoPuesto: (typeof ESTADOS_PUESTO)[number];
+  estadoPuesto: EstadoPuesto;
   /** Política congelada en la versión de puesto con la que corre la tarea. */
   politica: PoliticaPuesto;
   presupuesto: PresupuestoTarea;
@@ -119,14 +119,10 @@ export function evaluarPresupuesto(
 }
 
 /** Estados en los que el puesto no da ni un paso: no está trabajando. */
-const ESTADOS_QUE_NO_TRABAJAN = new Set<(typeof ESTADOS_PUESTO)[number]>([
-  'propuesto',
-  'pausado',
-  'dado_de_baja',
-]);
+const ESTADOS_QUE_NO_TRABAJAN = new Set<EstadoPuesto>(['propuesto', 'pausado', 'dado_de_baja']);
 
 /** Nivel máximo que se aplica en cada estado del puesto. Nulo es «sin techo». */
-function techoDelEstado(estado: (typeof ESTADOS_PUESTO)[number]): Nivel | null {
+function techoDelEstado(estado: EstadoPuesto): Nivel | null {
   // Un puesto degradado por incidente no vuelve a actuar solo hasta que alguien lo
   // recupere (ADR-005: bajada automática por incidente). El techo es N1: todo lo
   // que hiciera sin pedir permiso, ahora lo pide.

@@ -23,9 +23,7 @@ export interface DemoEnMemoria {
   transporte: Transport;
 }
 
-export async function montarDemoEnMemoria(
-  opciones: OpcionesServidorDemo,
-): Promise<DemoEnMemoria> {
+export async function montarDemoEnMemoria(opciones: OpcionesServidorDemo): Promise<DemoEnMemoria> {
   const demo = crearServidorDemo(opciones);
   const [delCliente, delServidor] = InMemoryTransport.createLinkedPair();
   await demo.servidor.connect(delServidor);

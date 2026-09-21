@@ -82,7 +82,13 @@ export interface PiezasDelPrompt {
   /** Prompt de la versión de puesto, tal como está en `version_puesto.prompt`. */
   prompt: string;
   /** Tono y prohibiciones de la organización o del departamento. */
-  brandVoice?: { tono?: string | undefined; tratamiento?: 'tu' | 'usted' | undefined; prohibiciones?: readonly string[] | undefined } | undefined;
+  brandVoice?:
+    | {
+        tono?: string | undefined;
+        tratamiento?: 'tu' | 'usted' | undefined;
+        prohibiciones?: readonly string[] | undefined;
+      }
+    | undefined;
   /** Memoria congelada de la versión, ya resumida. No entra nada personal. */
   memoria?: readonly string[] | undefined;
 }

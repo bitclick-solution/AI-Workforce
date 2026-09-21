@@ -71,9 +71,7 @@ export interface PeticionDePaso {
  * `execute` la ejecutaría el AI SDK dentro de `generateText`, sin pasar por la
  * política ni por el libro de auditoría.
  */
-export function herramientasParaElModelo(
-  herramientas: readonly HerramientaOfrecida[],
-): ToolSet {
+export function herramientasParaElModelo(herramientas: readonly HerramientaOfrecida[]): ToolSet {
   const conjunto: ToolSet = {};
   for (const herramienta of herramientas) {
     conjunto[herramienta.nombre] = tool({

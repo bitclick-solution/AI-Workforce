@@ -8,16 +8,30 @@
     "build": "tsup",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
+    "demo:cobros": "tsx src/demo-cobros.ts",
+    "decidir": "tsx src/demo-decidir.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "clean": "rm -rf dist coverage .turbo"
   },
   "dependencies": {
+    "@aiw/connector-demo": "workspace:*",
+    "@aiw/db": "workspace:*",
     "@aiw/domain": "workspace:*",
+    "@aiw/evals": "workspace:*",
+    "@aiw/learning": "workspace:*",
+    "@aiw/ledger": "workspace:*",
+    "@aiw/mcp-gateway": "workspace:*",
     "@aiw/models": "workspace:*",
-    "@aiw/learning": "workspace:*"
+    "@temporalio/activity": "catalog:",
+    "@temporalio/client": "catalog:",
+    "@temporalio/worker": "catalog:",
+    "@temporalio/workflow": "catalog:",
+    "postgres": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@temporalio/testing": "catalog:",
     "@types/node": "catalog:",
     "tsup": "catalog:",
     "tsx": "catalog:",

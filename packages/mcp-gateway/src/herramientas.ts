@@ -58,7 +58,8 @@ export interface HerramientaMcp {
  * propósito: una herramienta que no dice lo que hace no se trata como inofensiva.
  */
 export function clasificar(herramienta: HerramientaMcp, conector: string): HerramientaDescubierta {
-  const tipo: TipoClaseAccion = herramienta.annotations?.readOnlyHint === true ? 'lectura' : 'escritura';
+  const tipo: TipoClaseAccion =
+    herramienta.annotations?.readOnlyHint === true ? 'lectura' : 'escritura';
   const declarada = herramienta._meta?.[META_CLASE];
   return {
     nombre: herramienta.name,

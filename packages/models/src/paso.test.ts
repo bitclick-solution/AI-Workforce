@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { Enrutador, ProveedorNoRegistrado, enrutadorDePrueba } from './enrutado.js';
-import { guionCobros, HERRAMIENTA_LISTAR, HERRAMIENTA_NOTA, redactarNotas } from './guiones/cobros.js';
+import {
+  guionCobros,
+  HERRAMIENTA_LISTAR,
+  HERRAMIENTA_NOTA,
+  redactarNotas,
+} from './guiones/cobros.js';
 import { componerPrompt, crearCacheDePrompts } from './cache-de-prompts.js';
 import { darPasoDeModelo, herramientasParaElModelo } from './paso.js';
 import { MODELO_PRUEBA, PROVEEDOR_PRUEBA, crearProveedorDePrueba } from './proveedor-prueba.js';
@@ -175,7 +180,7 @@ describe('paso de modelo · el bucle se queda en casa', () => {
           ],
         },
       ],
-      herramientas: [CATALOGO[0]!],
+      herramientas: CATALOGO.slice(0, 1),
       atributos: ATRIBUTOS,
     });
 

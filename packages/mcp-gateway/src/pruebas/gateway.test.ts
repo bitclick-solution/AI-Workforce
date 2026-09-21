@@ -74,20 +74,17 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
     });
 
     const montados: Awaited<ReturnType<typeof montarDemoEnMemoria>>[] = [];
-    const registro = new RegistroDeServidores().registrar(
-      NOMBRE_CONECTOR_DEMO,
-      async (secreto) => {
-        const montado = await montarDemoEnMemoria({
-          credencial: secreto?.revelar() ?? '',
-          credencialEsperada: SECRETO,
-          ...(opciones.fallosIniciales === undefined
-            ? {}
-            : { fallosIniciales: opciones.fallosIniciales }),
-        });
-        montados.push(montado);
-        return conectarPorMcp(montado.transporte, NOMBRE_CONECTOR_DEMO);
-      },
-    );
+    const registro = new RegistroDeServidores().registrar(NOMBRE_CONECTOR_DEMO, async (secreto) => {
+      const montado = await montarDemoEnMemoria({
+        credencial: secreto?.revelar() ?? '',
+        credencialEsperada: SECRETO,
+        ...(opciones.fallosIniciales === undefined
+          ? {}
+          : { fallosIniciales: opciones.fallosIniciales }),
+      });
+      montados.push(montado);
+      return conectarPorMcp(montado.transporte, NOMBRE_CONECTOR_DEMO);
+    });
 
     const gateway = new Gateway({
       cliente,
@@ -305,10 +302,14 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
     const { gateway, crearTarea, sembrado } = await montar();
     const contexto = await crearTarea(sembrado.cobros);
 
-    await conTenant(cliente, sembrado.tenantId, (tx) => tx`
+    await conTenant(
+      cliente,
+      sembrado.tenantId,
+      (tx) => tx`
       update autorizacion_herramientas set revocada_en = now()
       where tenant_id = ${sembrado.tenantId} and id = ${sembrado.cobros.autorizacionId}
-    `);
+    `,
+    );
 
     const catalogo = await gateway.herramientasPara(contexto);
     expect(catalogo.herramientas).toHaveLength(0);
@@ -339,9 +340,14 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
     const todo = JSON.stringify({ catalogo, llamada, cadena });
     expect(todo).not.toContain(SECRETO);
     // Lo que sí está es la referencia, que es lo que se audita.
-    const conector = await conTenant(cliente, sembrado.tenantId, (tx) => tx<
-      { referencia_secreto: string }[]
-    >`select referencia_secreto from conector where tenant_id = ${sembrado.tenantId}`);
+    const conector = await conTenant(
+      cliente,
+      sembrado.tenantId,
+      (tx) =>
+        tx<
+          { referencia_secreto: string }[]
+        >`select referencia_secreto from conector where tenant_id = ${sembrado.tenantId}`,
+    );
     expect(conector[0]?.referencia_secreto).toBe(REFERENCIA_SECRETO_DEMO);
   });
 });
@@ -366,6 +372,5 @@ describe('secreto · no se imprime por ninguna de sus puertas', () => {
 });
 
 if (!HAY_BASE_DE_DATOS) {
-  // eslint-disable-next-line no-console
   console.warn(`[gateway] ${MOTIVO_SALTO}`);
 }

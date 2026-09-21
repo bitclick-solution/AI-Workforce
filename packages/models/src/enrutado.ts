@@ -14,7 +14,12 @@
 import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { z } from 'zod';
 
-import { MODELO_PRUEBA, PROVEEDOR_PRUEBA, crearProveedorDePrueba, type Guion } from './proveedor-prueba.js';
+import {
+  MODELO_PRUEBA,
+  PROVEEDOR_PRUEBA,
+  crearProveedorDePrueba,
+  type Guion,
+} from './proveedor-prueba.js';
 
 /** Lo que dice `puesto.enrutado_modelo`. Todo opcional: hay valores por defecto. */
 export const enrutadoModelo = z.object({
