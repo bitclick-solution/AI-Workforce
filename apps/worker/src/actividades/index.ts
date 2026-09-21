@@ -37,6 +37,9 @@ import {
 } from '@aiw/models';
 import type postgres from 'postgres';
 
+import { HerramientaFallo } from '@aiw/mcp-gateway';
+import { ApplicationFailure } from '@temporalio/activity';
+
 import { crearGuardias, revisarTodo } from '../bucle/guardias.js';
 import type {
   AprobacionCreada,
@@ -174,6 +177,55 @@ async function costeDeLaRaiz(
       )
   `;
   return Number(fila?.coste ?? 0);
+}
+
+/**
+ * Llama a la herramienta y traduce el fallo a lo que Temporal entiende.
+ *
+ * El contrato de los conectores dice que solo `temporal` mejora al insistir. Los
+ * otros tres motivos —no encontrada, no autorizado, argumentos inválidos— no van a
+ * cambiar en treinta segundos, así que se marcan como no reintentables y la tarea
+ * falla ya con el motivo en la mano. Reintentar cuatro veces un `no_encontrada` es
+ * hacer esperar al cliente medio minuto para acabar igual.
+ *
+ * Un fallo que no cumple el contrato sí se reintenta: lo más probable es que sea del
+ * transporte, y esos pasan.
+ */
+async function llamarConReintentoGobernado(
+  contexto: ContextoDeActividades,
+  pasoId: string,
+  peticion: PeticionPasoHerramienta,
+) {
+  try {
+    return await contexto.gateway.llamar(
+      {
+        tenantId: peticion.tenantId,
+        puestoId: peticion.puestoId,
+        versionPuestoId: peticion.versionPuestoId,
+        tareaId: peticion.tareaId,
+        pasoId,
+      },
+      {
+        herramienta: peticion.herramienta,
+        argumentos: peticion.argumentos,
+        presupuesto: {
+          limiteEuros: peticion.presupuestoEuros,
+          gastadoEuros: peticion.gastadoEuros,
+        },
+        ...(peticion.aprobacionId === undefined ? {} : { aprobacionId: peticion.aprobacionId }),
+      },
+    );
+  } catch (error) {
+    if (error instanceof HerramientaFallo && !error.reintentable) {
+      throw ApplicationFailure.create({
+        message: error.message,
+        type: error.codigo ?? 'HerramientaFallo',
+        nonRetryable: true,
+        details: [{ herramienta: error.herramienta, motivo: error.motivo }],
+      });
+    }
+    throw error;
+  }
 }
 
 /**
@@ -414,24 +466,7 @@ export function crearActividades(contexto: ContextoDeActividades) {
       }
 
       const pasoId = uuidV7();
-      const llamada = await contexto.gateway.llamar(
-        {
-          tenantId: peticion.tenantId,
-          puestoId: peticion.puestoId,
-          versionPuestoId: peticion.versionPuestoId,
-          tareaId: peticion.tareaId,
-          pasoId,
-        },
-        {
-          herramienta: peticion.herramienta,
-          argumentos: peticion.argumentos,
-          presupuesto: {
-            limiteEuros: peticion.presupuestoEuros,
-            gastadoEuros: peticion.gastadoEuros,
-          },
-          ...(peticion.aprobacionId === undefined ? {} : { aprobacionId: peticion.aprobacionId }),
-        },
-      );
+      const llamada = await llamarConReintentoGobernado(contexto, pasoId, peticion);
 
       // El resultado de la herramienta vuelve al modelo en la siguiente vuelta: pasa
       // por los guardias antes de entrar en el historial.

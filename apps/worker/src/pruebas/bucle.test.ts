@@ -174,7 +174,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('bucle del agente · contra la base y el lib
               sentido: 'editada',
               personaId: null,
               argumentosEditados: {
-                factura: 'F-2026-0001',
+                factura_id: 'inv-0001',
                 texto: 'Hola. Te llamamos mañana para hablar del pago de la F-2026-0001.',
               },
             }

@@ -24,5 +24,6 @@ export * from './secretos.js';
 export * from './herramientas.js';
 export * from './cliente-mcp.js';
 export * from './registro.js';
+export * from './transportes.js';
 export * from './autorizaciones.js';
 export * from './gateway.js';

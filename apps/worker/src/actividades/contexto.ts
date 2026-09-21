@@ -12,11 +12,17 @@
  * tocar ni una línea del bucle.
  */
 import { conTenant, crearConexion, type Conexion } from '@aiw/db';
-import { NOMBRE_CONECTOR_DEMO, montarDemoEnMemoria } from '@aiw/connector-demo';
+import {
+  NOMBRE_CONECTOR_DEMO,
+  VARIABLE_SECRETO_DEMO,
+  montarDemoEnMemoria,
+} from '@aiw/connector-demo';
 import {
   Gateway,
   RegistroDeServidores,
   conectarPorMcp,
+  conexionPorHttp,
+  conexionPorProcesoHijo,
   resolvedorDeEntorno,
   type ResolvedorDeSecretos,
 } from '@aiw/mcp-gateway';
@@ -80,6 +86,45 @@ export function registroConDemostracion(
     });
     return conectarPorMcp(transporte, NOMBRE_CONECTOR_DEMO);
   });
+}
+
+/**
+ * Registro que lanza el conector de demostración como proceso hijo.
+ *
+ * Es la forma en la que va a estar el conector de Odoo si se despliega como
+ * proceso: el gateway lo arranca y le inyecta la credencial en el entorno del hijo.
+ * El entorno del hijo se construye desde cero, así que el conector no ve ni la
+ * cadena de conexión de la base ni las credenciales de los otros conectores.
+ */
+export function registroConDemostracionPorProceso(opciones: {
+  comando: string;
+  argumentos: readonly string[];
+  directorio?: string | undefined;
+  fallosIniciales?: number | undefined;
+}): RegistroDeServidores {
+  return new RegistroDeServidores().registrar(NOMBRE_CONECTOR_DEMO, (secreto) =>
+    conexionPorProcesoHijo(NOMBRE_CONECTOR_DEMO, secreto, {
+      comando: opciones.comando,
+      argumentos: opciones.argumentos,
+      variableDelSecreto: VARIABLE_SECRETO_DEMO,
+      ...(opciones.directorio === undefined ? {} : { directorio: opciones.directorio }),
+      ...(opciones.fallosIniciales === undefined
+        ? {}
+        : { entorno: { DEMO_CONECTOR_FALLOS: String(opciones.fallosIniciales) } }),
+    }),
+  );
+}
+
+/**
+ * Registro que habla con un conector ya arrancado, por HTTP transmisible.
+ *
+ * La credencial va en la cabecera de autorización, que la pone el gateway al abrir
+ * la conexión. Es el camino del conector que vive en otra máquina.
+ */
+export function registroPorHttp(nombreConector: string, url: string): RegistroDeServidores {
+  return new RegistroDeServidores().registrar(nombreConector, (secreto) =>
+    conexionPorHttp(nombreConector, secreto, { url }),
+  );
 }
 
 /** Enrutador con el proveedor determinista del puesto de Cobros registrado. */

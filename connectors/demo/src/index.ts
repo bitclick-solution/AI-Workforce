@@ -21,4 +21,6 @@ export type Paquete = typeof PAQUETE;
 
 export * from './datos.js';
 export * from './servidor.js';
+export * from './errores.js';
 export * from './en-memoria.js';
+export * from './http.js';

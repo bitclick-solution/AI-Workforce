@@ -33,17 +33,32 @@ const CATALOGO = [
     descripcion: 'Escribe una nota de seguimiento.',
     esquemaEntrada: {
       type: 'object',
-      properties: { factura: { type: 'string' }, texto: { type: 'string' } },
-      required: ['factura', 'texto'],
+      properties: { factura_id: { type: 'string' }, texto: { type: 'string' } },
+      required: ['factura_id', 'texto'],
     },
   },
 ];
 
 const FACTURAS = {
   facturas: [
-    { numero: 'F-2026-0001', cliente: 'Talleres', importeEuros: 1240.5, diasDeRetraso: 37 },
-    { numero: 'F-2026-0002', cliente: 'Panadería', importeEuros: 318, diasDeRetraso: 20 },
+    {
+      id: 'inv-0001',
+      numero: 'F-2026-0001',
+      cliente: { id: 'cli-001', nombre: 'Talleres' },
+      importe_pendiente: 1240.5,
+      moneda: 'EUR',
+      dias_vencida: 37,
+    },
+    {
+      id: 'inv-0002',
+      numero: 'F-2026-0002',
+      cliente: { id: 'cli-002', nombre: 'Panadería' },
+      importe_pendiente: 318,
+      moneda: 'EUR',
+      dias_vencida: 20,
+    },
   ],
+  total: 2,
 };
 
 describe('paso de modelo · el bucle se queda en casa', () => {
@@ -106,10 +121,7 @@ describe('paso de modelo · el bucle se queda en casa', () => {
     });
 
     expect(paso.llamadas).toHaveLength(2);
-    expect(paso.llamadas.map((l) => l.argumentos['factura'])).toEqual([
-      'F-2026-0001',
-      'F-2026-0002',
-    ]);
+    expect(paso.llamadas.map((l) => l.argumentos['factura_id'])).toEqual(['inv-0001', 'inv-0002']);
   });
 
   it('la traza lleva tenant, puesto, tarea y versión, y ningún argumento', async () => {
@@ -292,6 +304,7 @@ describe('redacción de las notas de cobro', () => {
   it('una nota por factura, con el número y el importe dentro', () => {
     const notas = redactarNotas(FACTURAS.facturas);
     expect(notas).toHaveLength(2);
+    expect(notas[0]?.factura_id).toBe('inv-0001');
     expect(notas[0]?.texto).toContain('F-2026-0001');
     expect(notas[0]?.texto).toContain('1240.50 €');
   });

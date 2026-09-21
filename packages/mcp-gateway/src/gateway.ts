@@ -22,6 +22,9 @@
 import { conTenant } from '@aiw/db';
 import {
   decidirPaso,
+  esReintentable,
+  leerErrorDeHerramienta,
+  type MotivoErrorHerramienta,
   type Nivel,
   type PresupuestoTarea,
   type TipoClaseAccion,
@@ -100,10 +103,32 @@ export class PasoNoPermitido extends Error {
   }
 }
 
+/**
+ * Fallo de una herramienta, con el motivo del contrato si lo trae.
+ *
+ * `reintentable` es lo que el trabajador necesita para decidir si deja que Temporal
+ * insista. Sin este dato, un `no_encontrada` se reintentaría cuatro veces con espera
+ * creciente para acabar fallando igual, y el cliente esperaría medio minuto para
+ * nada.
+ */
 export class HerramientaFallo extends Error {
+  readonly herramienta: string;
+  readonly motivo: MotivoErrorHerramienta | undefined;
+  readonly reintentable: boolean;
+  /** Código del contrato, si el conector lo mandó. Sirve para agrupar en auditoría. */
+  readonly codigo: string | undefined;
+
   constructor(herramienta: string, detalle: string) {
-    super(`La herramienta «${herramienta}» falló: ${detalle}`);
+    const error = leerErrorDeHerramienta(detalle);
+    super(
+      `La herramienta «${herramienta}» falló: ${error ? error.message : detalle}` +
+        (error ? ` (${error.code}, motivo ${error.datos.motivo})` : ''),
+    );
     this.name = 'HerramientaFallo';
+    this.herramienta = herramienta;
+    this.motivo = error?.datos.motivo;
+    this.reintentable = esReintentable(error?.datos.motivo);
+    this.codigo = error?.code;
   }
 }
 
@@ -443,7 +468,17 @@ export class Gateway {
       referencias.push({ tipo: 'aprobacion', id: detalles.aprobacionId });
     }
     if (detalles.detalle) {
-      referencias.push({ tipo: 'error', id: recortar(detalles.detalle) });
+      const error = leerErrorDeHerramienta(detalles.detalle);
+      if (error) {
+        // Con el contrato cumplido, la entrada guarda código y motivo por separado:
+        // así una consulta de auditoría puede contar cuántos fallos fueron temporales
+        // sin leer mensajes a mano.
+        referencias.push({ tipo: 'codigo_error', id: error.code });
+        referencias.push({ tipo: 'motivo', id: error.datos.motivo });
+        referencias.push({ tipo: 'error', id: recortar(error.message) });
+      } else {
+        referencias.push({ tipo: 'error', id: recortar(detalles.detalle) });
+      }
     }
 
     return conTenant(this.#cliente, contexto.tenantId, (tx) =>

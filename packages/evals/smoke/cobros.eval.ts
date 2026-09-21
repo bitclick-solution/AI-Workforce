@@ -29,8 +29,9 @@ describe('evals de humo · puesto Cobros', () => {
   it('falla si se deja una factura vencida sin nota', () => {
     const resultado = evaluarNotas(
       VENCIDAS.slice(0, 2).map((factura) => ({
-        factura: factura.numero,
-        texto: `Hola. La factura ${factura.numero} de ${factura.importeEuros.toFixed(2)} € está vencida. ¿Nos confirmas el pago?`,
+        factura_id: factura.id,
+        numero: factura.numero,
+        texto: `Hola. La factura ${factura.numero} de ${factura.importe_pendiente.toFixed(2)} € está vencida. ¿Nos confirmas el pago?`,
       })),
     );
     expect(resultado.superado).toBe(false);
@@ -40,12 +41,14 @@ describe('evals de humo · puesto Cobros', () => {
   it('falla si propone una nota para una factura que está al día', () => {
     const notas = [
       ...VENCIDAS.map((factura) => ({
-        factura: factura.numero,
-        texto: `Hola. La factura ${factura.numero} de ${factura.importeEuros.toFixed(2)} € está vencida. ¿Nos confirmas el pago?`,
+        factura_id: factura.id,
+        numero: factura.numero,
+        texto: `Hola. La factura ${factura.numero} de ${factura.importe_pendiente.toFixed(2)} € está vencida. ¿Nos confirmas el pago?`,
       })),
       ...AL_DIA.slice(0, 1).map((factura) => ({
-        factura: factura.numero,
-        texto: `Hola. La factura ${factura.numero} de ${factura.importeEuros.toFixed(2)} €. ¿Nos confirmas el pago?`,
+        factura_id: factura.id,
+        numero: factura.numero,
+        texto: `Hola. La factura ${factura.numero} de ${factura.importe_pendiente.toFixed(2)} €. ¿Nos confirmas el pago?`,
       })),
     ];
     const resultado = evaluarNotas(notas);
@@ -56,7 +59,8 @@ describe('evals de humo · puesto Cobros', () => {
   it('falla si una nota no dice qué factura ni cuánto se debe', () => {
     const resultado = evaluarNotas(
       VENCIDAS.map((factura) => ({
-        factura: factura.numero,
+        factura_id: factura.id,
+        numero: factura.numero,
         texto: 'Hola. Tienes un pago pendiente. ¿Nos confirmas cuándo lo haces?',
       })),
     );
@@ -67,9 +71,10 @@ describe('evals de humo · puesto Cobros', () => {
   it('falla si la nota amenaza, aunque lo diga todo lo demás', () => {
     const resultado = evaluarNotas(
       VENCIDAS.map((factura) => ({
-        factura: factura.numero,
+        factura_id: factura.id,
+        numero: factura.numero,
         texto:
-          `Hola. La factura ${factura.numero} de ${factura.importeEuros.toFixed(2)} € ` +
+          `Hola. La factura ${factura.numero} de ${factura.importe_pendiente.toFixed(2)} € ` +
           'sigue sin pagar. Te aplicaremos un recargo y pasaremos el asunto al abogado. ' +
           '¿Nos confirmas el pago?',
       })),

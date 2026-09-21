@@ -171,7 +171,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
     await expect(
       gateway.llamar(contexto, {
         herramienta: HERRAMIENTA_NOTA,
-        argumentos: { factura: 'F-2026-0001', texto: 'Hola.' },
+        argumentos: { factura_id: 'inv-0001', texto: 'Hola.' },
         presupuesto: PRESUPUESTO,
       }),
     ).rejects.toBeInstanceOf(HerramientaNoAutorizada);
@@ -192,7 +192,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
     await expect(
       gateway.llamar(contexto, {
         herramienta: HERRAMIENTA_NOTA,
-        argumentos: { factura: 'F-2026-0001', texto: 'Sin permiso.' },
+        argumentos: { factura_id: 'inv-0001', texto: 'Sin permiso.' },
         presupuesto: PRESUPUESTO,
       }),
     ).rejects.toBeInstanceOf(PasoNoPermitido);
@@ -207,7 +207,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
 
     const llamada = await gateway.llamar(contexto, {
       herramienta: HERRAMIENTA_NOTA,
-      argumentos: { factura: 'F-2026-0001', texto: 'Te recordamos el pago pendiente.' },
+      argumentos: { factura_id: 'inv-0001', texto: 'Te recordamos el pago pendiente.' },
       presupuesto: PRESUPUESTO,
       aprobacionId,
     });
@@ -231,7 +231,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
     const fallo = await gateway
       .llamar(contexto, {
         herramienta: HERRAMIENTA_NOTA,
-        argumentos: { factura: 'F-2026-0001', texto: 'En prueba.' },
+        argumentos: { factura_id: 'inv-0001', texto: 'En prueba.' },
         presupuesto: PRESUPUESTO,
         aprobacionId: uuidV7(),
       })

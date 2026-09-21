@@ -5,6 +5,11 @@
  * llamar a nadie. Lee la conversación, y según lo que ya haya pasado pide listar
  * las facturas vencidas, propone una nota por cada una o cierra con un resumen.
  *
+ * Habla el contrato de herramientas de los conectores de cobros —el de Odoo y el de
+ * demostración—, así que los nombres de los campos son los del contrato:
+ * `factura_id`, `importe_pendiente`, `dias_vencida`. Escribir aquí otros nombres
+ * sería inventarse una traducción que el conector no hace.
+ *
  * `redactarNotas` está aparte a propósito: es la conducta que el caso dorado del
  * puesto evalúa. El evaluador de `@aiw/evals` la llama con la cartera de prueba y
  * comprueba propiedades —una nota por factura vencida, ninguna por una al día, el
@@ -19,17 +24,28 @@ import type { ContextoDeGuion, Guion, RespuestaDeGuion } from '../proveedor-prue
 export const HERRAMIENTA_LISTAR = 'listar_facturas_vencidas';
 export const HERRAMIENTA_NOTA = 'crear_nota_seguimiento';
 
-/** Factura tal como la devuelve el conector. Solo lo que la nota necesita. */
+/** Factura tal como la devuelve el contrato. Solo lo que la nota necesita. */
 export interface FacturaParaNota {
+  id: string;
   numero: string;
-  cliente: string;
-  importeEuros: number;
-  diasDeRetraso: number;
+  cliente: { id: string; nombre: string };
+  importe_pendiente: number;
+  moneda: string;
+  dias_vencida: number;
 }
 
 export interface NotaPropuesta {
-  factura: string;
+  /** Identificador de la factura, que es lo que pide el contrato de la herramienta. */
+  factura_id: string;
+  /** Número de la factura. No va a la herramienta; sirve para leer y para evaluar. */
+  numero: string;
   texto: string;
+}
+
+/** Importe con dos decimales y su moneda, como se escribe en una nota. */
+function importeLegible(factura: FacturaParaNota): string {
+  const simbolo = factura.moneda === 'EUR' ? '€' : factura.moneda;
+  return `${factura.importe_pendiente.toFixed(2)} ${simbolo}`;
 }
 
 /**
@@ -42,12 +58,13 @@ export interface NotaPropuesta {
  */
 export function redactarNotas(facturas: readonly FacturaParaNota[]): NotaPropuesta[] {
   return facturas.map((factura) => ({
-    factura: factura.numero,
+    factura_id: factura.id,
+    numero: factura.numero,
     texto:
-      `Hola, ${factura.cliente}. Te escribimos por la factura ${factura.numero}, ` +
-      `de ${factura.importeEuros.toFixed(2)} €, que venció hace ${factura.diasDeRetraso} ` +
-      'días. ¿Nos confirmas cuándo la vas a pagar? Si hay algún problema con ella, ' +
-      'dínoslo y lo miramos.',
+      `Hola, ${factura.cliente.nombre}. Te escribimos por la factura ${factura.numero}, ` +
+      `de ${importeLegible(factura)}, que venció hace ${factura.dias_vencida} días. ` +
+      '¿Nos confirmas cuándo la vas a pagar? Si hay algún problema con ella, dínoslo ' +
+      'y lo miramos.',
   }));
 }
 
@@ -69,22 +86,35 @@ function resultadosDe(prompt: LanguageModelV4Prompt, herramienta: string): strin
   return textos;
 }
 
+/**
+ * Lee la cartera del resultado de la herramienta.
+ *
+ * Un resultado que no es la carga del contrato no es una cartera de facturas, y
+ * entonces no hay nada sobre lo que escribir: el agente no inventa notas sobre algo
+ * que no ha entendido. Eso incluye los errores del contrato, que también son JSON.
+ */
 function facturasDelResultado(texto: string): FacturaParaNota[] {
   try {
     const analizado: unknown = JSON.parse(texto);
     const facturas = (analizado as { facturas?: unknown }).facturas;
     if (!Array.isArray(facturas)) return [];
     return facturas
-      .filter((f): f is FacturaParaNota => typeof f === 'object' && f !== null)
-      .map((f) => ({
-        numero: String(f.numero),
-        cliente: String(f.cliente),
-        importeEuros: Number(f.importeEuros),
-        diasDeRetraso: Number(f.diasDeRetraso),
-      }));
+      .filter(
+        (factura): factura is Record<string, unknown> =>
+          typeof factura === 'object' && factura !== null,
+      )
+      .map((factura) => {
+        const cliente = factura['cliente'] as { id?: unknown; nombre?: unknown } | undefined;
+        return {
+          id: String(factura['id']),
+          numero: String(factura['numero']),
+          cliente: { id: String(cliente?.id ?? ''), nombre: String(cliente?.nombre ?? '') },
+          importe_pendiente: Number(factura['importe_pendiente']),
+          moneda: String(factura['moneda'] ?? 'EUR'),
+          dias_vencida: Number(factura['dias_vencida']),
+        };
+      });
   } catch {
-    // Un resultado que no es JSON no es una cartera de facturas: el agente no
-    // inventa notas sobre algo que no ha entendido.
     return [];
   }
 }
@@ -111,7 +141,7 @@ export const guionCobros: Guion = (contexto: ContextoDeGuion): RespuestaDeGuion 
     }
     return {
       texto: 'Voy a ver qué facturas están vencidas.',
-      llamadas: [{ herramienta: HERRAMIENTA_LISTAR, argumentos: {} }],
+      llamadas: [{ herramienta: HERRAMIENTA_LISTAR, argumentos: { dias_vencida_minimo: 1 } }],
       tokens: { entrada: 640, salida: 60 },
     };
   }
@@ -131,13 +161,13 @@ export const guionCobros: Guion = (contexto: ContextoDeGuion): RespuestaDeGuion 
       texto: `Propongo una nota de seguimiento para cada una de las ${facturas.length} facturas vencidas.`,
       llamadas: redactarNotas(facturas).map((nota) => ({
         herramienta: HERRAMIENTA_NOTA,
-        argumentos: { factura: nota.factura, texto: nota.texto },
+        argumentos: { factura_id: nota.factura_id, texto: nota.texto, tipo: 'nota' },
       })),
       tokens: { entrada: 1200, salida: 220 },
     };
   }
 
-  const importe = facturas.reduce((suma, factura) => suma + factura.importeEuros, 0);
+  const importe = facturas.reduce((suma, factura) => suma + factura.importe_pendiente, 0);
   return {
     texto:
       `Seguimiento de cobros hecho: ${facturas.length} facturas vencidas por ` +

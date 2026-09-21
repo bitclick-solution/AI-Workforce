@@ -18,6 +18,22 @@ import {
   type ResultadoHerramienta,
 } from './herramientas.js';
 
+/**
+ * Transporte del SDK, tal como el SDK lo construye.
+ *
+ * El SDK declara sus manejadores y su identificador de sesión como propiedades
+ * opcionales que sí pueden valer `undefined`, y con `exactOptionalPropertyTypes`
+ * eso no encaja en su propia interfaz `Transport`. Es una incompatibilidad de la
+ * librería con un ajuste estricto nuestro, y se puentea aquí, en una función con
+ * nombre y en un solo sitio, en vez de relajar el ajuste para todo el repositorio o
+ * repartir aserciones por cada fábrica de transporte.
+ */
+export type TransporteDelSdk = object;
+
+function comoTransporte(transporte: TransporteDelSdk): Transport {
+  return transporte as Transport;
+}
+
 /** Nombre y versión con los que la plataforma se presenta ante un servidor MCP. */
 export const IDENTIDAD_CLIENTE = { name: 'aiw-mcp-gateway', version: '0.1.0' } as const;
 
@@ -41,11 +57,11 @@ function textoDe(resultado: Record<string, unknown>): string {
  * pero la verdad es lo que el servidor conteste ahora.
  */
 export async function conectarPorMcp(
-  transporte: Transport,
+  transporte: TransporteDelSdk,
   conector: string,
 ): Promise<ConexionMcp> {
   const cliente = new Client(IDENTIDAD_CLIENTE);
-  await cliente.connect(transporte);
+  await cliente.connect(comoTransporte(transporte));
 
   return {
     async listar(): Promise<HerramientaDescubierta[]> {

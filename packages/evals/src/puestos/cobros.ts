@@ -36,38 +36,48 @@ export const PUESTO = 'puestos/cobros';
  */
 export const CARTERA: readonly (FacturaParaNota & { vencida: boolean })[] = [
   {
+    id: 'inv-0001',
     numero: 'F-2026-0001',
-    cliente: 'Talleres Mediterráneo, S.L.',
-    importeEuros: 1240.5,
-    diasDeRetraso: 37,
+    cliente: { id: 'cli-001', nombre: 'Talleres Mediterráneo, S.L.' },
+    importe_pendiente: 1240.5,
+    moneda: 'EUR',
+    dias_vencida: 37,
     vencida: true,
   },
   {
+    id: 'inv-0002',
     numero: 'F-2026-0002',
-    cliente: 'Panadería La Espiga',
-    importeEuros: 318,
-    diasDeRetraso: 20,
+    cliente: { id: 'cli-002', nombre: 'Panadería La Espiga' },
+    importe_pendiente: 318,
+    moneda: 'EUR',
+    dias_vencida: 20,
     vencida: true,
   },
   {
+    id: 'inv-0003',
     numero: 'F-2026-0003',
-    cliente: 'Clínica Dental Sorolla',
-    importeEuros: 2860.75,
-    diasDeRetraso: 11,
+    cliente: { id: 'cli-003', nombre: 'Clínica Dental Sorolla' },
+    importe_pendiente: 2860.75,
+    moneda: 'EUR',
+    dias_vencida: 11,
     vencida: true,
   },
   {
+    id: 'inv-0004',
     numero: 'F-2026-0004',
-    cliente: 'Gestoría Ribera',
-    importeEuros: 540,
-    diasDeRetraso: 0,
+    cliente: { id: 'cli-004', nombre: 'Gestoría Ribera' },
+    importe_pendiente: 540,
+    moneda: 'EUR',
+    dias_vencida: 0,
     vencida: false,
   },
   {
+    id: 'inv-0005',
     numero: 'F-2026-0005',
-    cliente: 'Hotel Marina Alta',
-    importeEuros: 7420.1,
-    diasDeRetraso: 0,
+    cliente: { id: 'cli-005', nombre: 'Hotel Marina Alta' },
+    importe_pendiente: 7420.1,
+    moneda: 'EUR',
+    dias_vencida: 0,
     vencida: false,
   },
 ];
@@ -96,8 +106,8 @@ export const PROHIBIDAS = [
 ];
 
 /** Cómo se formatea un importe en una nota. Dos decimales y el símbolo del euro. */
-function importeEsperado(importeEuros: number): string {
-  return `${importeEuros.toFixed(2)} €`;
+function importeEsperado(factura: FacturaParaNota): string {
+  return `${factura.importe_pendiente.toFixed(2)} €`;
 }
 
 export interface FalloDelCaso {
@@ -126,9 +136,11 @@ export function evaluarNotas(notas: readonly NotaPropuesta[]): ResultadoEval {
     });
   }
 
-  // 2. Cubre todas las vencidas.
-  const cubiertas = new Set(notas.map((nota) => nota.factura));
-  const sinCubrir = VENCIDAS.filter((factura) => !cubiertas.has(factura.numero));
+  // 2. Cubre todas las vencidas. Se compara por identificador, que es lo que el
+  // contrato de la herramienta pide: un agente que acierte el número y falle el
+  // identificador escribiría la nota en otra factura o en ninguna.
+  const cubiertas = new Set(notas.map((nota) => nota.factura_id));
+  const sinCubrir = VENCIDAS.filter((factura) => !cubiertas.has(factura.id));
   if (sinCubrir.length === 0) cumplidas += 1;
   else {
     fallos.push({
@@ -138,7 +150,7 @@ export function evaluarNotas(notas: readonly NotaPropuesta[]): ResultadoEval {
   }
 
   // 3. Ninguna nota para una factura que está al día.
-  const invadidas = AL_DIA.filter((factura) => cubiertas.has(factura.numero));
+  const invadidas = AL_DIA.filter((factura) => cubiertas.has(factura.id));
   if (invadidas.length === 0) cumplidas += 1;
   else {
     fallos.push({
@@ -149,18 +161,15 @@ export function evaluarNotas(notas: readonly NotaPropuesta[]): ResultadoEval {
 
   // 4. Cada nota cita su número de factura y su importe.
   const incompletas = notas.filter((nota) => {
-    const factura = CARTERA.find((candidata) => candidata.numero === nota.factura);
+    const factura = CARTERA.find((candidata) => candidata.id === nota.factura_id);
     if (!factura) return true;
-    return (
-      !nota.texto.includes(factura.numero) ||
-      !nota.texto.includes(importeEsperado(factura.importeEuros))
-    );
+    return !nota.texto.includes(factura.numero) || !nota.texto.includes(importeEsperado(factura));
   });
   if (incompletas.length === 0) cumplidas += 1;
   else {
     fallos.push({
       regla: 'cada nota cita el número y el importe de su factura',
-      detalle: `sin los datos: ${incompletas.map((nota) => nota.factura).join(', ')}`,
+      detalle: `sin los datos: ${incompletas.map((nota) => nota.factura_id).join(', ')}`,
     });
   }
 
