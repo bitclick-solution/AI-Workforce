@@ -13,6 +13,8 @@ import { CONSULTAS_PANEL } from './carga.js';
 import { MIGRACIONES, sentenciasDe } from './migrador.js';
 import {
   NOMBRES_TABLAS,
+  NOMBRES_TABLAS_CONTADOR,
+  NOMBRES_TABLAS_CONTADOR_INMUTABLES,
   NOMBRES_TABLAS_CON_TENANT,
   NOMBRES_TABLAS_INMUTABLES,
   NOMBRES_TABLAS_INMUTABLES_CON_DISPARADOR_PROPIO,
@@ -30,8 +32,23 @@ if (!migracion) throw new Error('No hay migración inicial.');
 const sql = readFileSync(migracion.ruta, 'utf8');
 const reverso = readFileSync(migracion.rutaReverso, 'utf8');
 
+/**
+ * El modelo ya no cabe en una sola migración: lo que se comprueba sobre el conjunto
+ * —que existen todas las tablas del registro, que el reverso las borra y que ninguna
+ * clave foránea deja borrar en cascada— se lee de todas, y lo que es propio de la
+ * inicial se sigue leyendo de ella.
+ */
+const sqlDeTodas = MIGRACIONES.map((m) => readFileSync(m.ruta, 'utf8')).join('\n');
+const reversoDeTodas = MIGRACIONES.map((m) => readFileSync(m.rutaReverso, 'utf8')).join('\n');
+
+/** El contador v0 trae su propia migración; las pruebas que la miran usan esta. */
+const contador = MIGRACIONES.find((m) => m.nombre === '0001_contador_uso_de_modelos');
+if (!contador) throw new Error('No hay migración del contador de tareas v0.');
+const sqlContador = readFileSync(contador.ruta, 'utf8');
+const reversoContador = readFileSync(contador.rutaReverso, 'utf8');
+
 function creaTabla(nombre: string): boolean {
-  return new RegExp(`create table (if not exists )?${nombre}\\b`).test(sql);
+  return new RegExp(`create table (if not exists )?${nombre}\\b`).test(sqlDeTodas);
 }
 
 describe('registro de tablas', () => {
@@ -110,7 +127,7 @@ describe('migración inicial', () => {
   });
 
   it('las claves foráneas restringen el borrado', () => {
-    const referencias = sql.match(/references \w+ \(\w+\)( on delete \w+)?/g) ?? [];
+    const referencias = sqlDeTodas.match(/references \w+ \(\w+\)( on delete \w+)?/g) ?? [];
     expect(referencias.length).toBeGreaterThan(30);
     for (const referencia of referencias) {
       expect(referencia, `${referencia} no restringe el borrado`).toContain('on delete restrict');
@@ -132,9 +149,11 @@ describe('migración inicial', () => {
 });
 
 describe('reverso de la migración', () => {
-  it('borra todas las tablas que crea la migración', () => {
+  it('borra todas las tablas que crean las migraciones', () => {
     for (const nombre of NOMBRES_TABLAS) {
-      expect(reverso, `el reverso no borra ${nombre}`).toContain(`drop table if exists ${nombre};`);
+      expect(reversoDeTodas, `ningún reverso borra ${nombre}`).toContain(
+        `drop table if exists ${nombre};`,
+      );
     }
   });
 
@@ -276,5 +295,87 @@ describe('el plan y la retención siguen los ADR', () => {
   it('la retención va de 6 a 120 meses y por defecto son 24 (ADR-010)', () => {
     expect(sql).toContain('retencion_meses bigint not null default 24');
     expect(sql).toContain('check (retencion_meses between 6 and 120)');
+  });
+});
+
+describe('migración del contador de tareas v0', () => {
+  it('crea las dos tablas del contador con su tenant y su índice por tenant', () => {
+    for (const nombre of NOMBRES_TABLAS_CONTADOR) {
+      expect(sqlContador, `la migración no crea ${nombre}`).toContain(`create table ${nombre} (`);
+      expect(sqlContador).toContain(
+        `tenant_id uuid not null references organizacion (id) on delete restrict`,
+      );
+      const patron = new RegExp(`create (unique )?index \\w+\\s+on ${nombre} \\(tenant_id`);
+      expect(patron.test(sqlContador), `${nombre} no tiene índice que empiece por tenant_id`).toBe(
+        true,
+      );
+    }
+  });
+
+  it('activa y fuerza la seguridad de fila y crea la política de tenant', () => {
+    for (const nombre of NOMBRES_TABLAS_CONTADOR) {
+      expect(sqlContador, `${nombre} no entra en el bucle de RLS`).toContain(`'${nombre}'`);
+    }
+    expect(sqlContador).toContain("execute format('alter table %I enable row level security'");
+    expect(sqlContador).toContain("execute format('alter table %I force row level security'");
+    expect(sqlContador).toContain('using (tenant_id = aiw_tenant_actual())');
+  });
+
+  it('el rol de aplicación solo lee e inserta: las filas son inmutables', () => {
+    for (const nombre of NOMBRES_TABLAS_CONTADOR_INMUTABLES) {
+      expect(sqlContador).toContain(`grant select, insert on ${nombre} to aiw_app`);
+      expect(sqlContador, `${nombre} no tiene disparador de inmutabilidad`).toContain(
+        `create trigger ${nombre}_sin_actualizar`,
+      );
+      expect(sqlContador).not.toContain(`grant select, insert, update, delete on ${nombre}`);
+    }
+    expect(sqlContador).toContain('execute function aiw_fila_inmutable()');
+  });
+
+  it('el reintento de una actividad no cobra dos veces: la única la impone la base', () => {
+    expect(sqlContador).toContain(
+      'create unique index uso_modelo_tenant_clave_key on uso_modelo (tenant_id, clave_idempotencia)',
+    );
+    expect(sqlContador).toContain('constraint uso_modelo_tokens_no_negativos');
+    expect(sqlContador).toContain('constraint uso_modelo_llamadas_positivas');
+  });
+
+  it('la tarifa es un dato con vigencia y sin cierre de vigencia que actualizar', () => {
+    expect(sqlContador).toContain('vigente_desde timestamptz not null');
+    expect(sqlContador).not.toContain('vigente_hasta');
+    expect(sqlContador).toContain(
+      'create unique index tarifa_modelo_tenant_modelo_vigencia_key\n  on tarifa_modelo (tenant_id, proveedor, modelo, vigente_desde)',
+    );
+    expect(sqlContador).toContain('constraint tarifa_modelo_precios_no_negativos');
+  });
+
+  it('es autocontenida y no depende del orden: no altera nada de lo que ya existe', () => {
+    expect(sqlContador).not.toMatch(/alter table (?!%I)\w+ (add|drop|alter) /);
+    expect(sqlContador).not.toContain('create extension');
+    expect(sqlContador).not.toContain('create role');
+    expect(sqlContador).not.toContain('create or replace function');
+    // Asume el dueño del esquema antes de crear nada, igual que la inicial.
+    const rol = sqlContador.indexOf('set local role aiw_migrador');
+    expect(rol).toBeGreaterThan(-1);
+    expect(rol).toBeLessThan(sqlContador.indexOf('create table '));
+  });
+
+  it('su reverso borra sus tablas de la hoja a la raíz y no toca la inicial', () => {
+    expect(reversoContador.indexOf('drop table if exists uso_modelo;')).toBeLessThan(
+      reversoContador.indexOf('drop table if exists tarifa_modelo;'),
+    );
+    expect(reversoContador).not.toContain('drop role');
+    expect(reversoContador).not.toContain('drop function');
+    expect(reversoContador).not.toContain('drop table if exists tarea;');
+  });
+
+  it('no lleva ninguna credencial ni ningún precio escrito a mano', () => {
+    expect(sqlContador).not.toMatch(/postgres(ql)?:\/\/[^\s]*:[^\s@]+@/);
+    expect(sqlContador.toLowerCase()).not.toContain('password ');
+    // Los precios son dato del tenant: en el DDL solo cabe el cero por defecto.
+    const defectosNumericos = sqlContador.match(/euros_por_millon\w* numeric\(\d+, \d+\)[^,]*/g);
+    for (const linea of defectosNumericos ?? []) {
+      expect(linea).not.toMatch(/default (?!0\b)\d/);
+    }
   });
 });

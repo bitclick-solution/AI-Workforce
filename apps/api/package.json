@@ -7,15 +7,18 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsx watch src/main.ts",
+    "demo:contador": "tsx src/demo-contador.ts",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "clean": "rm -rf dist coverage .turbo"
   },
   "dependencies": {
+    "@aiw/db": "workspace:*",
     "@aiw/domain": "workspace:*",
     "@aiw/ledger": "workspace:*",
-    "@aiw/mcp-gateway": "workspace:*"
+    "@aiw/mcp-gateway": "workspace:*",
+    "postgres": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

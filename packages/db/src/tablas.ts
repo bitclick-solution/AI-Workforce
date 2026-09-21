@@ -125,17 +125,37 @@ export const NOMBRES_TABLAS_PARTICIONADAS = ['entrada_auditoria', 'mensaje', 'se
  */
 export const NOMBRES_TABLAS_LIBRO = ['entrada_auditoria', 'contador_consumo'] as const;
 
+/**
+ * Tablas del contador de tareas v0: los usos reales de modelo y las tarifas
+ * versionadas que les ponen precio. Su esquema tipado vive en `@aiw/ledger`, igual
+ * que el del libro, y su DDL en la migración `0001_contador_uso_de_modelos`.
+ *
+ * Van aparte de `NOMBRES_TABLAS_LIBRO` porque no las crea la migración inicial:
+ * quien compruebe que existen tiene que mirar todas las migraciones, no solo la
+ * primera.
+ */
+export const NOMBRES_TABLAS_CONTADOR = ['tarifa_modelo', 'uso_modelo'] as const;
+
+/**
+ * Las dos son inmutables: un consumo registrado y un precio aplicado no se editan,
+ * se corrigen con una fila nueva. La migración `0001` les pone su propio disparador
+ * y les retira `UPDATE` y `DELETE` al rol de aplicación, sin tocar el bucle de la
+ * migración inicial.
+ */
+export const NOMBRES_TABLAS_CONTADOR_INMUTABLES = ['tarifa_modelo', 'uso_modelo'] as const;
+
 export const NOMBRES_TABLAS_CON_TENANT: readonly string[] = TABLAS_CON_TENANT.map((t) =>
   getTableName(t),
 );
 
 export const NOMBRES_TABLAS_RAIZ: readonly string[] = TABLAS_RAIZ.map((t) => getTableName(t));
 
-/** Todas las tablas que crea la migración inicial, incluidas las del libro. */
+/** Todas las tablas del modelo, las cree la migración inicial o una posterior. */
 export const NOMBRES_TABLAS: readonly string[] = [
   ...NOMBRES_TABLAS_RAIZ,
   ...NOMBRES_TABLAS_CON_TENANT,
   ...NOMBRES_TABLAS_LIBRO,
+  ...NOMBRES_TABLAS_CONTADOR,
   ...TABLAS_INFRAESTRUCTURA.map((t) => getTableName(t)),
 ];
 
@@ -168,6 +188,9 @@ export const ORDEN_PURGA: readonly string[] = [
   'decision_aprobacion',
   'aprobacion',
   'delegacion',
+  // El uso de modelo referencia tarea, paso y su tarifa: se vacía antes que ellas.
+  'uso_modelo',
+  'tarifa_modelo',
   'paso',
   'tarea',
   'habilidad_version_puesto',
