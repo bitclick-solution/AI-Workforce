@@ -5,6 +5,7 @@ packages:
 
 # Versiones únicas para todo el workspace. Los paquetes las referencian con "catalog:".
 catalog:
+  '@modelcontextprotocol/sdk': ^1.30.0
   '@temporalio/client': ^1.24.0
   '@types/node': ^22.20.4
   '@types/react': ^19.3.0
