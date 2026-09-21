@@ -76,13 +76,6 @@ export interface Respaldo {
 }
 
 /**
- * Traduce la política de respaldo a lo que hace el padre cuando vence el plazo.
- *
- * Es una función y no un `switch` repartido por el flujo porque el ADR-014 exige
- * que la política se aplique «y se registre como hecho»: con un solo sitio que la
- * traduzca, el motivo que se anota es siempre el mismo texto.
- */
-/**
  * Acota el presupuesto que pide un contrato al restante del padre (ADR-004).
  *
  * El padre no puede dar más de lo que le queda: si pide más, el hijo recibe el
@@ -100,6 +93,13 @@ export function acotarPresupuesto(
   return Math.min(pedidoEuros, cota);
 }
 
+/**
+ * Traduce la política de respaldo a lo que hace el padre cuando vence el plazo.
+ *
+ * Es una función y no un `switch` repartido por el flujo porque el ADR-014 exige
+ * que la política se aplique «y se registre como hecho»: con un solo sitio que la
+ * traduzca, el motivo que se anota es siempre el mismo texto.
+ */
 export function resolverRespaldo(politica: PoliticaRespaldo): Respaldo {
   switch (politica) {
     case 'seguir_sin_ello':
