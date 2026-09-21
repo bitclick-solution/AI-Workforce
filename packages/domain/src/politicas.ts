@@ -129,7 +129,13 @@ function techoDelEstado(estado: EstadoPuesto): Nivel | null {
   return estado === 'degradado' ? 'n1' : null;
 }
 
-function menorNivel(a: Nivel, b: Nivel): Nivel {
+/**
+ * El menor de dos niveles. N0 es el más restrictivo y N3 el más autónomo.
+ *
+ * Es la única comparación de niveles de la plataforma: el gateway la importa de
+ * aquí para que la regla viva en un solo sitio.
+ */
+export function menorNivel(a: Nivel, b: Nivel): Nivel {
   return NIVELES.indexOf(a) <= NIVELES.indexOf(b) ? a : b;
 }
 

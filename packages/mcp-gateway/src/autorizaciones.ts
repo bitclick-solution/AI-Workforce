@@ -11,7 +11,7 @@
  * la autorización no puede dar más autonomía de la que la política permite, y la
  * política no puede autorizar un conector que nadie conectó.
  */
-import { esquemas, NIVELES, type Nivel } from '@aiw/domain';
+import { esquemas, menorNivel, type Nivel } from '@aiw/domain';
 import type postgres from 'postgres';
 import { z } from 'zod';
 
@@ -110,11 +110,6 @@ export async function leerContextoDelPuesto(
       'version_puesto.politica',
     ),
   };
-}
-
-/** El menor de dos niveles. N0 es el más restrictivo y N3 el más autónomo. */
-export function menorNivel(a: Nivel, b: Nivel): Nivel {
-  return NIVELES.indexOf(a) <= NIVELES.indexOf(b) ? a : b;
 }
 
 /**
