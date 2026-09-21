@@ -1,10 +1,13 @@
 /**
  * Fichero único de estilo del sistema de componentes.
  *
- * Base sobria y neutra con un solo acento. La identidad visual definitiva del
- * producto está pendiente de decisión (pregunta abierta de la rebanada
- * «Prototipo de interfaz»): cuando se responda, se cambia este fichero y no los
- * componentes.
+ * Base sobria y neutra con un solo acento. El panel tiene identidad propia y no
+ * hereda la paleta de BitclickLabs ni los tokens cosechados del prototipo
+ * (decisión de Jesús, 2026-09-21): de la marca se toma la voz y no el color.
+ *
+ * Esta base es provisional a propósito. Cuando exista el sistema de diseño del
+ * producto, se cambia este fichero y no los componentes: ningún componente de
+ * este paquete debe llevar un color, un radio ni una sombra escritos a mano.
  */
 export const TEMA = {
   superficie: {
