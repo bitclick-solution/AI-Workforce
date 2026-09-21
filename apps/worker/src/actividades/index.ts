@@ -253,14 +253,42 @@ export function crearActividades(contexto: ContextoDeActividades) {
       ejecucionTemporalId: string;
     }): Promise<{ conto: boolean }> {
       return enTenant(contexto, peticion.tenantId, async (tx) => {
-        await tx`
+        const [fila] = await tx<{ tarea_padre_id: string | null }[]>`
           update tarea set
             estado = 'en_curso',
             flujo_temporal_id = ${peticion.flujoTemporalId},
             ejecucion_temporal_id = ${peticion.ejecucionTemporalId},
             proyectado_en = clock_timestamp()
           where tenant_id = ${peticion.tenantId} and id = ${peticion.tareaId}
+          returning tarea_padre_id
         `;
+        if (!fila) {
+          throw new Error(`La tarea ${peticion.tareaId} no existe en este tenant.`);
+        }
+
+        // Solo la raíz suma una unidad. El flujo hijo de una delegación arranca por
+        // aquí igual que el padre, y su consumo ya cuenta dentro de la raíz (ADR-003):
+        // contarlo otra vez cobraría dos tareas por una. `registrarTareaRaiz` lo
+        // rechaza con un error, y un error en una actividad interna se reintenta,
+        // así que preguntar antes no es una comodidad: es lo que evita que el hijo se
+        // quede reintentando veinte minutos contra una regla que nunca va a ceder.
+        if (fila.tarea_padre_id !== null) {
+          await anotar(tx, peticion.tenantId, {
+            actorTipo: 'plataforma',
+            puestoId: peticion.puestoId,
+            versionPuestoId: peticion.versionPuestoId,
+            tareaId: peticion.tareaId,
+            accion: ACCIONES.tareaArrancada,
+            datosReferenciados: [
+              { tipo: 'tarea', id: peticion.tareaId },
+              { tipo: 'tarea_padre', id: fila.tarea_padre_id },
+              { tipo: 'flujo_temporal', id: peticion.flujoTemporalId },
+            ],
+            resultado: 'exito',
+          });
+          return { conto: false };
+        }
+
         const contada = await registrarTareaRaiz(tx, peticion.tenantId, {
           tareaId: peticion.tareaId,
           puestoId: peticion.puestoId,

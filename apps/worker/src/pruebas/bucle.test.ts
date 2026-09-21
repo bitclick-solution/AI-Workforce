@@ -325,6 +325,68 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('bucle del agente · contra la base y el lib
     });
   });
 
+  it('una tarea hija no suma otra unidad al contador: cuenta dentro de su raíz', async () => {
+    const montaje = await montarParaPruebas({ nombre: `Bucle hija ${Date.now()}` });
+    montajes.push(montaje);
+    const tenantId = montaje.semilla.tenantId;
+
+    await montaje.actividades.arrancarTarea({
+      tenantId,
+      tareaId: montaje.tareaId,
+      puestoId: montaje.semilla.cobros.puestoId,
+      versionPuestoId: montaje.semilla.cobros.versionPuestoId,
+      flujoTemporalId: `prueba-${montaje.tareaId}`,
+      ejecucionTemporalId: 'sin-temporal',
+    });
+
+    // Una tarea que cuelga de la raíz, como la que abre una delegación.
+    const hijaId = await conTenant(montaje.cliente, tenantId, async (tx) => {
+      const [hija] = await tx<{ id: string }[]>`
+        insert into tarea (
+          tenant_id, tarea_raiz_id, tarea_padre_id, puesto_id, version_puesto_id,
+          origen, estado, presupuesto_euros
+        ) values (
+          ${tenantId}, ${montaje.tareaId}, ${montaje.tareaId},
+          ${montaje.semilla.conciliacion.puestoId},
+          ${montaje.semilla.conciliacion.versionPuestoId},
+          'delegacion', 'pendiente', 0.2
+        )
+        returning id
+      `;
+      if (!hija) throw new Error('No se creó la tarea hija.');
+      return hija.id;
+    });
+
+    const arrancada = await montaje.actividades.arrancarTarea({
+      tenantId,
+      tareaId: hijaId,
+      puestoId: montaje.semilla.conciliacion.puestoId,
+      versionPuestoId: montaje.semilla.conciliacion.versionPuestoId,
+      flujoTemporalId: `prueba-hija-${hijaId}`,
+      ejecucionTemporalId: 'sin-temporal',
+    });
+
+    // No cuenta, y no falla: arrancar un hijo es normal, y llamar a
+    // `registrarTareaRaiz` con él sería un error que se reintentaría en bucle.
+    expect(arrancada.conto).toBe(false);
+
+    const [contador] = await conTenant(montaje.cliente, tenantId, async (tx) => {
+      const filas = await tx<{ tareas: string }[]>`
+        select tareas from contador_consumo where tenant_id = ${tenantId}
+      `;
+      return [...filas];
+    });
+    expect(Number(contador?.tareas)).toBe(1);
+
+    // Pero su arranque sí queda en el libro, con el padre referenciado.
+    const cadena = await conTenant(montaje.cliente, tenantId, (tx) => leerCadena(tx, tenantId));
+    const arranque = cadena.find((entrada) => entrada.accion === 'tarea.arrancada');
+    expect(arranque?.tareaId).toBe(hijaId);
+    expect(arranque?.datosReferenciados).toEqual(
+      expect.arrayContaining([{ tipo: 'tarea_padre', id: montaje.tareaId }]),
+    );
+  });
+
   it('un guardia de salida tapa lo que tenga forma de credencial', async () => {
     const { crearGuardias, revisarTodo, REDACTADO } = await import('../bucle/guardias.js');
     const guardias = crearGuardias(['sin_secretos']);
