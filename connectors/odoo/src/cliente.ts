@@ -10,7 +10,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
-import { ErrorConector, motivoDeMensaje } from './errores.js';
+import { ErrorConector, motivoDeMensaje, recortarDetalle } from './errores.js';
 
 export interface ClienteMcpDinamico {
   /** Llama a una herramienta del MCP dinámico y devuelve su carga ya en JSON. */
@@ -49,9 +49,10 @@ function textoDe(resultado: ResultadoHerramienta): string {
 export function leerCarga(resultado: ResultadoHerramienta, herramienta: string): unknown {
   const texto = textoDe(resultado);
   if (resultado.isError === true) {
+    // El motivo se decide sobre el texto entero; el mensaje solo lleva el recorte.
     throw new ErrorConector(
       motivoDeMensaje(texto),
-      `El MCP dinámico rechazó «${herramienta}»: ${texto || 'sin detalle'}`,
+      `El MCP dinámico rechazó «${herramienta}»: ${recortarDetalle(texto) || 'sin detalle'}`,
     );
   }
   if (resultado.structuredContent !== undefined) return resultado.structuredContent;

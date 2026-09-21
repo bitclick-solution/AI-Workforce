@@ -31,7 +31,11 @@ Mismo contrato que sirve `connectors/demo` en la prueba técnica del stack: el g
 - `listar_facturas_vencidas` (lectura). Entrada `{ dias_vencida_minimo?, limite? }`; salida `{ facturas, total }` ordenada de más a menos días vencida. Nunca devuelve una factura que no está vencida.
 - `crear_nota_seguimiento` (escritura). Entrada `{ factura_id, texto, tipo?, fecha_limite?, clave_idempotencia? }`; salida `{ id, factura_id, tipo, creado_en }`. Con la misma `clave_idempotencia` devuelve la misma nota sin crear otra.
 
-Todo fallo sale como error MCP con `code`, `message` en español y `datos.motivo` en `{ no_encontrada, no_autorizado, temporal, invalido }`. Solo `temporal` es reintentable, y lo dice en `datos.reintentable`.
+Todo fallo sale como error MCP con `code`, `message` en español y `datos.motivo` en `{ no_encontrada, no_autorizado, temporal, invalido }`. Solo `temporal` es reintentable, y lo dice en `datos.reintentable`. El detalle que viene del ERP se recorta a su primera línea y a 300 caracteres: una traza de Odoo con SQL y nombres de tabla no tiene por qué llegar al contexto del modelo ni a los registros de aguas abajo, y la traza completa sigue en el MCP dinámico.
+
+### Idempotencia
+
+`clave_idempotencia` guarda junto a la nota la huella de los datos que la crearon. La misma clave con los mismos datos devuelve la misma nota; con datos distintos sale como `invalido`, en vez de devolver la nota vieja en silencio. Dos llamadas simultáneas con la misma clave esperan a la misma escritura y el ERP se escribe una vez. El almacén vive en el proceso y guarda 1000 claves, olvidando la más antigua al pasarlas; la garantía duradera entre reinicios es del flujo de Temporal y del gateway, que ya llevan clave por paso.
 
 ## Cómo se lanza
 

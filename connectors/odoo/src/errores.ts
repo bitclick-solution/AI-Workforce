@@ -46,10 +46,13 @@ export class ErrorConector extends Error {
 }
 
 const PATRONES: readonly (readonly [Motivo, RegExp])[] = [
-  ['no_encontrada', /not found|does not exist|no existe|unknown record|missing record|invalid id/i],
+  [
+    'no_encontrada',
+    /not found|does not exist|no existe|unknown record|missing record|invalid id|missingerror/i,
+  ],
   [
     'no_autorizado',
-    /access denied|access error|permission|forbidden|unauthorized|not allowed|no tiene acceso|authentication|invalid credentials/i,
+    /access\s?denied|access\s?error|permission|forbidden|unauthorized|not allowed|no tiene acceso|authentication|invalid credentials/i,
   ],
   [
     'temporal',
@@ -57,7 +60,7 @@ const PATRONES: readonly (readonly [Motivo, RegExp])[] = [
   ],
   [
     'invalido',
-    /invalid (field|domain|argument|value)|validation error|required field|campo obligatorio/i,
+    /invalid (field|domain|argument|value)|validation\s?error|user\s?error|required field|campo obligatorio/i,
   ],
 ];
 
@@ -75,9 +78,27 @@ export function motivoDeMensaje(mensaje: string): Motivo {
   return 'temporal';
 }
 
+/** Lo que cabe de un texto ajeno en un mensaje de error del conector. */
+export const LIMITE_DETALLE = 300;
+
+/**
+ * Recorta el detalle que viene del ERP antes de meterlo en un mensaje.
+ *
+ * Un fallo de Odoo puede traer una traza entera: SQL, nombres de tabla y
+ * detalle interno. Eso no tiene por qué llegar al contexto del modelo ni a los
+ * registros de aguas abajo, así que se queda en la primera línea y en
+ * `LIMITE_DETALLE` caracteres. Quien necesite la traza completa la tiene en el
+ * MCP dinámico, que es donde se produjo.
+ */
+export function recortarDetalle(texto: string, limite = LIMITE_DETALLE): string {
+  const primeraLinea = texto.split('\n', 1)[0] ?? '';
+  const limpio = primeraLinea.replace(/\s+/g, ' ').trim();
+  return limpio.length > limite ? `${limpio.slice(0, limite)}…` : limpio;
+}
+
 /** Convierte cualquier excepción en `ErrorConector`, conservando el motivo si ya lo tenía. */
 export function traducirError(error: unknown, contexto: string): ErrorConector {
   if (error instanceof ErrorConector) return error;
   const mensaje = error instanceof Error ? error.message : String(error);
-  return new ErrorConector(motivoDeMensaje(mensaje), `${contexto}: ${mensaje}`);
+  return new ErrorConector(motivoDeMensaje(mensaje), `${contexto}: ${recortarDetalle(mensaje)}`);
 }

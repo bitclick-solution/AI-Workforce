@@ -130,6 +130,79 @@ describe('crear_nota_seguimiento', () => {
     expect(cliente.llamadas).toHaveLength(1);
   });
 
+  it('la misma clave con otros datos se rechaza en vez de devolver la nota vieja', async () => {
+    const clave_idempotencia = 'tarea-7-paso-3';
+    await herramientas.crearNotaSeguimiento({
+      factura_id: 42,
+      texto: 'Primer aviso enviado.',
+      clave_idempotencia,
+    });
+    await expect(
+      herramientas.crearNotaSeguimiento({
+        factura_id: 43,
+        texto: 'Otro aviso distinto.',
+        clave_idempotencia,
+      }),
+    ).rejects.toMatchObject({ motivo: 'invalido' });
+    expect(cliente.llamadas).toHaveLength(1);
+  });
+
+  it('dos llamadas a la vez con la misma clave escriben una sola nota', async () => {
+    const entrada = {
+      factura_id: 42,
+      texto: 'Aviso simultáneo.',
+      clave_idempotencia: 'tarea-7-paso-4',
+    };
+    const [una, otra] = await Promise.all([
+      herramientas.crearNotaSeguimiento(entrada),
+      herramientas.crearNotaSeguimiento(entrada),
+    ]);
+    expect(otra).toEqual(una);
+    expect(cliente.llamadas).toHaveLength(1);
+  });
+
+  it('una clave cuya escritura falló no deja nada guardado y se puede reintentar', async () => {
+    const clave_idempotencia = 'tarea-7-paso-5';
+    await expect(
+      herramientas.crearNotaSeguimiento({
+        factura_id: 777777,
+        texto: 'Aviso.',
+        clave_idempotencia,
+      }),
+    ).rejects.toMatchObject({ motivo: 'temporal' });
+    const salida = await herramientas.crearNotaSeguimiento({
+      factura_id: 42,
+      texto: 'Aviso.',
+      clave_idempotencia,
+    });
+    expect(salida.id).toBe(9001);
+  });
+
+  it('el detalle del ERP llega recortado, sin traza ni SQL', async () => {
+    const conTraza = clienteGrabado({
+      chatter_post: [
+        {
+          error: [
+            'AccessError: no puedes modificar este documento',
+            'Traceback (most recent call last):',
+            'SELECT id, partner_id FROM account_move WHERE company_id = 1',
+          ].join('\n'),
+        },
+      ],
+    });
+    const solo = crearHerramientas({ cliente: conTraza, ahora: () => DIA_DE_LA_GRABACION });
+    try {
+      await solo.crearNotaSeguimiento({ factura_id: 42, texto: 'Aviso.' });
+      expect.unreachable('la llamada debía fallar');
+    } catch (error) {
+      const mensaje = (error as ErrorConector).message;
+      expect((error as ErrorConector).motivo).toBe('no_autorizado');
+      expect(mensaje).toContain('no puedes modificar este documento');
+      expect(mensaje).not.toContain('Traceback');
+      expect(mensaje).not.toContain('SELECT');
+    }
+  });
+
   it('sin clave de idempotencia cada llamada escribe', async () => {
     const entrada = { factura_id: 42, texto: 'Aviso.' };
     await herramientas.crearNotaSeguimiento(entrada);

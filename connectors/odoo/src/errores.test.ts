@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 import {
   CODIGO_POR_MOTIVO,
   ErrorConector,
+  LIMITE_DETALLE,
   MOTIVOS,
   motivoDeMensaje,
+  recortarDetalle,
   traducirError,
 } from './errores.js';
 
@@ -39,6 +41,9 @@ describe('traducción de los fallos del MCP dinámico', () => {
     ['Odoo ValidationError: unknown record id', 'no_encontrada'],
     ['Access denied for model account.move', 'no_autorizado'],
     ['AccessError: you are not allowed to modify this document', 'no_autorizado'],
+    ['AccessError sin más detalle', 'no_autorizado'],
+    ['MissingError: el registro ya no está', 'no_encontrada'],
+    ['ValidationError: el campo no admite ese valor', 'invalido'],
     ['Invalid credentials for the Odoo instance', 'no_autorizado'],
     ['Read timed out after 60s talking to Odoo', 'temporal'],
     ['fetch failed: ECONNREFUSED odoo-mcp:8000', 'temporal'],
@@ -50,6 +55,34 @@ describe('traducción de los fallos del MCP dinámico', () => {
 
   it('lo que no encaja se declara temporal y se reintenta', () => {
     expect(motivoDeMensaje('algo raro pasó')).toBe('temporal');
+  });
+
+  it('el cuerpo íntegro del ERP no entra en el mensaje', () => {
+    const traza = [
+      'AccessError: no puedes modificar este documento',
+      'Traceback (most recent call last):',
+      '  File "/usr/lib/python3/odoo/models.py", line 4821, in check_access_rule',
+      'SELECT id, name, partner_id FROM account_move WHERE company_id = 1',
+    ].join('\n');
+    const fallo = traducirError(new Error(traza), 'No se pudo anotar');
+    expect(fallo.motivo).toBe('no_autorizado');
+    expect(fallo.message).not.toContain('Traceback');
+    expect(fallo.message).not.toContain('SELECT');
+    expect(fallo.message).not.toContain('odoo/models.py');
+  });
+
+  it('un detalle larguísimo se queda en el límite y se marca recortado', () => {
+    const largo = `ValidationError: ${'dato interno '.repeat(200)}`;
+    const recortado = recortarDetalle(largo);
+    expect(recortado.length).toBe(LIMITE_DETALLE + 1);
+    expect(recortado.endsWith('…')).toBe(true);
+    expect(traducirError(new Error(largo), 'Contexto').message.length).toBeLessThan(
+      LIMITE_DETALLE + 50,
+    );
+  });
+
+  it('un detalle corto pasa entero y sin espacios sobrantes', () => {
+    expect(recortarDetalle('  Access   denied  ')).toBe('Access denied');
   });
 
   it('conserva el motivo de un ErrorConector y añade contexto al resto', () => {

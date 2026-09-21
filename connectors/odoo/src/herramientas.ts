@@ -37,6 +37,12 @@ const PAGOS_PENDIENTES = ['not_paid', 'partial'] as const;
 
 const MILISEGUNDOS_POR_DIA = 86_400_000;
 
+/** Lo guardado bajo una clave: la nota y la huella de los datos que la crearon. */
+export interface NotaIdempotente {
+  readonly huella: string;
+  readonly salida: SalidaNota;
+}
+
 /**
  * Memoria de claves de idempotencia.
  *
@@ -45,22 +51,43 @@ const MILISEGUNDOS_POR_DIA = 86_400_000;
  * y del gateway, que ya llevan clave por paso; queda fuera de esta rebanada.
  */
 export interface AlmacenIdempotencia {
-  leer(clave: string): SalidaNota | undefined;
-  guardar(clave: string, salida: SalidaNota): void;
+  leer(clave: string): NotaIdempotente | undefined;
+  guardar(clave: string, nota: NotaIdempotente): void;
 }
 
-export function almacenEnMemoria(maximo = 1000): AlmacenIdempotencia {
-  const notas = new Map<string, SalidaNota>();
+/** Claves que caben en memoria antes de empezar a olvidar las más viejas. */
+export const CLAVES_EN_MEMORIA = 1000;
+
+/**
+ * Almacén en memoria con tope y expulsión de la clave más antigua.
+ *
+ * El tope evita que un proceso largo acumule claves sin fin. Al pasarlo, la
+ * clave más vieja se olvida: una repetición suya volvería a escribir en el
+ * ERP. Con el volumen de cobros de un tenant no se alcanza, y la garantía
+ * duradera es del flujo, no de este almacén.
+ */
+export function almacenEnMemoria(maximo = CLAVES_EN_MEMORIA): AlmacenIdempotencia {
+  const notas = new Map<string, NotaIdempotente>();
   return {
     leer: (clave) => notas.get(clave),
-    guardar: (clave, salida) => {
+    guardar: (clave, nota) => {
       if (notas.size >= maximo) {
         const primera = notas.keys().next();
         if (!primera.done) notas.delete(primera.value);
       }
-      notas.set(clave, salida);
+      notas.set(clave, nota);
     },
   };
+}
+
+/** Los datos que hacen única a una nota: si cambian, la clave no vale para las dos. */
+export function huellaDeNota(argumentos: EntradaNotaResuelta): string {
+  return JSON.stringify([
+    argumentos.factura_id,
+    argumentos.tipo,
+    argumentos.texto,
+    argumentos.fecha_limite ?? null,
+  ]);
 }
 
 export interface OpcionesHerramientas {
@@ -118,6 +145,8 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
   const { cliente } = opciones;
   const ahora = opciones.ahora ?? (() => new Date());
   const almacen = opciones.almacen ?? almacenEnMemoria();
+  /** Escrituras en vuelo por clave de idempotencia, para las llamadas simultáneas. */
+  const enCurso = new Map<string, { huella: string; promesa: Promise<SalidaNota> }>();
 
   async function listarFacturasVencidas(entrada: unknown): Promise<SalidaListar> {
     const argumentos = validar(EntradaListarFacturasVencidas, entrada ?? {}, NOMBRES.listar);
@@ -204,24 +233,55 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
     };
   }
 
-  async function crearNotaSeguimiento(entrada: unknown): Promise<SalidaNota> {
-    const argumentos = validar(EntradaCrearNotaSeguimiento, entrada, NOMBRES.nota);
-    const clave = argumentos.clave_idempotencia;
-    if (clave !== undefined) {
-      const ya = almacen.leer(clave);
-      if (ya !== undefined) return ya;
-    }
+  async function escribir(argumentos: EntradaNotaResuelta): Promise<SalidaNota> {
     const momento = ahora();
     try {
-      const salida = SalidaCrearNotaSeguimiento.parse(
+      return SalidaCrearNotaSeguimiento.parse(
         argumentos.tipo === 'actividad'
           ? await crearActividad(argumentos, momento)
           : await anotarEnHistorial(argumentos, momento),
       );
-      if (clave !== undefined) almacen.guardar(clave, salida);
-      return salida;
     } catch (error) {
       throw traducirError(error, 'No se pudo crear la nota de seguimiento');
+    }
+  }
+
+  /** La misma clave con otros datos es un error del que llama, no una repetición. */
+  function comprobarHuella(guardada: string, actual: string, clave: string): void {
+    if (guardada === actual) return;
+    throw new ErrorConector(
+      'invalido',
+      `La clave de idempotencia «${clave}» ya se usó para otra nota. Usa una clave nueva o repite los mismos datos.`,
+    );
+  }
+
+  async function crearNotaSeguimiento(entrada: unknown): Promise<SalidaNota> {
+    const argumentos = validar(EntradaCrearNotaSeguimiento, entrada, NOMBRES.nota);
+    const clave = argumentos.clave_idempotencia;
+    if (clave === undefined) return escribir(argumentos);
+
+    const huella = huellaDeNota(argumentos);
+    const guardada = almacen.leer(clave);
+    if (guardada !== undefined) {
+      comprobarHuella(guardada.huella, huella, clave);
+      return guardada.salida;
+    }
+    // La escritura en vuelo se registra antes del primer `await`: dos llamadas a
+    // la vez con la misma clave esperan a la misma promesa y el ERP se escribe
+    // una sola vez.
+    const enVuelo = enCurso.get(clave);
+    if (enVuelo !== undefined) {
+      comprobarHuella(enVuelo.huella, huella, clave);
+      return enVuelo.promesa;
+    }
+    const promesa = escribir(argumentos);
+    enCurso.set(clave, { huella, promesa });
+    try {
+      const salida = await promesa;
+      almacen.guardar(clave, { huella, salida });
+      return salida;
+    } finally {
+      enCurso.delete(clave);
     }
   }
 
