@@ -161,20 +161,36 @@ async function escribirPaso(
   };
 }
 
-/** Coste acumulado de la tarea raíz, tal como lo dice `uso_modelo`. */
-async function costeDeLaRaiz(
+/**
+ * Coste acumulado de una tarea, tal como lo dice `uso_modelo`.
+ *
+ * Qué se suma depende de si la tarea es raíz, y la diferencia importa:
+ *
+ * - **Raíz**: todo su árbol, delegaciones incluidas. Es lo que se cobra al cliente
+ *   (ADR-003) y lo que decide si el bucle del padre se detiene.
+ * - **Hija**: solo lo suyo. Su presupuesto es el del contrato de la delegación, y
+ *   medirlo contra el gasto del árbol la haría detenerse por lo que gastó el padre
+ *   antes de delegarle nada. El tope del árbol ya lo vigila el padre, que sí mide
+ *   contra la raíz.
+ */
+async function costeDeLaTarea(
   tx: postgres.TransactionSql,
   tenantId: string,
   tareaId: string,
 ): Promise<number> {
   const [fila] = await tx<{ coste: string }[]>`
+    with esta as (
+      select id, tarea_padre_id, coalesce(tarea_raiz_id, id) as raiz
+      from tarea
+      where tenant_id = ${tenantId} and id = ${tareaId}
+    )
     select coalesce(sum(u.coste_euros), 0) as coste
-    from uso_modelo u
+    from uso_modelo u, esta
     where u.tenant_id = ${tenantId}
-      and u.tarea_raiz_id = (
-        select coalesce(t.tarea_raiz_id, t.id) from tarea t
-        where t.tenant_id = ${tenantId} and t.id = ${tareaId}
-      )
+      and case
+        when esta.tarea_padre_id is null then u.tarea_raiz_id = esta.raiz
+        else u.tarea_id = esta.id
+      end
   `;
   return Number(fila?.coste ?? 0);
 }
@@ -364,7 +380,7 @@ export function crearActividades(contexto: ContextoDeActividades) {
           // esta tarea no gasta. Nulo se reserva para «no hay límite», que en esta
           // rebanada solo ocurre si alguien lo pide explícitamente.
           presupuestoEuros: Number.isFinite(limite) ? limite : null,
-          gastadoEuros: await costeDeLaRaiz(tx, peticion.tenantId, peticion.tareaId),
+          gastadoEuros: await costeDeLaTarea(tx, peticion.tenantId, peticion.tareaId),
         };
       });
     },
@@ -452,7 +468,7 @@ export function crearActividades(contexto: ContextoDeActividades) {
             argumentos: llamada.argumentos,
           })),
           costeEuros: uso.costeEuros,
-          gastadoEuros: await costeDeLaRaiz(tx, peticion.tenantId, peticion.tareaId),
+          gastadoEuros: await costeDeLaTarea(tx, peticion.tenantId, peticion.tareaId),
           motivoFin: paso.motivoFin,
           ...(revisado.pasa
             ? {}
@@ -722,7 +738,7 @@ export function crearActividades(contexto: ContextoDeActividades) {
           update tarea set
             estado = ${peticion.estado},
             resultado = ${JSON.stringify(peticion.resultado ?? {})}::text::jsonb,
-            coste_euros = ${await costeDeLaRaiz(tx, peticion.tenantId, peticion.tareaId)},
+            coste_euros = ${await costeDeLaTarea(tx, peticion.tenantId, peticion.tareaId)},
             proyectado_en = clock_timestamp()
           where tenant_id = ${peticion.tenantId} and id = ${peticion.tareaId}
         `;
