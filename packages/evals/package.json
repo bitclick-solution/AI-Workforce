@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./puestos/cobros": {
+      "types": "./src/puestos/cobros.ts",
+      "default": "./src/puestos/cobros.ts"
     }
   },
   "files": [
@@ -18,6 +22,9 @@
     "test": "vitest run --passWithNoTests",
     "clean": "rm -rf dist coverage .turbo",
     "evals:smoke": "vitest run --config vitest.evals.config.ts"
+  },
+  "dependencies": {
+    "@aiw/models": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",
