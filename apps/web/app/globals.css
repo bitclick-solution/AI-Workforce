@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 
+/* Los componentes de @aiw/ui viven fuera de esta aplicación: sin esto, Tailwind
+   no ve sus clases y el panel se sirve sin estilos. */
+@source '../../../packages/ui/src';
+
 :root {
   color-scheme: light dark;
 }
