@@ -126,6 +126,9 @@ export const ESTADOS_NOTIFICACION = [
 export const ESTADOS_EVENTO_SALIDA = ['pendiente', 'publicado', 'fallido'] as const;
 
 export type Plan = (typeof PLANES)[number];
+export type EstadoPuesto = (typeof ESTADOS_PUESTO)[number];
+export type EstadoTarea = (typeof ESTADOS_TAREA)[number];
+export type ResultadoAccion = (typeof RESULTADOS_ACCION)[number];
 export type Nivel = (typeof NIVELES)[number];
 export type Ambito = (typeof AMBITOS)[number];
 export type SentidoDecision = (typeof SENTIDOS_DECISION)[number];

@@ -23,3 +23,7 @@ export * as esquemas from './esquemas/index.js';
 
 // Aprobación por correo v0
 export * from './puertos.js';
+
+// Prueba técnica del stack: motor mínimo de políticas y contrato de delegación
+export * from './politicas.js';
+export * from './delegacion.js';
