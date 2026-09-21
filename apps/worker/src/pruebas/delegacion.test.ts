@@ -43,6 +43,17 @@ function contrato(parcial: Partial<ContratoDelegacion> = {}): ContratoDelegacion
 let entorno: TestWorkflowEnvironment | null = null;
 let motivoSalto = HAY_BASE_DE_DATOS ? '' : MOTIVO_SALTO;
 
+/** Un fallo de flujo llega envuelto: el motivo real está en la cadena de causas. */
+function mensajesDe(error: unknown): string {
+  const partes: string[] = [];
+  let actual: unknown = error;
+  while (actual instanceof Error) {
+    partes.push(actual.message);
+    actual = actual.cause;
+  }
+  return partes.join(' ← ');
+}
+
 describe('delegación · plazo vencido y contrato del ADR-014', () => {
   const montajes: MontajeDePruebas[] = [];
   const trabajadores: TrabajadorDePrueba[] = [];
@@ -159,11 +170,14 @@ describe('delegación · plazo vencido y contrato del ADR-014', () => {
       contrato: sinAdr014 as unknown as ContratoDelegacion,
     }).catch((error: unknown) => error);
 
-    // Falla, y falla pronto: el contrato se valida al entrar en el flujo. La versión
-    // anterior de este código lo validaba al abrir la delegación, después de la
-    // tarea entera, y la actividad se reintentaba sesenta veces contra una carga que
-    // el libro nunca iba a aceptar.
+    // Falla, y falla pronto: el contrato se valida al entrar en el flujo y el fallo
+    // es un `ApplicationFailure` no reintentable, no un error de Zod que Temporal
+    // trataría como fallo de la tarea de flujo y reintentaría sin fin. La versión
+    // anterior lo validaba al abrir la delegación, después de la tarea entera, y la
+    // actividad se reintentaba sesenta veces contra una carga que el libro nunca
+    // iba a aceptar.
     expect(fallo).toBeInstanceOf(Error);
-    expect(String(fallo)).toMatch(/caducidadSegundos|politicaRespaldo|invalid|required/i);
+    expect(mensajesDe(fallo)).toMatch(/caducidadSegundos|politicaRespaldo/);
+    expect(mensajesDe(fallo)).toContain('ADR-014');
   }, 120_000);
 });

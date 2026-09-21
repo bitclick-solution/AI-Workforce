@@ -27,6 +27,7 @@ import {
   registrarTareaRaiz,
   registrarUsoDeModelo,
   solicitarAprobacion,
+  vencerAprobaciones,
   anotar,
 } from '@aiw/ledger';
 import {
@@ -628,6 +629,49 @@ export function crearActividades(contexto: ContextoDeActividades) {
       aprobacionId: string;
       motivo: string;
     }): Promise<DecisionRecibida> {
+      const leida = await enTenant(contexto, peticion.tenantId, (tx) =>
+        leerAprobacion(tx, peticion.tenantId, peticion.aprobacionId),
+      );
+      // Alguien decidió mientras el flujo esperaba. Gana la persona.
+      if (leida?.decision) {
+        return {
+          aprobacionId: peticion.aprobacionId,
+          sentido: leida.decision.sentido,
+          personaId: leida.decision.personaId,
+        };
+      }
+
+      // Ya venció por reloj: la vence la plataforma igual que lo hará la rutina
+      // nocturna, con `persona_id` nulo y entrada `aprobacion.vencida`. No sirve
+      // `registrarDecision`: esa es la puerta de los enlaces, y un enlace no decide
+      // una aprobación vencida —con razón—, así que devolvía «enlace rechazado» y
+      // dejaba la aprobación sin decisión. Lo enseñó la integración continua.
+      if (leida?.venceEn && leida.venceEn.getTime() <= Date.now()) {
+        const [vencida] = await vencerAprobaciones(contexto.cliente, peticion.tenantId, {
+          aprobacionId: peticion.aprobacionId,
+          motivo: peticion.motivo,
+        });
+        if (vencida) {
+          return {
+            aprobacionId: peticion.aprobacionId,
+            sentido: 'rechazada',
+            personaId: null,
+            motivo: peticion.motivo,
+          };
+        }
+        // Carrera: alguien decidió entre la lectura y el vencimiento. Gana la persona.
+        const releida = await enTenant(contexto, peticion.tenantId, (tx) =>
+          leerAprobacion(tx, peticion.tenantId, peticion.aprobacionId),
+        );
+        return {
+          aprobacionId: peticion.aprobacionId,
+          sentido: releida?.decision?.sentido ?? 'rechazada',
+          personaId: releida?.decision?.personaId ?? null,
+        };
+      }
+
+      // Todavía no venció y aun así hay que cerrarla: es el flujo hijo, que no espera
+      // decisiones humanas. La decide la plataforma ahora, con persona nula.
       const resultado = await registrarDecision(contexto.cliente, peticion.tenantId, {
         aprobacionId: peticion.aprobacionId,
         sentido: 'rechazada',

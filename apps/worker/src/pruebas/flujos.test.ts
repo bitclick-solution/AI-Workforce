@@ -337,15 +337,20 @@ describe('flujos durables · tareaAgente con servidor de Temporal', () => {
     expect(resultado.escriturasSaltadas).toBe(3);
     expect(resultado.escriturasEjecutadas).toBe(0);
 
-    // Quien vence aquí es el flujo, con `registrarDecision` y `persona_id` nulo, así
-    // que la entrada del libro es `aprobacion.rechazada` con herramienta `temporal`.
-    // `aprobacion.vencida` es de la rutina que barre por `vence_en`, que es otra cosa
-    // y llega en su rebanada.
-    const decisiones = await contarEnElLibro(montaje.cliente, montaje.semilla.tenantId, {
-      accion: 'aprobacion.rechazada',
-      herramienta: 'temporal',
+    // Quien vence aquí es el flujo, pero lo hace como lo hará la rutina nocturna:
+    // con `vencerAprobaciones`, `persona_id` nulo y entrada `aprobacion.vencida`.
+    // `registrarDecision` es la puerta de los enlaces y no decide una aprobación ya
+    // vencida: por ese camino el libro anotaba «enlace rechazado» y la aprobación
+    // se quedaba sin decisión.
+    const vencidas = await contarEnElLibro(montaje.cliente, montaje.semilla.tenantId, {
+      accion: 'aprobacion.vencida',
     });
-    expect(decisiones).toBe(3);
+    expect(vencidas).toBe(3);
+    expect(
+      await contarEnElLibro(montaje.cliente, montaje.semilla.tenantId, {
+        accion: 'aprobacion.enlace.rechazado',
+      }),
+    ).toBe(0);
 
     const sinPersona = await conTenant(montaje.cliente, montaje.semilla.tenantId, async (tx) => {
       const filas = await tx<{ persona_id: string | null; motivo: string | null }[]>`

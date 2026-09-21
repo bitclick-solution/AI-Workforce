@@ -461,6 +461,85 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('bucle del agente · contra la base y el lib
     expect(repetida.presupuestoEuros).toBe(0.5);
   });
 
+  it('vencer una aprobación ya caducada la resuelve la plataforma como `aprobacion.vencida`', async () => {
+    const montaje = await montarParaPruebas({ nombre: `Bucle vencimiento ${Date.now()}` });
+    montajes.push(montaje);
+    const tenantId = montaje.semilla.tenantId;
+    const identidad = {
+      tenantId,
+      puestoId: montaje.semilla.cobros.puestoId,
+      versionPuestoId: montaje.semilla.cobros.versionPuestoId,
+      tareaId: montaje.tareaId,
+    };
+    await montaje.actividades.arrancarTarea({
+      ...identidad,
+      flujoTemporalId: `prueba-${montaje.tareaId}`,
+      ejecucionTemporalId: 'sin-temporal',
+    });
+    const pedir = (numeroPaso: number, validezSegundos: number) =>
+      montaje.actividades.pedirAprobacion({
+        ...identidad,
+        claseAccion: 'escritura',
+        nivelExigido: 'n1',
+        borradorOpaco: { tipo: 'nota_seguimiento', carga: { factura_id: 'F-2026-0001' } },
+        resumenLegible: 'Nota de seguimiento a la factura F-2026-0001',
+        numeroPaso,
+        validezSegundos,
+      });
+
+    // Ya vencida cuando el flujo la vence: es lo que pasa tras esperar la validez.
+    const caducada = await pedir(1, 0);
+    const vencida = await montaje.actividades.vencerAprobacion({
+      tenantId,
+      aprobacionId: caducada.aprobacionId,
+      motivo: 'Vencida sin respuesta durante la ejecución del flujo',
+    });
+    expect(vencida).toMatchObject({ sentido: 'rechazada', personaId: null });
+
+    // Todavía viva: es el flujo hijo, que no espera decisiones humanas.
+    const viva = await pedir(2, 120);
+    const rechazada = await montaje.actividades.vencerAprobacion({
+      tenantId,
+      aprobacionId: viva.aprobacionId,
+      motivo: 'Un flujo hijo no espera decisiones humanas: el padre tiene su plazo',
+    });
+    expect(rechazada).toMatchObject({ sentido: 'rechazada', personaId: null });
+
+    // Vencerla otra vez no cambia nada y sigue diciendo lo mismo.
+    const repetida = await montaje.actividades.vencerAprobacion({
+      tenantId,
+      aprobacionId: caducada.aprobacionId,
+      motivo: 'Vencida sin respuesta durante la ejecución del flujo',
+    });
+    expect(repetida).toMatchObject({ sentido: 'rechazada', personaId: null });
+
+    const entradas = await conTenant(montaje.cliente, tenantId, async (tx) => {
+      const filas = await tx<{ accion: string; herramienta: string | null }[]>`
+        select accion, herramienta from entrada_auditoria
+        where tenant_id = ${tenantId} and accion like 'aprobacion.%'
+        order by numero_orden asc
+      `;
+      return [...filas].map(
+        (fila) => `${fila.accion}${fila.herramienta ? `@${fila.herramienta}` : ''}`,
+      );
+    });
+    expect(entradas).toEqual([
+      'aprobacion.solicitada',
+      'aprobacion.vencida',
+      'aprobacion.solicitada',
+      'aprobacion.rechazada@temporal',
+    ]);
+
+    const decisiones = await conTenant(montaje.cliente, tenantId, async (tx) => {
+      const filas = await tx<{ persona_id: string | null; motivo: string | null }[]>`
+        select persona_id, motivo from decision_aprobacion where tenant_id = ${tenantId}
+      `;
+      return [...filas];
+    });
+    expect(decisiones).toHaveLength(2);
+    expect(decisiones.every((decision) => decision.persona_id === null)).toBe(true);
+  });
+
   it('un guardia de salida tapa lo que tenga forma de credencial', async () => {
     const { crearGuardias, revisarTodo, REDACTADO } = await import('../bucle/guardias.js');
     const guardias = crearGuardias(['sin_secretos']);

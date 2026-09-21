@@ -26,7 +26,7 @@ import {
   workflowInfo,
   type ChildWorkflowHandle,
 } from '@temporalio/workflow';
-import { contratoDelegacion, type CargaSenalDecision } from '@aiw/domain';
+import { contratoDelegacion, type CargaSenalDecision, type ContratoDelegacion } from '@aiw/domain';
 
 import { ejecutarBucle, type OperacionesDelBucle } from '../bucle/bucle.js';
 import type {
@@ -111,6 +111,41 @@ const internas = proxyActivities<
 });
 
 /**
+ * Valida el contrato al entrar en el flujo y, si no cumple, hace fallar la ejecución.
+ *
+ * Tiene que ser un `ApplicationFailure` no reintentable y no el error de Zod: un
+ * error corriente lanzado desde el código del flujo es un fallo de la tarea de
+ * flujo, y Temporal la reintenta sin fin esperando a que el código se arregle. Lo
+ * enseñó la integración continua: un contrato sin caducidad dejaba el flujo girando
+ * hasta que la prueba se rendía por tiempo.
+ */
+function validarContrato(contrato: unknown): ContratoDelegacion {
+  const resultado = contratoDelegacion.safeParse(contrato);
+  if (resultado.success) return resultado.data;
+  throw ApplicationFailure.create({
+    message:
+      'El contrato de la delegación no cumple el ADR-014: ' +
+      resultado.error.issues
+        .map((problema) => `${problema.path.join('.') || '(raíz)'}: ${problema.message}`)
+        .join('; '),
+    type: 'ContratoDeDelegacionNoValido',
+    nonRetryable: true,
+  });
+}
+
+/** Mensajes de un error y de sus causas, del más externo al más profundo, sin repetir. */
+function mensajesDeLaCadena(error: unknown): string[] {
+  const mensajes: string[] = [];
+  let actual: unknown = error;
+  while (actual instanceof Error) {
+    if (actual.message && !mensajes.includes(actual.message)) mensajes.push(actual.message);
+    actual = actual.cause;
+  }
+  if (mensajes.length === 0) mensajes.push(String(error));
+  return mensajes;
+}
+
+/**
  * Flujo de una tarea de agente.
  *
  * Arranca, cuenta la tarea, ejecuta el bucle y proyecta el estado. Las aprobaciones
@@ -125,7 +160,7 @@ export async function tareaAgente(entrada: EntradaTareaAgente): Promise<Resultad
   // `politicaRespaldo` llegaba hasta `anotar`, que lo rechazaba, y la actividad se
   // reintentaba sesenta veces.
   const contratoDeLaDelegacion = entrada.delegacion
-    ? contratoDelegacion.parse(entrada.delegacion.contrato)
+    ? validarContrato(entrada.delegacion.contrato)
     : undefined;
 
   const info = workflowInfo();
@@ -292,12 +327,16 @@ export async function tareaAgente(entrada: EntradaTareaAgente): Promise<Resultad
     // tarea pasa a fallida con el motivo en `resultado`, que es lo que hay que poder
     // leer en el panel sin abrir Temporal.
     estado = 'fallida';
-    const motivo = error instanceof Error ? error.message : String(error);
+    // Lo que llega aquí es el envoltorio de Temporal («Activity task failed»); lo que
+    // pasó de verdad está al fondo de la cadena de causas, y eso es lo que tiene que
+    // poder leerse en la fila de la tarea sin abrir Temporal.
+    const causas = mensajesDeLaCadena(error);
+    const motivo = causas[causas.length - 1] ?? String(error);
     await internas.proyectarEstado({
       tenantId: entrada.tenantId,
       tareaId: entrada.tareaId,
       estado: 'fallida',
-      resultado: { motivo, pasos: pasosDados },
+      resultado: { motivo, pasos: pasosDados, ...(causas.length > 1 ? { causas } : {}) },
     });
     throw ApplicationFailure.create({
       message: `La tarea ${entrada.tareaId} falló: ${motivo}`,
@@ -318,7 +357,7 @@ export async function tareaAgente(entrada: EntradaTareaAgente): Promise<Resultad
  * delegación propia: la profundidad máxima de esta rebanada es uno.
  */
 export async function delegacion(entrada: EntradaDelegacion): Promise<ResultadoDelegacionHija> {
-  const contrato = contratoDelegacion.parse(entrada.contrato);
+  const contrato = validarContrato(entrada.contrato);
   const info = workflowInfo();
 
   await internas.arrancarTarea({
