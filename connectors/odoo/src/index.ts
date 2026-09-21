@@ -20,6 +20,7 @@ export { clienteGrabado, clienteHttp, leerCarga, HERRAMIENTAS_DINAMICAS } from '
 export type { ClienteMcpDinamico, Grabaciones, LlamadaGrabada } from './cliente.js';
 export {
   EXTREMO_MCP_POR_DEFECTO,
+  LONGITUD_MINIMA_SECRETO,
   MOTIVO_SALTO,
   VARIABLES,
   hayCredenciales,

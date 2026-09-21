@@ -59,6 +59,8 @@ Llegan solo por variables de entorno que el gateway inyecta al lanzar el proceso
 | `ODOO_CLAVE_API` | Clave de API. Vive en memoria del proceso y no sale de ahí.       |
 | `ODOO_MCP_URL`   | Extremo del MCP dinámico. Por defecto `http://odoo-mcp:8000/mcp`. |
 
+El conector rechaza al arrancar una `ODOO_CLAVE_API` de menos de ocho caracteres: por debajo de ese tamaño la redacción no la taparía —un valor tan corto puede ser una palabra común y taparlo dejaría los mensajes ilegibles—, y lo que no se puede redactar no se usa.
+
 Convención de despliegue: **una imagen del MCP dinámico por tenant**, arrancada con esas cuatro variables mapeadas a los nombres del proyecto original (`ODOO_URL`, `ODOO_DB`, `ODOO_USERNAME`, `ODOO_API_KEY`). El conector las valida al arrancar y falla rápido si falta alguna. El cifrado por tenant y la resolución de `conector.referencia_secreto` son del gateway MCP (`packages/mcp-gateway`, zona crítica): fuera del alcance de esta rebanada.
 
 ## Pruebas

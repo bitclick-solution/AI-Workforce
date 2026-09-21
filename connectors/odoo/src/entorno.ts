@@ -25,6 +25,15 @@ export const VARIABLES = ['ODOO_URL', 'ODOO_BASE', 'ODOO_USUARIO', 'ODOO_CLAVE_A
 
 export const EXTREMO_MCP_POR_DEFECTO = 'http://odoo-mcp:8000/mcp';
 
+/**
+ * Longitud mínima de un secreto para que la redacción lo tape.
+ *
+ * Por debajo, el valor podría ser una palabra común y taparlo dejaría los
+ * mensajes ilegibles. Por eso una clave más corta que esto no se acepta: lo
+ * que no se puede redactar no se usa.
+ */
+export const LONGITUD_MINIMA_SECRETO = 8;
+
 export const MOTIVO_SALTO =
   `Sin ${VARIABLES.join(', ')}: estas pruebas necesitan la instancia de pruebas de Odoo y el ` +
   'MCP dinámico. Defínelas en tu entorno para ejecutarlas; en la CI corren sobre las grabaciones de src/grabaciones.';
@@ -56,11 +65,18 @@ export function leerConfiguracion(entorno: Entorno = process.env): Configuracion
       'ODOO_URL no puede llevar usuario ni contraseña dentro: las credenciales van en ODOO_USUARIO y ODOO_CLAVE_API.',
     );
   }
+  const claveApi = (entorno['ODOO_CLAVE_API'] ?? '').trim();
+  if (claveApi.length < LONGITUD_MINIMA_SECRETO) {
+    throw new ErrorConector(
+      'invalido',
+      `ODOO_CLAVE_API es demasiado corta: la redacción no taparía un valor de menos de ${String(LONGITUD_MINIMA_SECRETO)} caracteres y podría acabar en un mensaje de error. Genera una clave de API de Odoo en condiciones.`,
+    );
+  }
   return {
     url,
     base: (entorno['ODOO_BASE'] ?? '').trim(),
     usuario: (entorno['ODOO_USUARIO'] ?? '').trim(),
-    claveApi: (entorno['ODOO_CLAVE_API'] ?? '').trim(),
+    claveApi,
     extremoMcp: (entorno['ODOO_MCP_URL'] ?? '').trim() || EXTREMO_MCP_POR_DEFECTO,
   };
 }
@@ -79,9 +95,10 @@ export function redactar(texto: string, secretos: readonly (string | undefined)[
   for (const secreto of secretos) {
     if (secreto === undefined) continue;
     const limpio = secreto.trim();
-    // Un valor corto podría ser una palabra común y taparía texto legítimo. Una
-    // credencial de Odoo nunca baja de ocho caracteres.
-    if (limpio.length < 8) continue;
+    // Un valor corto podría ser una palabra común y taparía texto legítimo.
+    // `leerConfiguracion` rechaza las claves que no llegan a este tamaño, así
+    // que ninguna credencial en uso se queda fuera de la redacción.
+    if (limpio.length < LONGITUD_MINIMA_SECRETO) continue;
     resultado = resultado.split(limpio).join(MARCA_OCULTA);
   }
   return resultado;

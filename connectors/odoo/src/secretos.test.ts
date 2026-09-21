@@ -14,7 +14,13 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { clienteGrabado } from './cliente.js';
-import { MARCA_OCULTA, VARIABLES, leerConfiguracion, redactar } from './entorno.js';
+import {
+  LONGITUD_MINIMA_SECRETO,
+  MARCA_OCULTA,
+  VARIABLES,
+  leerConfiguracion,
+  redactar,
+} from './entorno.js';
 import { cargarGrabaciones } from './grabaciones/index.js';
 import { crearHerramientas } from './herramientas.js';
 import { NOMBRES } from './herramientas.js';
@@ -76,6 +82,24 @@ describe('sin secretos en @aiw/connector-odoo', () => {
       const mensaje = (error as Error).message;
       expect(mensaje).toContain('ODOO_BASE');
       expect(mensaje).not.toContain(CLAVE_SEMBRADA);
+    }
+  });
+
+  it('una clave más corta que la redacción no se acepta', () => {
+    const corta = 'abc123';
+    expect(corta.length).toBeLessThan(LONGITUD_MINIMA_SECRETO);
+    try {
+      leerConfiguracion({
+        ODOO_URL: 'https://odoo.local',
+        ODOO_BASE: 'pruebas',
+        ODOO_USUARIO: 'agente',
+        ODOO_CLAVE_API: corta,
+      });
+      expect.unreachable('la clave corta debía rechazarse');
+    } catch (error) {
+      const mensaje = (error as Error).message;
+      expect(mensaje).toContain('ODOO_CLAVE_API');
+      expect(mensaje).not.toContain(corta);
     }
   });
 
