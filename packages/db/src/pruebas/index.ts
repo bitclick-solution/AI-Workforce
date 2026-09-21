@@ -5,3 +5,4 @@
 export * from './entorno.js';
 export * from './secretos.js';
 export * from './semilla.js';
+export * from './finanzas.js';
