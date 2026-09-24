@@ -54,6 +54,7 @@ describe('datos personales', () => {
   it.each([
     ['correo', 'escribe a marta.garcia@cliente.es hoy'],
     ['iban', 'cuenta ES91 2100 0418 4502 0005 1332'],
+    ['iban', 'cuenta es91 2100 0418 4502 0005 1332'],
     ['tarjeta', 'tarjeta 4111 1111 1111 1111'],
     ['documento', 'DNI 12345678Z'],
     ['documento', 'NIE X1234567L'],

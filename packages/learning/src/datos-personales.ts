@@ -18,7 +18,7 @@ export type ClaseDatoPersonal = 'correo' | 'iban' | 'tarjeta' | 'documento' | 't
 /** El orden importa: el IBAN y la tarjeta contienen secuencias que parecen teléfonos. */
 const PATRONES: readonly { clase: ClaseDatoPersonal; patron: RegExp }[] = [
   { clase: 'correo', patron: /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu },
-  { clase: 'iban', patron: /\b[A-Z]{2}\d{2}(?:[ -]?[A-Z0-9]{4}){3,7}(?:[ -]?[A-Z0-9]{1,4})?\b/g },
+  { clase: 'iban', patron: /\b[A-Z]{2}\d{2}(?:[ -]?[A-Z0-9]{4}){3,7}(?:[ -]?[A-Z0-9]{1,4})?\b/gi },
   { clase: 'tarjeta', patron: /\b(?:\d{4}[ -]?){3}\d{4}\b/g },
   // DNI (8 cifras y letra), NIE (X/Y/Z, 7 cifras y letra) y CIF (letra, 7 cifras y control).
   {

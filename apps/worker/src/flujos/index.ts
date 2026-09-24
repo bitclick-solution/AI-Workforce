@@ -18,6 +18,7 @@ import {
   ApplicationFailure,
   ParentClosePolicy,
   condition,
+  isCancellation,
   defineQuery,
   defineSignal,
   proxyActivities,
@@ -294,13 +295,30 @@ export async function tareaAgente(entrada: EntradaTareaAgente): Promise<Resultad
                 parentClosePolicy: ParentClosePolicy.ABANDON,
               });
             } catch (error) {
-              // Ya hay un flujo para esta edición (la tarea se reinició después de
-              // lanzarlo): el aprendizaje es idempotente por aprobación y la tarea
-              // no debe fallar por eso. Cualquier otro error sí sube.
-              if (!(
-                error instanceof Error && error.name === 'WorkflowExecutionAlreadyStartedError'
-              )) {
-                throw error;
+              // Solo sube la cancelación de la propia tarea. Si ya hay un flujo para
+              // esta edición (la tarea se reinició después de lanzarlo), no pasa
+              // nada: el aprendizaje es idempotente por aprobación. Cualquier otro
+              // fallo al lanzar el hijo no puede tumbar la tarea: el aprendizaje no
+              // es parte del trabajo. Se anota como incidencia y la tarea sigue.
+              if (isCancellation(error)) throw error;
+              if (error instanceof Error && error.name === 'WorkflowExecutionAlreadyStartedError') {
+                return;
+              }
+              try {
+                await internas.senalDeAprendizaje({
+                  ...identidad,
+                  tipo: 'incidencia',
+                  resumen: 'No se pudo lanzar el flujo de aprendizaje de una edición.',
+                  detalle: {
+                    aprobacionId,
+                    error: error instanceof Error ? error.message : String(error),
+                  },
+                  puntuacion: 0,
+                });
+              } catch (errorAlAnotar) {
+                // Ni siquiera anotar la incidencia puede tumbar la tarea: la edición
+                // sigue en `decision_aprobacion` y se puede aprender de ella después.
+                if (isCancellation(errorAlAnotar)) throw errorAlAnotar;
               }
             }
           }
