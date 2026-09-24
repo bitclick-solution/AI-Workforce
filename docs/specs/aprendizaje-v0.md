@@ -58,7 +58,7 @@ Cuando una persona edita el borrador de un agente antes de aprobarlo, esa edici�
 3. **Sin migración: el estado se deriva.** `leccion` y `promocion` son inmutables por disparador, así que `leccion.estado` queda en `propuesta` y `promocion.revertida_en` en nulo. Promocionada es «tiene promoción»; revertida es «su versión ya no está en el linaje activo», y la reversión queda en el libro. Si el panel necesita filtrar por estado, será una vista o una proyección, no un `UPDATE`.
 4. **Revertir mueve el puntero, no crea versión.** El plan dice «volver a cualquier versión anterior en un clic»; `puesto.version_activa_id` es mutable y su comentario dice que cambiarlo deja rastro en auditoría. Crear una versión copia duplicaría números sin información nueva.
 5. **Memoria viva y memoria congelada.** El prompt se compone con `version_puesto.memoria_congelada`, que es inmutable y reproduce exactamente lo que vio cada tarea. La promoción escribe además una fila en `memoria` con ámbito `puesto` para la búsqueda futura; la reversión la caduca (`caduca_en`), porque `memoria` es mutable.
-6. **Promoción manual siempre en v0.** El plan promociona memoria sola con aviso (N2); en v0 toda promoción la hace una persona y la clase `aprender` queda en N1, como pide finanzas.md para el periodo de prueba.
+6. **Promoción manual siempre en v0.** El plan promociona memoria sola con aviso (N2); en v0 toda promoción la hace una persona y la clase `aprender` queda en N1, como pide finanzas.md para el periodo de prueba. Jesús lo confirmó el 2026-09-24: sigue manual hasta que exista la evaluación en sombra.
 7. **Lección determinista y señal de tipo `correccion`.** La lección se redacta con una plantilla sobre la diferencia por rutas, sin modelo: coste cero y reproducible en la CI. El enum `tipo_senal` no tiene `edicion` y añadirlo sería una migración: se usa `correccion` con origen `aprobacion.editada`.
 8. **Datos personales.** Un detector propio y mínimo en `learning` sustituye correos, teléfonos, IBAN, DNI/NIE/CIF y tarjetas por «[dato personal]» antes de escribir la lección. El servicio `services/pii` lo sustituirá; la regla «nunca entrena con datos personales» no espera a él.
 9. **Bandera.** `AIW_APRENDIZAJE_V0=1` enciende el arranque del flujo desde la tarea y el CLI. La memoria congelada entra en el prompt siempre: es contenido de la versión, no una funcionalidad.
@@ -81,4 +81,6 @@ Presupuesto: 45 €. Referencia: «Sala v0» trabajó con 40 € y tocaba tres p
 
 ## Pregunta abierta
 
-¿La promoción de lecciones de memoria pasa a N2 (sola con aviso, como dice el plan) en la rebanada siguiente, o se mantiene manual hasta que exista la evaluación en sombra contra las 50 últimas tareas?
+Resuelta por Jesús el 2026-09-24: la promoción de lecciones de memoria sigue manual (N1) hasta que exista la evaluación en sombra contra las 50 últimas tareas. La promoción N2 con aviso no entra en la rebanada siguiente del bucle: depende de la evaluación en sombra.
+
+El índice único `(tenant_id, leccion_id)` en `promocion`, que el Revisor propuso como red de seguridad en la base, entra como migración en una rebanada propia antes de la revisión del viernes 2 de octubre.
