@@ -12,7 +12,8 @@
     "decidir": "tsx src/demo-decidir.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
-    "clean": "rm -rf dist coverage .turbo"
+    "clean": "rm -rf dist coverage .turbo",
+    "demo:sala": "tsx src/demo-sala.ts"
   },
   "dependencies": {
     "@ai-sdk/provider": "catalog:",
@@ -24,6 +25,8 @@
     "@aiw/ledger": "workspace:*",
     "@aiw/mcp-gateway": "workspace:*",
     "@aiw/models": "workspace:*",
+    "@aiw/platform-agents": "workspace:*",
+    "@aiw/rooms": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
     "@temporalio/activity": "catalog:",
     "@temporalio/client": "catalog:",

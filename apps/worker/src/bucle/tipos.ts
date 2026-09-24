@@ -204,6 +204,8 @@ export interface PeticionCerrarDelegacion {
 export interface EntradaTareaAgente extends IdentidadDeEjecucion {
   /** Lo que se le pide al agente, en idioma de negocio. */
   encargo: string;
+  /** Solo herramientas de lectura: la intervención en la sala no escribe (sala v0). */
+  soloLectura?: boolean | undefined;
   /** Tope de vueltas del bucle. Protege de un modelo que no sabe parar. */
   maxPasos?: number | undefined;
   /** Validez de cada aprobación, en segundos. */

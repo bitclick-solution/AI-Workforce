@@ -68,6 +68,21 @@ export function redactarNotas(facturas: readonly FacturaParaNota[]): NotaPropues
 }
 
 /**
+ * Resumen agregado de la cartera vencida para la sala: cuántas, cuánto y la más
+ * antigua. Ni un nombre de cliente ni un número de factura.
+ */
+export function resumirCartera(facturas: readonly FacturaParaNota[]): string {
+  const importe = facturas.reduce((suma, factura) => suma + factura.importe_pendiente, 0);
+  const antigua = Math.max(...facturas.map((factura) => factura.dias_vencida));
+  const masDe30 = facturas.filter((factura) => factura.dias_vencida > 30).length;
+  return (
+    `Este mes hay ${facturas.length} facturas vencidas por ${importe.toFixed(2)} € en total; ` +
+    `la más antigua lleva ${antigua} días y ${masDe30} pasan de 30 días. ` +
+    'Si quieres, preparo una nota de seguimiento para cada una y te la paso para aprobar.'
+  );
+}
+
+/**
  * El guion completo.
  *
  * No lleva estado propio: decide solo con la conversación. Por eso reanudar un
@@ -98,12 +113,11 @@ export const guionCobros: Guion = (contexto: ContextoDeGuion): RespuestaDeGuion 
 
   if (notasHechas.length === 0 && facturas.length > 0) {
     if (!contexto.herramientas.includes(HERRAMIENTA_NOTA)) {
-      return {
-        texto:
-          `Hay ${facturas.length} facturas vencidas, pero no tengo autorizada la ` +
-          'herramienta para dejar la nota de seguimiento.',
-        tokens: { entrada: 1200, salida: 50 },
-      };
+      // Sin la herramienta de escritura —una intervención en la sala es de solo
+      // lectura— responde con agregados: número, importe y antigüedad, sin nombres
+      // de clientes, que es lo que la sala general puede ver (plan v8, _Cómo funciona
+      // la sala_, privacidad).
+      return { texto: resumirCartera(facturas), tokens: { entrada: 1200, salida: 70 } };
     }
     return {
       texto: `Propongo una nota de seguimiento para cada una de las ${facturas.length} facturas vencidas.`,

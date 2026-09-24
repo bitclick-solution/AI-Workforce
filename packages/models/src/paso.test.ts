@@ -168,7 +168,7 @@ describe('paso de modelo · el bucle se queda en casa', () => {
     expect(segunda.tokens).toEqual(primera.tokens);
   });
 
-  it('sin la herramienta de escritura autorizada, el agente lo dice y no la pide', async () => {
+  it('sin la herramienta de escritura, responde con agregados y no la pide', async () => {
     const paso = await darPasoDeModelo({
       modelo: crearProveedorDePrueba({ guion: guionCobros }),
       sistema: 'Eres el agente de Cobros.',
@@ -197,7 +197,7 @@ describe('paso de modelo · el bucle se queda en casa', () => {
     });
 
     expect(paso.llamadas).toHaveLength(0);
-    expect(paso.texto).toContain('no tengo autorizada');
+    expect(paso.texto).toContain('facturas vencidas por');
   });
 });
 

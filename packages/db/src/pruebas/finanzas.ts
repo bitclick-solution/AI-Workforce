@@ -41,6 +41,11 @@ export interface OpcionesFinanzas {
   listaBlanca: readonly string[];
   /** Presupuesto por tarea del puesto de Cobros, en euros. */
   presupuestoEuros?: number | undefined;
+  /**
+   * Solo Cobros, sin Conciliación. Lo usa la sala v0: allí Conciliación bancaria
+   * se contrata desde una frase, y sembrarla antes haría la demostración trampa.
+   */
+  soloCobros?: boolean | undefined;
 }
 
 export interface FinanzasSembrado {
@@ -73,8 +78,16 @@ function exigir<T>(valor: T | undefined, que: string): T {
  */
 export async function sembrarFinanzas(
   cliente: postgres.Sql,
+  opciones: OpcionesFinanzas & { soloCobros: true },
+): Promise<Omit<FinanzasSembrado, 'conciliacion'>>;
+export async function sembrarFinanzas(
+  cliente: postgres.Sql,
   opciones: OpcionesFinanzas,
-): Promise<FinanzasSembrado> {
+): Promise<FinanzasSembrado>;
+export async function sembrarFinanzas(
+  cliente: postgres.Sql,
+  opciones: OpcionesFinanzas,
+): Promise<Omit<FinanzasSembrado, 'conciliacion'> & { conciliacion?: PuestoSembrado }> {
   const tenantId = uuidV7();
   const presupuesto = opciones.presupuestoEuros ?? 2;
 
@@ -170,6 +183,9 @@ export async function sembrarFinanzas(
         'No propones nada para una factura que no ha vencido.',
       MODELO_COBROS,
     );
+    if (opciones.soloCobros === true) {
+      return { tenantId, personaId, departamentoId, conectorId, cobros };
+    }
     const conciliacion = await sembrarPuesto(
       PUESTO_CONCILIACION,
       'en_prueba',

@@ -26,6 +26,7 @@ import {
   type ContextoDeActividades,
 } from '../actividades/contexto.js';
 import { crearTareaRaiz, sembrarDemostracion, type SemillaDeDemostracion } from '../semilla.js';
+import { sembrarSala, type SemillaDeSala } from '../semilla-sala.js';
 
 /**
  * Secreto del conector para las pruebas.
@@ -57,20 +58,26 @@ export interface MontajeDePruebas {
   cerrar: () => Promise<void>;
 }
 
-export async function montarParaPruebas(opciones: OpcionesMontaje): Promise<MontajeDePruebas> {
-  const trazas = new TrazasEnMemoria();
-  const contexto = crearContextoDeActividades({
+/** Contexto de actividades de prueba: base real, conector de demostración en memoria. */
+function contextoDePrueba(
+  trazas: TrazasEnMemoria,
+  fallosIniciales?: number | undefined,
+): ContextoDeActividades {
+  return crearContextoDeActividades({
     urlBaseDeDatos: URL_BASE_DE_DATOS ?? '',
     registro: registroConDemostracion({
       credencialEsperada: SECRETO_DE_PRUEBA,
-      ...(opciones.fallosIniciales === undefined
-        ? {}
-        : { fallosIniciales: opciones.fallosIniciales }),
+      ...(fallosIniciales === undefined ? {} : { fallosIniciales }),
     }),
     enrutador: enrutadorDeDemostracion(),
     secretos: resolvedorDeEntorno(ENTORNO_DE_PRUEBA),
     trazas,
   });
+}
+
+export async function montarParaPruebas(opciones: OpcionesMontaje): Promise<MontajeDePruebas> {
+  const trazas = new TrazasEnMemoria();
+  const contexto = contextoDePrueba(trazas, opciones.fallosIniciales);
 
   const semilla = await sembrarDemostracion(contexto.cliente, {
     nombre: opciones.nombre,
@@ -133,4 +140,28 @@ export async function leerPasos(
     order by numero asc
   `,
   );
+}
+
+export interface MontajeDeSala {
+  cliente: postgres.Sql;
+  contexto: ContextoDeActividades;
+  actividades: Actividades;
+  trazas: TrazasEnMemoria;
+  semilla: SemillaDeSala;
+  cerrar: () => Promise<void>;
+}
+
+/** Montaje de la sala v0: Finanzas con Cobros, sala general y el mismo contexto real. */
+export async function montarSalaParaPruebas(nombre: string): Promise<MontajeDeSala> {
+  const trazas = new TrazasEnMemoria();
+  const contexto = contextoDePrueba(trazas);
+  const semilla = await sembrarSala(contexto.cliente, { nombre });
+  return {
+    cliente: contexto.cliente,
+    contexto,
+    actividades: crearActividades(contexto),
+    trazas,
+    semilla,
+    cerrar: contexto.cerrar,
+  };
 }

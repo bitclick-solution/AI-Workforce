@@ -67,24 +67,37 @@ export async function sembrarDemostracion(
       : { presupuestoEuros: opciones.presupuestoEuros }),
   });
 
+  const tarifas = await registrarTarifasDePrueba(cliente, sembrado.tenantId, opciones.tarifaDesde);
+  return { ...sembrado, ...tarifas };
+}
+
+/**
+ * Tarifas de los dos modelos del proveedor de prueba. Las usan la demostración de
+ * cobros y la de la sala: sin tarifa, el uso de modelo no tiene precio.
+ */
+export async function registrarTarifasDePrueba(
+  cliente: postgres.Sql,
+  tenantId: string,
+  tarifaDesde?: Date | undefined,
+): Promise<{ tarifaId: string; tarifaConciliacionId: string }> {
   // Un día antes: la tarifa aplicable es la de mayor vigencia que no sea posterior
   // al uso, y un uso con la misma marca que su tarifa es una carrera que no hace
   // falta correr.
-  const vigenteDesde = opciones.tarifaDesde ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const vigenteDesde = tarifaDesde ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
   // Cada puesto usa su modelo del proveedor de prueba, y cada modelo necesita su
   // tarifa: el mismo precio, porque los dos son el mismo proveedor de mentira. Se
   // registran una detrás de otra: cada registro anota en el libro, y dos anotaciones
   // a la vez en la misma transacción leen el mismo eslabón anterior y rompen la cadena.
-  const [tarifa, tarifaConciliacion] = await conTenant(cliente, sembrado.tenantId, async (tx) => [
-    await registrarTarifa(tx, sembrado.tenantId, { ...TARIFA_DE_PRUEBA, vigenteDesde }),
-    await registrarTarifa(tx, sembrado.tenantId, {
+  const [tarifa, tarifaConciliacion] = await conTenant(cliente, tenantId, async (tx) => [
+    await registrarTarifa(tx, tenantId, { ...TARIFA_DE_PRUEBA, vigenteDesde }),
+    await registrarTarifa(tx, tenantId, {
       ...TARIFA_DE_PRUEBA,
       modelo: MODELO_PRUEBA_CONCILIACION,
       vigenteDesde,
     }),
   ]);
 
-  return { ...sembrado, tarifaId: tarifa.id, tarifaConciliacionId: tarifaConciliacion.id };
+  return { tarifaId: tarifa.id, tarifaConciliacionId: tarifaConciliacion.id };
 }
 
 export interface TareaSembrada {

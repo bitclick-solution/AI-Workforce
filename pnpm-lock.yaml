@@ -297,6 +297,12 @@ importers:
       '@aiw/models':
         specifier: workspace:*
         version: link:../../packages/models
+      '@aiw/platform-agents':
+        specifier: workspace:*
+        version: link:../platform-agents
+      '@aiw/rooms':
+        specifier: workspace:*
+        version: link:../../packages/rooms
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.30.0(zod@4.6.5)
