@@ -381,7 +381,20 @@ export async function ejecutarBucle(
       cuenta.aprobaciones += 1;
       aprobacionId = aprobacion.aprobacionId;
 
-      const decision = await operaciones.esperarDecision(aprobacion.aprobacionId, validez);
+      const recibida = await operaciones.esperarDecision(aprobacion.aprobacionId, validez);
+      // Una edición sin argumentos legibles no se ejecuta nunca con el borrador
+      // original: la persona aprobó otra cosa. Se trata como rechazo, que es el lado
+      // seguro, y queda el motivo en el paso.
+      const decision: DecisionRecibida =
+        recibida.sentido === 'editada' && recibida.argumentosEditados === undefined
+          ? {
+              ...recibida,
+              sentido: 'rechazada',
+              motivo:
+                'La persona editó el borrador, pero la edición no se pudo leer: ' +
+                'no se ejecuta el borrador original.',
+            }
+          : recibida;
 
       if (decision.sentido === 'rechazada') {
         const paso = siguientePaso();
