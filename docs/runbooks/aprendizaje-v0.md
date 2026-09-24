@@ -10,6 +10,33 @@ Cómo convertir a mano una lección propuesta en una versión nueva de un puesto
 - La bandera `AIW_APRENDIZAJE_V0=1`.
 - El identificador de la organización (`--tenant` o `AIW_TENANT`) y el tuyo como persona de esa organización (`--persona` o `AIW_PERSONA`). La promoción queda a tu nombre en el libro de auditoría.
 
+## Preparar la terminal
+
+Los mandatos leen la configuración del entorno de la terminal y **no** leen `.env`, igual que los de la [prueba técnica del stack](prueba-tecnica-del-stack.md). Carga `.env`, compón `DATABASE_URL` y enciende la bandera en la misma terminal donde vas a lanzar la demo o el CLI.
+
+En bash:
+
+```bash
+set -a; . ./.env; set +a
+export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/aiworkforce"
+export AIW_APRENDIZAJE_V0=1
+pnpm --filter @aiw/worker demo:aprendizaje
+```
+
+En PowerShell, desde la raíz del repositorio:
+
+```powershell
+Get-Content .env | Where-Object { $_ -match '^[A-Za-z_][A-Za-z0-9_]*=' } | ForEach-Object {
+  $nombre, $valor = $_ -split '=', 2
+  [Environment]::SetEnvironmentVariable($nombre, $valor.TrimEnd("`r"), 'Process')
+}
+$env:DATABASE_URL = "postgresql://$($env:POSTGRES_USER):$($env:POSTGRES_PASSWORD)@localhost:$($env:POSTGRES_PORT)/aiworkforce"
+$env:AIW_APRENDIZAJE_V0 = '1'
+pnpm --filter @aiw/worker demo:aprendizaje
+```
+
+Las variables duran lo que dure la terminal. La forma `AIW_APRENDIZAJE_V0=1 pnpm …` delante del mandato solo funciona en bash.
+
 ## Ver el expediente del puesto
 
 ```bash
