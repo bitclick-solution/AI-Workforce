@@ -226,7 +226,8 @@ console.log(`  tareas contadas:      ${contador?.tareas ?? 0}`);
 console.log(`  acciones:             ${contador?.acciones ?? 0}`);
 console.log(`  coste del contador:   ${Number(contador?.coste_euros ?? 0).toFixed(4)} €`);
 
-montado.trabajador.shutdown();
+// `runUntil` ya paró el trabajador al resolverse: pararlo otra vez lanza
+// `IllegalStateError`. Se vio al ejecutar la demostración de punta a punta.
 await montado.cerrar();
 await conexionTemporal.close();
 await clienteTemporal.connection.close();
