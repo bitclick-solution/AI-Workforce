@@ -7,6 +7,9 @@
  * cómo lo limita es lo que fija el ADR-004:
  *
  * - Una mención obliga a responder al mencionado.
+ * - Nunca más de dos intervenciones por mensaje, tampoco con menciones ni con
+ *   «@todos»: los que se quedan fuera los nombra el motivo. «Salvo que la persona
+ *   pida más» (plan v8) llega con los hilos; en v0 el tope es fijo.
  * - Sin mención, habla el puesto cuya ficha declara el tema del mensaje, con una
  *   intervención por defecto y dos como máximo.
  * - Una petición de operación de organización («contrata…») no es para ningún
@@ -139,39 +142,36 @@ export function moderar(
     (ESTADOS_QUE_INTERVIENEN as readonly string[]).includes(p.estado),
   );
 
-  // La persona que llama a todos pide más de dos a propósito: el límite no aplica.
-  if (MENCIONES_A_TODOS.some((mencion) => aparece(mencion, texto))) {
-    if (disponibles.length === 0) {
-      return {
-        tipo: 'silencio',
-        motivo: 'Se llamó a todo el equipo, pero no hay agentes en la sala.',
-      };
-    }
+  // Llamar a todos o mencionar a varios obliga a responder, pero sin pasar del
+  // tope: una mención de más no puede convertir la sala en ruido ni en coste.
+  const aTodos = MENCIONES_A_TODOS.some((mencion) => aparece(mencion, texto));
+  const mencionados = aTodos ? disponibles : disponibles.filter((p) => mencionado(p, texto));
+  if (aTodos && disponibles.length === 0) {
     return {
-      tipo: 'intervenir',
-      turnos: disponibles.map((p) => ({
-        puestoId: p.puestoId,
-        nombre: p.nombre,
-        motivo: 'La persona ha llamado a todo el equipo.',
-        porMencion: true,
-        coincidencias: 0,
-      })),
-      motivo: 'Mención a todo el equipo: responden todos los agentes de la sala.',
+      tipo: 'silencio',
+      motivo: 'Se llamó a todo el equipo, pero no hay agentes en la sala.',
     };
   }
-
-  const porMencion = disponibles.filter((p) => mencionado(p, texto));
-  if (porMencion.length > 0) {
+  if (mencionados.length > 0) {
+    const hablan = mencionados.slice(0, LIMITE_MAXIMO);
+    const esperan = mencionados.slice(LIMITE_MAXIMO).map((p) => p.nombre);
     return {
       tipo: 'intervenir',
-      turnos: porMencion.map((p) => ({
+      turnos: hablan.map((p) => ({
         puestoId: p.puestoId,
         nombre: p.nombre,
-        motivo: `La persona ha mencionado a ${p.nombre}: una mención obliga a responder.`,
+        motivo: aTodos
+          ? 'La persona ha llamado a todo el equipo.'
+          : `La persona ha mencionado a ${p.nombre}: una mención obliga a responder.`,
         porMencion: true,
         coincidencias: 0,
       })),
-      motivo: 'Responden los agentes mencionados.',
+      motivo:
+        (aTodos ? 'Mención a todo el equipo' : 'Responden los agentes mencionados') +
+        (esperan.length > 0
+          ? `: hablan ${hablan.map((p) => p.nombre).join(' y ')}; ${esperan.join(', ')} ` +
+            `no, por el límite de ${LIMITE_MAXIMO} por mensaje.`
+          : '.'),
     };
   }
 

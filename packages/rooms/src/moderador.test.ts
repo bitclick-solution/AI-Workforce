@@ -76,9 +76,30 @@ describe('moderar', () => {
     expect(decision.tipo === 'intervenir' && decision.turnos[0]?.porMencion).toBe(true);
   });
 
-  it('una mención a todo el equipo hace hablar a todos los disponibles', () => {
+  it('una mención a todo el equipo hace hablar a los disponibles, dos como máximo', () => {
     const decision = moderar('@todos resumen de la semana', SALA);
     expect(decision.tipo === 'intervenir' && decision.turnos.length).toBe(2);
+    const tercero: ParticipanteDeSala = {
+      puestoId: 'p-tercero',
+      nombre: 'Tesorería',
+      estado: 'activo',
+      temas: ['tesoreria'],
+    };
+    const conTres = moderar('@todos resumen de la semana', [...SALA, tercero]);
+    expect(conTres.tipo === 'intervenir' && conTres.turnos.length).toBe(LIMITE_MAXIMO);
+    expect(conTres.motivo).toContain('por el límite de 2');
+  });
+
+  it('ni mencionando a tres hablan más de dos', () => {
+    const tercero: ParticipanteDeSala = {
+      puestoId: 'p-tercero',
+      nombre: 'Tesorería',
+      estado: 'activo',
+      temas: [],
+    };
+    const decision = moderar('@Cobros @Conciliación @Tesorería ¿cómo lo veis?', [...SALA, tercero]);
+    expect(decision.tipo === 'intervenir' && decision.turnos.length).toBe(LIMITE_MAXIMO);
+    expect(decision.tipo === 'intervenir' && decision.turnos.every((t) => t.porMencion)).toBe(true);
   });
 
   it('un puesto pausado no habla ni con mención ni con tema', () => {

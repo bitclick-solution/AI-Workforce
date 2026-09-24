@@ -52,7 +52,8 @@ Una persona escribe en la sala general. El moderador clasifica el mensaje con la
 3. **La intervención es de solo lectura.** Responde con datos agregados; convertirla en trabajo con aprobaciones es «De conversación a trabajo», otra rebanada.
 4. **Temas y plantilla de origen en `puesto.ficha`.** Sin migración; la columna de origen del ADR-019 llega con su rebanada.
 5. **Coste de la propuesta:** `coste_estimado_euros` guarda el precio mensual de referencia para el cliente; `efectos_previstos.coste` añade tareas al mes y coste de modelos.
-6. **Caducidad:** siete días; al vencer, la propuesta pasa a `rechazada` con motivo «caducada» y se anota `propuesta.caducada`.
+6. **El tope de dos vale también con menciones y con «@todos».** El plan admite más «si la persona lo pide»; en v0 el tope es fijo y el motivo del moderador nombra a los que se quedan fuera. Pedir más llega con los hilos.
+7. **Caducidad:** siete días; al vencer, la propuesta pasa a `rechazada` con motivo «caducada» y se anota `propuesta.caducada`.
 
 ## Fuera de alcance
 

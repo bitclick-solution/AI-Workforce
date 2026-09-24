@@ -39,7 +39,7 @@ describe('evals de humo · moderador de sala', () => {
     expect(resultado.superado).toBe(false);
   });
 
-  it('falla si habla un pausado o si hablan tres sin mención', () => {
+  it('falla si habla un pausado o si hablan tres', () => {
     const resultado = evaluarDecisiones([
       {
         expectativa: {
@@ -60,7 +60,7 @@ describe('evals de humo · moderador de sala', () => {
         },
       },
     ]);
-    expect(resultado.diagnostico).toContain('turnos sin mención');
+    expect(resultado.diagnostico).toContain('más que el límite');
     expect(resultado.diagnostico).toContain('pausado');
   });
 

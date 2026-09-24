@@ -3,7 +3,7 @@
  *
  * Qué se evalúa: ante una sala de Finanzas con Cobros activo, Conciliación en prueba
  * y Previsión pausada, el moderador da la palabra a quien tiene el tema en su ficha,
- * obedece a las menciones, nunca da más de dos turnos sin que se pidan, calla cuando
+ * obedece a las menciones, nunca da más de dos turnos por mensaje, calla cuando
  * nadie tiene el tema, no deja hablar a un pausado y pasa las contrataciones al
  * Director de IA.
  *
@@ -52,6 +52,7 @@ export const EXPECTATIVAS: Expectativa[] = [
     hablan: ['conciliacion'],
   },
   { mensaje: '@Conciliación ¿estás?', tipo: 'intervenir', hablan: ['conciliacion'] },
+  { mensaje: '@todos ¿algo urgente?', tipo: 'intervenir', hablan: ['cobros', 'conciliacion'] },
   { mensaje: '¿cómo va la tesorería?', tipo: 'silencio' },
   { mensaje: '¿quién trae el café?', tipo: 'silencio' },
   { mensaje: 'contrata un agente de conciliación en Finanzas', tipo: 'operacion' },
@@ -73,8 +74,9 @@ export function evaluarDecisiones(
     if (decision.motivo.trim().length === 0) fallos.push(`${donde}: decisión sin motivo`);
     if (decision.tipo !== 'intervenir') continue;
     const hablan = decision.turnos.map((t) => t.puestoId).sort();
-    if (!decision.turnos.some((t) => t.porMencion) && hablan.length > LIMITE_MAXIMO) {
-      fallos.push(`${donde}: ${hablan.length} turnos sin mención`);
+    // El tope vale también con menciones y con «@todos» (ADR-004).
+    if (hablan.length > LIMITE_MAXIMO) {
+      fallos.push(`${donde}: ${hablan.length} turnos, más que el límite de ${LIMITE_MAXIMO}`);
     }
     if (hablan.some((id) => pausados.has(id))) fallos.push(`${donde}: habla un puesto pausado`);
     if (JSON.stringify(hablan) !== JSON.stringify([...(expectativa.hablan ?? [])].sort())) {
