@@ -18,6 +18,12 @@
     "test": "vitest run --passWithNoTests",
     "clean": "rm -rf dist coverage .turbo"
   },
+  "dependencies": {
+    "@ai-sdk/provider": "catalog:",
+    "@aiw/domain": "workspace:*",
+    "ai": "catalog:",
+    "zod": "catalog:"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",
