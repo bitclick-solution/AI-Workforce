@@ -10,10 +10,13 @@
  * Es la prueba más barata de esta rebanada y la que más pronto avisa: el error
  * típico al escribir un flujo es importar por error un módulo de actividades.
  */
+import { existsSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
+
 import { bundleWorkflowCode } from '@temporalio/worker';
 import { describe, expect, it } from 'vitest';
 
-import { RUTA_FLUJOS } from '../trabajador.js';
+import { RUTA_FLUJOS, resolverRutaDeFlujos } from '../trabajador.js';
 
 describe('paquete de flujos', () => {
   it('se empaqueta sin arrastrar nada que el entorno aislado no permita', async () => {
@@ -27,4 +30,34 @@ describe('paquete de flujos', () => {
     // en una actividad, así que queda en el historial de Temporal.
     expect(code).toContain('decidirPaso');
   }, 240_000);
+});
+
+describe('ruta del paquete de flujos', () => {
+  it('es una ruta absoluta que existe', () => {
+    expect(isAbsolute(RUTA_FLUJOS)).toBe(true);
+    expect(existsSync(RUTA_FLUJOS)).toBe(true);
+  });
+
+  // Regresión: con `URL.pathname` la ruta en Windows salía `/D:/…`, que no existe, y
+  // la demostración no arrancaba el trabajador. Se simula Windows sin salir de Linux.
+  it('en Windows es una ruta de unidad, sin la barra delante', () => {
+    const base = 'file:///D:/PROYECTOS/AI-Workforce/apps/worker/src/trabajador.ts';
+    const vistas: string[] = [];
+    const ruta = resolverRutaDeFlujos(base, {
+      windows: true,
+      existe: (candidata) => {
+        vistas.push(candidata);
+        return true;
+      },
+    });
+
+    expect(ruta).toBe('D:\\PROYECTOS\\AI-Workforce\\apps\\worker\\src\\flujos\\index.ts');
+    expect(vistas).toEqual([ruta]);
+  });
+
+  it('sin el fuente usa el compilado, que es lo que hay en la imagen', () => {
+    const base = 'file:///app/dist/trabajador-abc.js';
+    const ruta = resolverRutaDeFlujos(base, { windows: false, existe: () => false });
+    expect(ruta).toBe('/app/dist/flujos/index.js');
+  });
 });

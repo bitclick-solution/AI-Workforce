@@ -10,17 +10,42 @@ Cómo ejecutar, demostrar y diagnosticar la rebanada «Prueba técnica del stack
 
 ## Levantar el entorno
 
+`pnpm dev:up` levanta PostgreSQL, Temporal, Langfuse, Centrifugo, Silo y Mailpit. La primera vez copia `.env.example` a `.env` y sustituye cada `GENERAR` por un valor aleatorio local, incluidos `POSTGRES_PASSWORD` y `DEMO_CONECTOR_SECRETO`. No hay ninguna credencial versionada.
+
+Los mandatos de esta rebanada leen su configuración del entorno de la terminal y **no** leen `.env`. Antes de migrar o de lanzar la demostración, carga `.env` en la terminal, compón `DATABASE_URL` con los valores de PostgreSQL y enciende la bandera. El orden importa: `.env` trae `AIW_PRUEBA_STACK=0`, así que la bandera va después.
+
+En bash o zsh:
+
 ```bash
-pnpm dev:up                        # PostgreSQL, Temporal, Langfuse, Centrifugo, Silo, Mailpit
-pnpm --filter @aiw/db db:migrar    # esquema y roles
+pnpm dev:up
+set -a; . ./.env; set +a
+export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/aiworkforce"
+export AIW_PRUEBA_STACK=1
+pnpm --filter @aiw/db db:migrar
 ```
 
-`pnpm dev:up` copia `.env.example` a `.env` y sustituye cada `GENERAR` por un valor aleatorio local, incluido `DEMO_CONECTOR_SECRETO`. No hay ninguna credencial versionada.
+En PowerShell, desde la raíz del repositorio:
+
+```powershell
+pnpm dev:up
+Get-Content .env | Where-Object { $_ -match '^[A-Za-z_][A-Za-z0-9_]*=' } | ForEach-Object {
+  $nombre, $valor = $_ -split '=', 2
+  [Environment]::SetEnvironmentVariable($nombre, $valor, 'Process')
+}
+$env:DATABASE_URL = "postgresql://$($env:POSTGRES_USER):$($env:POSTGRES_PASSWORD)@localhost:$($env:POSTGRES_PORT)/aiworkforce"
+$env:AIW_PRUEBA_STACK = '1'
+pnpm --filter @aiw/db db:migrar
+```
+
+La forma `AIW_PRUEBA_STACK=1 pnpm …` delante del mandato solo funciona en bash. En PowerShell la variable se pone antes, en su propia línea, y dura lo que dure la terminal.
 
 ## La demostración
 
+En la misma terminal en la que cargaste el entorno:
+
 ```bash
-AIW_PRUEBA_STACK=1 pnpm --filter @aiw/worker demo:cobros
+pnpm --filter @aiw/worker demo:cobros          # espera a que decidas tú
+pnpm --filter @aiw/worker demo:cobros --auto   # se aprueba sola, para grabarla
 ```
 
 Qué hace, en orden:
@@ -36,6 +61,8 @@ Con `--auto` la demostración se aprueba a sí misma y no espera a nadie: es la 
 
 ## Decidir una aprobación
 
+Decide desde una segunda terminal, con el entorno cargado igual que en la primera: sin `DATABASE_URL` el mandato no puede leer la aprobación. La bandera no hace falta para decidir.
+
 ```bash
 pnpm --filter @aiw/worker decidir <aprobacionId> aprobada --tenant <tenantId>
 pnpm --filter @aiw/worker decidir <aprobacionId> rechazada --tenant <tenantId> --motivo "Ya nos pagó ayer"
@@ -50,16 +77,16 @@ El tenant hace falta y no se adivina: las políticas de RLS no dejan leer una ap
 
 ## Qué comprobar cuando algo va mal
 
-| Síntoma                                     | Dónde mirar                                                                                                       |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| El proceso arranca y termina sin hacer nada | Falta la bandera, `DATABASE_URL` o `DEMO_CONECTOR_SECRETO`. El propio proceso lo dice.                            |
-| `ConectorNoRegistrado`                      | El nombre de `conector.nombre` en la base no coincide con ninguna fábrica registrada en el proceso.               |
-| `ReferenciaDeSecretoNoResoluble`            | `conector.referencia_secreto` apunta a una variable que no está en el entorno del gateway.                        |
-| `HerramientaNoAutorizada`                   | La herramienta no está en `autorizacion_herramientas.lista_blanca`, o la autorización tiene `revocada_en` puesta. |
-| `PasoNoPermitido` con decisión `simular`    | El puesto está `en_prueba`. Es lo correcto: en prueba no se escribe fuera.                                        |
-| `PasoNoPermitido` con decisión `detener`    | La tarea agotó su presupuesto. Hay una aprobación de ampliación pendiente.                                        |
-| La tarea queda en `esperando_aprobacion`    | O hay una aprobación sin decidir, o se detuvo por presupuesto. `tarea.resultado` lo dice.                         |
-| La tarea pasa a `fallida`                   | El conector falló cuatro veces seguidas. El motivo está en `tarea.resultado` y los cuatro intentos en el libro.   |
+| Síntoma                                     | Dónde mirar                                                                                                                                              |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| El proceso arranca y termina sin hacer nada | Falta la bandera, `DATABASE_URL` o `DEMO_CONECTOR_SECRETO`. El propio proceso lo dice. Carga `.env` y enciende la bandera como en «Levantar el entorno». |
+| `ConectorNoRegistrado`                      | El nombre de `conector.nombre` en la base no coincide con ninguna fábrica registrada en el proceso.                                                      |
+| `ReferenciaDeSecretoNoResoluble`            | `conector.referencia_secreto` apunta a una variable que no está en el entorno del gateway.                                                               |
+| `HerramientaNoAutorizada`                   | La herramienta no está en `autorizacion_herramientas.lista_blanca`, o la autorización tiene `revocada_en` puesta.                                        |
+| `PasoNoPermitido` con decisión `simular`    | El puesto está `en_prueba`. Es lo correcto: en prueba no se escribe fuera.                                                                               |
+| `PasoNoPermitido` con decisión `detener`    | La tarea agotó su presupuesto. Hay una aprobación de ampliación pendiente.                                                                               |
+| La tarea queda en `esperando_aprobacion`    | O hay una aprobación sin decidir, o se detuvo por presupuesto. `tarea.resultado` lo dice.                                                                |
+| La tarea pasa a `fallida`                   | El conector falló cuatro veces seguidas. El motivo está en `tarea.resultado` y los cuatro intentos en el libro.                                          |
 
 ## Reconstruir el estado de una tarea
 

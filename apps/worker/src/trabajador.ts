@@ -6,12 +6,20 @@
  * bucle y en las actividades; esto es el cableado, y conviene que se lea como tal.
  */
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import { Worker, type NativeConnection } from '@temporalio/worker';
 import type postgres from 'postgres';
 
 import { crearActividades } from './actividades/index.js';
 import { crearContextoDeActividades, type OpcionesContexto } from './actividades/contexto.js';
+
+export interface OpcionesRutaDeFlujos {
+  /** Comprueba si existe un fichero. Por defecto, el sistema de ficheros real. */
+  existe?: ((ruta: string) => boolean) | undefined;
+  /** Fuerza la convención de rutas de Windows o de POSIX. Por defecto, la del proceso. */
+  windows?: boolean | undefined;
+}
 
 /**
  * Ruta del paquete de flujos, resuelta por el propio módulo para no depender del
@@ -20,10 +28,20 @@ import { crearContextoDeActividades, type OpcionesContexto } from './actividades
  * Se prueban las dos extensiones porque el mismo código corre de dos formas: desde
  * el fuente con `tsx` y en las pruebas, y compilado en la imagen. El empaquetador
  * de Temporal acepta TypeScript, así que desde el fuente se le da el `.ts`.
+ *
+ * La URL del módulo se convierte en ruta con `fileURLToPath` y no con `pathname`:
+ * en Windows `pathname` da `/D:/…`, que no existe, y Temporal no encontraría el
+ * paquete. Se vio al ejecutar la demostración en Windows.
  */
-function resolverRutaDeFlujos(): string {
-  const fuente = new URL('./flujos/index.ts', import.meta.url).pathname;
-  return existsSync(fuente) ? fuente : new URL('./flujos/index.js', import.meta.url).pathname;
+export function resolverRutaDeFlujos(
+  base: string | URL = import.meta.url,
+  opciones: OpcionesRutaDeFlujos = {},
+): string {
+  const existe = opciones.existe ?? existsSync;
+  const convencion = opciones.windows === undefined ? {} : { windows: opciones.windows };
+  const ruta = (relativa: string) => fileURLToPath(new URL(relativa, base), convencion);
+  const fuente = ruta('./flujos/index.ts');
+  return existe(fuente) ? fuente : ruta('./flujos/index.js');
 }
 
 export const RUTA_FLUJOS = resolverRutaDeFlujos();
