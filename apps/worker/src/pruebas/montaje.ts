@@ -21,7 +21,7 @@ import type postgres from 'postgres';
 import { crearActividades, type Actividades } from '../actividades/index.js';
 import {
   crearContextoDeActividades,
-  enrutadorDeCobros,
+  enrutadorDeDemostracion,
   registroConDemostracion,
   type ContextoDeActividades,
 } from '../actividades/contexto.js';
@@ -67,7 +67,7 @@ export async function montarParaPruebas(opciones: OpcionesMontaje): Promise<Mont
         ? {}
         : { fallosIniciales: opciones.fallosIniciales }),
     }),
-    enrutador: enrutadorDeCobros(),
+    enrutador: enrutadorDeDemostracion(),
     secretos: resolvedorDeEntorno(ENTORNO_DE_PRUEBA),
     trazas,
   });

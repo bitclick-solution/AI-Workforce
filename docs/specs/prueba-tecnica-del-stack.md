@@ -43,6 +43,7 @@ Sin endpoints nuevos. Dos puestos de Finanzas sembrados por script, no por la sa
 - Unitario: tabla de decisión del motor de políticas (clase × nivel × estado del puesto); parada por presupuesto; validación Zod del contrato de delegación; lista blanca y clasificación de herramientas; cálculo de coste con la tabla de precios.
 - Integración: entorno de pruebas de Temporal con salto de tiempo: reanudación tras caída, reintentos con espera, flujo hijo con contrato y plazo vencido, espera y señal de aprobación, proyección del estado; gateway contra el conector de demostración.
 - Eval: caso dorado `cobros`: dada la lista de facturas de prueba, el agente propone una nota de seguimiento correcta por factura y no propone ninguna para las no vencidas.
+- Eval: caso dorado `conciliacion`: con el encargo que delega Cobros, el agente propone el asiento de la factura pedida y de ninguna otra, cuadrado por su importe, citando número e identificador de la misma factura y sin afirmar un movimiento bancario que no ha visto.
 - Auditoría y contador: prueba de que cada paso deja entrada y de que el contador cuadra; verificación de la cadena al final.
 - Secretos: el secreto del conector de demostración llega por `DEMO_CONECTOR_SECRETO` en `.env.example` como `GENERAR`; prueba que rastrea mensajes y trazas en busca de su valor; gitleaks en CI.
 
@@ -72,6 +73,9 @@ Se escribe aquí y no se corrige el objetivo ni los criterios de hecho: la espec
 - **El aviso del 80 % se da en el paso que cruza el umbral**, contando el coste estimado del paso igual que hace la parada. Antes miraba solo lo gastado y un paso caro avisaba al siguiente.
 - **El conector de demostración produce los cuatro motivos de error**, `no_autorizado` incluido: revocar la credencial con la conexión abierta es lo que hace un sistema de gestión cuando alguien invalida la clave de API, y la plataforma no lo reintenta.
 - **El eval de humo de Cobros ejercita `redactarNotas`, no el guion completo.** La decisión herramienta a herramienta la cubren las pruebas del bucle; un eval del guion entero queda para la rebanada que certifique el puesto.
+- **Cada puesto contesta con el guion de su modelo.** El proveedor determinista tenía un solo guion y el hijo de Conciliación repetía el trabajo de Cobros. Ahora el `enrutado_modelo` de cada puesto dice un modelo distinto del proveedor `prueba` —`deterministico` y `deterministico-conciliacion`— y `enrutadorDeGuiones` elige el guion por modelo; un modelo sin guion falla en vez de contestar con el de otro puesto. Cada modelo necesita su fila en la tabla de precios, así que la semilla registra dos tarifas iguales.
+- **Dos anotaciones en paralelo dentro de la misma transacción rompen la cadena.** El cerrojo de `anotar` es `pg_advisory_xact_lock`, que es reentrante dentro de la transacción que ya lo tiene: con `Promise.all`, las dos leen el mismo eslabón anterior. Todo lo que anota se encadena con `await`, una detrás de otra.
+- **Conciliación no se inventa el cobro.** Sin extracto bancario, su informe deja `movimiento_bancario: null` y la propuesta `pendiente_de_extracto`; su caso dorado lo comprueba con un contraejemplo. La conciliación con extracto y con las cuentas de cada empresa es otra rebanada.
 - **Runbook**: `docs/runbooks/prueba-tecnica-del-stack.md`.
 
 ## Presupuesto de tokens

@@ -20,6 +20,16 @@ export const NOMBRE_DEPARTAMENTO = 'Finanzas';
 export const PUESTO_COBROS = 'Cobros';
 export const PUESTO_CONCILIACION = 'Conciliación';
 
+/**
+ * Modelo del proveedor de prueba de cada puesto: el enrutado es dato del puesto, y
+ * el proveedor de prueba contesta a cada modelo con el guion de su puesto. Son los
+ * mismos valores que `MODELO_PRUEBA` y `MODELO_PRUEBA_CONCILIACION` de
+ * `@aiw/models`, escritos aquí porque este paquete no depende de aquel; las pruebas
+ * del trabajador fallan si se separan, porque un modelo sin guion no contesta.
+ */
+export const MODELO_COBROS = 'deterministico';
+export const MODELO_CONCILIACION = 'deterministico-conciliacion';
+
 export interface OpcionesFinanzas {
   /** Nombre de la organización. Tiene que ser único en la base. */
   nombre: string;
@@ -102,6 +112,7 @@ export async function sembrarFinanzas(
       nombre: string,
       estado: 'activo' | 'en_prueba',
       prompt: string,
+      modelo: string,
     ): Promise<PuestoSembrado> {
       const politica = {
         niveles: { lectura: 'n3', escritura: 'n1' },
@@ -114,7 +125,7 @@ export async function sembrarFinanzas(
         insert into puesto (tenant_id, departamento_id, nombre, clase_riesgo, estado, enrutado_modelo)
         values (
           ${tenantId}, ${departamentoId}, ${nombre}, 'medio', ${estado},
-          '{"proveedor":"prueba","modelo":"deterministico"}'::jsonb
+          ${JSON.stringify({ proveedor: 'prueba', modelo })}::text::jsonb
         )
         returning id
       `;
@@ -157,12 +168,14 @@ export async function sembrarFinanzas(
       'Eres el agente de Cobros de Finanzas. Revisas las facturas vencidas y ' +
         'propones una nota de seguimiento por cada una, en el tono de la organización. ' +
         'No propones nada para una factura que no ha vencido.',
+      MODELO_COBROS,
     );
     const conciliacion = await sembrarPuesto(
       PUESTO_CONCILIACION,
       'en_prueba',
       'Eres el agente de Conciliación de Finanzas. Cruzas una factura con el ' +
         'extracto bancario y propones el asiento. Estás en prueba: no escribes en ningún sistema.',
+      MODELO_CONCILIACION,
     );
 
     return { tenantId, personaId, departamentoId, conectorId, cobros, conciliacion };

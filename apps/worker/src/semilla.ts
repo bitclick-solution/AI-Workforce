@@ -18,7 +18,7 @@ import {
   REFERENCIA_SECRETO_DEMO,
 } from '@aiw/connector-demo';
 import { registrarTarifa } from '@aiw/ledger';
-import { MODELO_PRUEBA, PROVEEDOR_PRUEBA } from '@aiw/models';
+import { MODELO_PRUEBA, MODELO_PRUEBA_CONCILIACION, PROVEEDOR_PRUEBA } from '@aiw/models';
 import type postgres from 'postgres';
 
 /**
@@ -39,7 +39,10 @@ export const TARIFA_DE_PRUEBA = {
 };
 
 export interface SemillaDeDemostracion extends FinanzasSembrado {
+  /** Tarifa del modelo de Cobros. */
   tarifaId: string;
+  /** Tarifa del modelo de Conciliación: sin ella, el uso del hijo no tiene precio. */
+  tarifaConciliacionId: string;
 }
 
 export interface OpcionesSemilla {
@@ -64,17 +67,24 @@ export async function sembrarDemostracion(
       : { presupuestoEuros: opciones.presupuestoEuros }),
   });
 
-  const tarifa = await conTenant(cliente, sembrado.tenantId, (tx) =>
-    registrarTarifa(tx, sembrado.tenantId, {
+  // Un día antes: la tarifa aplicable es la de mayor vigencia que no sea posterior
+  // al uso, y un uso con la misma marca que su tarifa es una carrera que no hace
+  // falta correr.
+  const vigenteDesde = opciones.tarifaDesde ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
+  // Cada puesto usa su modelo del proveedor de prueba, y cada modelo necesita su
+  // tarifa: el mismo precio, porque los dos son el mismo proveedor de mentira. Se
+  // registran una detrás de otra: cada registro anota en el libro, y dos anotaciones
+  // a la vez en la misma transacción leen el mismo eslabón anterior y rompen la cadena.
+  const [tarifa, tarifaConciliacion] = await conTenant(cliente, sembrado.tenantId, async (tx) => [
+    await registrarTarifa(tx, sembrado.tenantId, { ...TARIFA_DE_PRUEBA, vigenteDesde }),
+    await registrarTarifa(tx, sembrado.tenantId, {
       ...TARIFA_DE_PRUEBA,
-      // Un día antes: la tarifa aplicable es la de mayor vigencia que no sea
-      // posterior al uso, y un uso con la misma marca que su tarifa es una carrera
-      // que no hace falta correr.
-      vigenteDesde: opciones.tarifaDesde ?? new Date(Date.now() - 24 * 60 * 60 * 1000),
+      modelo: MODELO_PRUEBA_CONCILIACION,
+      vigenteDesde,
     }),
-  );
+  ]);
 
-  return { ...sembrado, tarifaId: tarifa.id };
+  return { ...sembrado, tarifaId: tarifa.id, tarifaConciliacionId: tarifaConciliacion.id };
 }
 
 export interface TareaSembrada {

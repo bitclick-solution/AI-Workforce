@@ -36,6 +36,7 @@ export interface ResultadoEval {
 
 /** Casos dorados por puesto. Uno por comportamiento de agente. */
 export * as cobros from './puestos/cobros.js';
+export * as conciliacion from './puestos/conciliacion.js';
 
 export function casoDorado(caso: CasoDorado): CasoDorado {
   if (caso.id.trim() === '') {

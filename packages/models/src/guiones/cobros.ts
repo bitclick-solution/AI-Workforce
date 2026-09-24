@@ -17,9 +17,8 @@
  * igualdad con una cadena escrita a mano. Así el día que un proveedor de verdad
  * sustituya este guion, el mismo evaluador sirve sin tocar una línea.
  */
-import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
-
 import type { ContextoDeGuion, Guion, RespuestaDeGuion } from '../proveedor-prueba.js';
+import { facturasDelResultado, resultadosDe } from './lectura.js';
 
 export const HERRAMIENTA_LISTAR = 'listar_facturas_vencidas';
 export const HERRAMIENTA_NOTA = 'crear_nota_seguimiento';
@@ -66,57 +65,6 @@ export function redactarNotas(facturas: readonly FacturaParaNota[]): NotaPropues
       '¿Nos confirmas cuándo la vas a pagar? Si hay algún problema con ella, dínoslo ' +
       'y lo miramos.',
   }));
-}
-
-/** Resultados de herramienta que ya hay en la conversación, por nombre. */
-function resultadosDe(prompt: LanguageModelV4Prompt, herramienta: string): string[] {
-  const textos: string[] = [];
-  for (const mensaje of prompt) {
-    if (mensaje.role !== 'tool') continue;
-    for (const parte of mensaje.content) {
-      if (parte.type !== 'tool-result' || parte.toolName !== herramienta) continue;
-      const salida = parte.output;
-      if (salida.type === 'text' || salida.type === 'error-text') textos.push(salida.value);
-      else if (salida.type === 'json' || salida.type === 'error-json') {
-        textos.push(JSON.stringify(salida.value));
-      }
-      // Una ejecución denegada no es un resultado: no hay nada que leer en ella.
-    }
-  }
-  return textos;
-}
-
-/**
- * Lee la cartera del resultado de la herramienta.
- *
- * Un resultado que no es la carga del contrato no es una cartera de facturas, y
- * entonces no hay nada sobre lo que escribir: el agente no inventa notas sobre algo
- * que no ha entendido. Eso incluye los errores del contrato, que también son JSON.
- */
-function facturasDelResultado(texto: string): FacturaParaNota[] {
-  try {
-    const analizado: unknown = JSON.parse(texto);
-    const facturas = (analizado as { facturas?: unknown }).facturas;
-    if (!Array.isArray(facturas)) return [];
-    return facturas
-      .filter(
-        (factura): factura is Record<string, unknown> =>
-          typeof factura === 'object' && factura !== null,
-      )
-      .map((factura) => {
-        const cliente = factura['cliente'] as { id?: unknown; nombre?: unknown } | undefined;
-        return {
-          id: String(factura['id']),
-          numero: String(factura['numero']),
-          cliente: { id: String(cliente?.id ?? ''), nombre: String(cliente?.nombre ?? '') },
-          importe_pendiente: Number(factura['importe_pendiente']),
-          moneda: String(factura['moneda'] ?? 'EUR'),
-          dias_vencida: Number(factura['dias_vencida']),
-        };
-      });
-  } catch {
-    return [];
-  }
 }
 
 /**

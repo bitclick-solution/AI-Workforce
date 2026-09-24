@@ -405,6 +405,14 @@ describe('flujos durables · tareaAgente con servidor de Temporal', () => {
     expect(resultado.delegacion?.entregado).toBe(true);
     expect(resultado.delegacion?.tareaDestinoId).toBeTruthy();
 
+    // El hijo contesta con el guion de Conciliación, no con el de Cobros: entrega el
+    // informe en JSON con el asiento de la factura que pide el contrato.
+    const entregado = JSON.parse(resultado.delegacion?.resumen ?? '{}') as {
+      propuestas?: { factura?: string; movimiento_bancario?: unknown }[];
+    };
+    expect(entregado.propuestas?.map((propuesta) => propuesta.factura)).toEqual(['F-2026-0001']);
+    expect(entregado.propuestas?.[0]?.movimiento_bancario).toBeNull();
+
     const delegaciones = await conTenant(montaje.cliente, tenantId, async (tx) => {
       const filas = await tx<
         {

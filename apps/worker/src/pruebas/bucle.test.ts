@@ -195,6 +195,8 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('bucle del agente · contra la base y el lib
   });
 
   it('un puesto en prueba simula las escrituras y no toca el conector', async () => {
+    // Conciliación con el encargo de Cobros, que no nombra ninguna factura: concilia
+    // las tres vencidas y deja una nota por cada una, que el puesto en prueba simula.
     const { resultado } = await correr({
       nombre: `Bucle en prueba ${Date.now()}`,
       puesto: 'conciliacion',
@@ -203,6 +205,39 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('bucle del agente · contra la base y el lib
     expect(resultado.escriturasSimuladas).toBe(3);
     expect(resultado.escriturasEjecutadas).toBe(0);
     expect(resultado.estado).toBe('completada');
+  });
+
+  it('Conciliación contesta con su guion: propone el asiento de la factura del encargo', async () => {
+    const { resultado } = await correr({
+      nombre: `Bucle conciliación ${Date.now()}`,
+      puesto: 'conciliacion',
+      entrada: { encargo: 'Concilia la factura F-2026-0001 con el extracto bancario.' },
+    });
+
+    expect(resultado.estado).toBe('completada');
+    // Una sola nota, la de la factura pedida, y simulada porque el puesto está en prueba.
+    expect(resultado.escriturasSimuladas).toBe(1);
+    expect(resultado.escriturasEjecutadas).toBe(0);
+
+    // Entrega el informe en JSON, sin afirmar un cobro que no ha visto.
+    const informe = JSON.parse(resultado.resumen) as {
+      propuestas: {
+        factura: string;
+        importe: number;
+        asiento_propuesto: { debe: number; haber: number }[];
+        movimiento_bancario: unknown;
+      }[];
+    };
+    expect(informe.propuestas.map((propuesta) => propuesta.factura)).toEqual(['F-2026-0001']);
+    const [propuesta] = informe.propuestas;
+    const debe = (propuesta?.asiento_propuesto ?? []).reduce((suma, linea) => suma + linea.debe, 0);
+    const haber = (propuesta?.asiento_propuesto ?? []).reduce(
+      (suma, linea) => suma + linea.haber,
+      0,
+    );
+    expect(debe).toBeCloseTo(propuesta?.importe ?? -1, 2);
+    expect(haber).toBeCloseTo(propuesta?.importe ?? -1, 2);
+    expect(propuesta?.movimiento_bancario).toBeNull();
   });
 
   it('el presupuesto agotado detiene el bucle y pide la ampliación', async () => {

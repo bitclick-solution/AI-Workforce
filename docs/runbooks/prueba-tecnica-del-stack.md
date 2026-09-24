@@ -54,7 +54,7 @@ Qué hace, en orden:
 2. Arranca un trabajador de Temporal en una cola propia y lanza el flujo `tareaAgente`.
 3. El agente llama a `listar_facturas_vencidas` por el gateway. Salen tres facturas.
 4. Por cada factura propone `crear_nota_seguimiento`, que es escritura N1: se crea una aprobación con borrador opaco y resumen legible, y el flujo espera. La demostración imprime el mandato exacto para decidir cada una.
-5. Tras las notas, delega la conciliación de la primera factura al puesto **Conciliación** como flujo hijo con contrato. El hijo está en prueba, así que sus escrituras quedan simuladas.
+5. Tras las notas, delega la conciliación de la primera factura al puesto **Conciliación** como flujo hijo con contrato. El hijo contesta con su propio guion: busca la factura entre las vencidas, propone el asiento 572 Bancos a 430 Clientes por su importe, lo anota en la factura y entrega un informe en JSON. Como ningún conector le da el extracto bancario, el informe deja el movimiento vacío y la propuesta pendiente de cruzar. El hijo está en prueba, así que su nota queda simulada. La demostración imprime el resumen y las líneas del asiento.
 6. Cierra la tarea e imprime pasos, aprobaciones, escrituras hechas, saltadas y simuladas, coste en euros, verificación de la cadena de auditoría y el contador.
 
 Con `--auto` la demostración se aprueba a sí misma y no espera a nadie: es la forma de grabarla de un tirón.

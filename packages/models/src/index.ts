@@ -30,4 +30,4 @@ export * from './trazas.js';
 export * from './paso.js';
 export * from './conversacion.js';
 export * from './cache-de-prompts.js';
-export * from './guiones/cobros.js';
+export * from './guiones/index.js';

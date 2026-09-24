@@ -27,15 +27,13 @@ import {
   type ResolvedorDeSecretos,
 } from '@aiw/mcp-gateway';
 import {
-  Enrutador,
   TrazasEnMemoria,
   crearCacheDePrompts,
-  crearProveedorDePrueba,
-  guionCobros,
+  enrutadorDeGuiones,
   type CacheDePrompts,
+  type Enrutador,
   type PuertoDeTrazas,
 } from '@aiw/models';
-import { PROVEEDOR_PRUEBA } from '@aiw/models';
 import type postgres from 'postgres';
 
 export interface OpcionesContexto {
@@ -127,11 +125,13 @@ export function registroPorHttp(nombreConector: string, url: string): RegistroDe
   );
 }
 
-/** Enrutador con el proveedor determinista del puesto de Cobros registrado. */
-export function enrutadorDeCobros(): Enrutador {
-  return new Enrutador().registrar(PROVEEDOR_PRUEBA, (modeloId) =>
-    crearProveedorDePrueba({ guion: guionCobros, modeloId }),
-  );
+/**
+ * Enrutador de la demostración y de las pruebas: el proveedor determinista, que
+ * contesta a cada puesto con el guion de su modelo. Cobros y Conciliación hacen
+ * cada uno su trabajo porque su `enrutado_modelo` dice modelos distintos.
+ */
+export function enrutadorDeDemostracion(): Enrutador {
+  return enrutadorDeGuiones();
 }
 
 export function crearContextoDeActividades(opciones: OpcionesContexto): ContextoDeActividades {
@@ -146,7 +146,7 @@ export function crearContextoDeActividades(opciones: OpcionesContexto): Contexto
   return {
     cliente: conexion.cliente,
     gateway,
-    enrutador: opciones.enrutador ?? enrutadorDeCobros(),
+    enrutador: opciones.enrutador ?? enrutadorDeDemostracion(),
     cachePrompts: crearCacheDePrompts(),
     trazas: opciones.trazas ?? new TrazasEnMemoria(),
     cerrar: async () => {

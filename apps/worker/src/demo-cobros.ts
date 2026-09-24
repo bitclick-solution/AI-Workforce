@@ -63,6 +63,50 @@ const clienteTemporal = new Client({
   namespace: configuracion.temporal.espacio,
 });
 
+/**
+ * Imprime lo que entrega el hijo. Conciliación entrega un informe en JSON, que es el
+ * formato del contrato; se enseña legible, con el asiento propuesto línea a línea.
+ * Si lo entregado no es ese informe —un respaldo por plazo vencido, por ejemplo—,
+ * se imprime tal cual.
+ */
+function imprimirEntrega(texto: string): void {
+  let informe: {
+    resumen?: unknown;
+    propuestas?: {
+      factura?: unknown;
+      asiento_propuesto?: {
+        cuenta?: unknown;
+        concepto?: unknown;
+        debe?: unknown;
+        haber?: unknown;
+      }[];
+      movimiento_bancario?: unknown;
+    }[];
+  };
+  try {
+    informe = JSON.parse(texto) as typeof informe;
+  } catch {
+    console.log(`    resumen:            ${texto}`);
+    return;
+  }
+  console.log(`    resumen:            ${String(informe.resumen ?? '')}`);
+  for (const propuesta of informe.propuestas ?? []) {
+    console.log(`    asiento ${String(propuesta.factura)}:`);
+    for (const linea of propuesta.asiento_propuesto ?? []) {
+      const importe =
+        Number(linea.debe) > 0
+          ? `debe  ${Number(linea.debe).toFixed(2)}`
+          : `haber ${Number(linea.haber).toFixed(2)}`;
+      console.log(
+        `      ${String(linea.cuenta)} ${String(linea.concepto).padEnd(10)} ${importe} €`,
+      );
+    }
+    console.log(
+      `      movimiento bancario: ${propuesta.movimiento_bancario === null ? 'pendiente, sin extracto' : String(propuesta.movimiento_bancario)}`,
+    );
+  }
+}
+
 /** Aprobaciones que ya se han mostrado, para no repetirlas en cada vuelta. */
 const mostradas = new Set<string>();
 
@@ -197,7 +241,7 @@ console.log(`  coste:                ${resultado.costeEuros.toFixed(4)} €`);
 if (resultado.delegacion) {
   console.log(`  delegación:           ${resultado.delegacion.tareaDestinoId}`);
   console.log(`    entregada:          ${resultado.delegacion.entregado ? 'sí' : 'no'}`);
-  console.log(`    resumen:            ${resultado.delegacion.resumen}`);
+  imprimirEntrega(resultado.delegacion.resumen);
   if (resultado.delegacion.respaldoAplicado) {
     console.log(`    respaldo aplicado:  ${resultado.delegacion.respaldoAplicado}`);
   }
