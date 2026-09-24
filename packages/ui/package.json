@@ -23,7 +23,9 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "@types/react": "catalog:",
-    "react": "catalog:"
+    "react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "react-dom": "catalog:"
   },
   "peerDependencies": {
     "react": "catalog:"
