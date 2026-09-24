@@ -140,9 +140,15 @@ importers:
       '@aiw/mcp-gateway':
         specifier: workspace:*
         version: link:../../packages/mcp-gateway
+      '@aiw/rooms':
+        specifier: workspace:*
+        version: link:../../packages/rooms
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.30.0(zod@4.6.5)
+      '@temporalio/client':
+        specifier: 'catalog:'
+        version: 1.24.0
       postgres:
         specifier: 'catalog:'
         version: 3.4.9
@@ -212,6 +218,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/rooms
     devDependencies:
+      '@aiw/evals':
+        specifier: workspace:*
+        version: link:../../packages/evals
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.4
@@ -297,6 +306,12 @@ importers:
       '@aiw/models':
         specifier: workspace:*
         version: link:../../packages/models
+      '@aiw/platform-agents':
+        specifier: workspace:*
+        version: link:../platform-agents
+      '@aiw/rooms':
+        specifier: workspace:*
+        version: link:../../packages/rooms
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.30.0(zod@4.6.5)
@@ -443,6 +458,9 @@ importers:
       '@aiw/models':
         specifier: workspace:*
         version: link:../models
+      '@aiw/rooms':
+        specifier: workspace:*
+        version: link:../rooms
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

@@ -58,6 +58,7 @@ import type {
   SalidaPasoModelo,
 } from '../bucle/tipos.js';
 import { enTenant, type ContextoDeActividades } from './contexto.js';
+import { crearActividadesDeSala } from './sala.js';
 
 /** Acciones del libro que escriben estas actividades. Un solo sitio, se añaden. */
 export const ACCIONES = {
@@ -1016,6 +1017,9 @@ export function crearActividades(contexto: ContextoDeActividades) {
         carga: cargaDeSenal(peticion.tenantId, leida, leida.decision, 'plataforma'),
       };
     },
+
+    // Sala v0: publicar, moderar, intervenir, proponer y contratar.
+    ...crearActividadesDeSala(contexto),
   };
 }
 

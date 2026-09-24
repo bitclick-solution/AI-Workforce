@@ -199,7 +199,15 @@ export async function tareaAgente(entrada: EntradaTareaAgente): Promise<Resultad
   };
 
   const operaciones: OperacionesDelBucle = {
-    leerContexto: () => internas.leerContexto(identidad),
+    // Una intervención en la sala es de solo lectura (docs/specs/sala-v0.md,
+    // decisión 3): el modelo no ve las herramientas de escritura, así que ni puede
+    // pedirlas. Se filtra en cada lectura del contexto, no una vez al empezar.
+    leerContexto: async () => {
+      const contexto = await internas.leerContexto(identidad);
+      return entrada.soloLectura === true
+        ? { ...contexto, herramientas: contexto.herramientas.filter((h) => h.tipo === 'lectura') }
+        : contexto;
+    },
 
     async pasoModelo(peticion) {
       const salida = await externas.pasoModelo(peticion);
@@ -414,3 +422,6 @@ export async function delegacion(entrada: EntradaDelegacion): Promise<ResultadoD
     costeEuros: resultado.costeEuros,
   };
 }
+
+// Sala v0: moderación, intervenciones y propuestas de operación.
+export * from './sala.js';

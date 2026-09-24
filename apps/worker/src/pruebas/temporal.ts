@@ -33,10 +33,16 @@ export interface EntornoDePruebas {
  */
 export async function arrancarEntorno(clase: ClaseDeEntorno): Promise<EntornoDePruebas> {
   const { TestWorkflowEnvironment } = await import('@temporalio/testing');
+  // Sin salida a `temporal.download`, el binario del CLI de Temporal se puede traer
+  // aparte (por ejemplo de sus versiones en GitHub) y apuntar aquí. Solo sirve para
+  // el servidor local; el de salto de tiempo sigue necesitando la descarga.
+  const cli = process.env['AIW_TEMPORAL_CLI'];
   try {
     const entorno =
       clase === 'local'
-        ? await TestWorkflowEnvironment.createLocal()
+        ? await TestWorkflowEnvironment.createLocal(
+            cli ? { server: { executable: { type: 'existing-path', path: cli } } } : {},
+          )
         : await TestWorkflowEnvironment.createTimeSkipping();
     return { entorno, motivoSalto: '' };
   } catch (error) {

@@ -38,6 +38,9 @@ export interface ResultadoEval {
 export * as cobros from './puestos/cobros.js';
 export * as conciliacion from './puestos/conciliacion.js';
 
+/** Casos dorados de los agentes de plataforma que viven en paquetes. */
+export * as moderador from './plataforma/moderador.js';
+
 export function casoDorado(caso: CasoDorado): CasoDorado {
   if (caso.id.trim() === '') {
     throw new Error('Un caso dorado necesita un identificador.');
