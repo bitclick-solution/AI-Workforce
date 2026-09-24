@@ -83,6 +83,37 @@ export const parametrosLeccion = z.object({
   rango: z.tuple([z.number(), z.number()]).optional(),
 });
 
+/**
+ * Edición del borrador antes de aprobar, en `decision_aprobacion.edicion_previa`:
+ * la carga que propuso el agente y la que aprobó la persona. Las dos son opacas
+ * (ADR-001); el aprendizaje solo compara sus rutas.
+ */
+export const edicionBorrador = z
+  .object({ antes: z.unknown(), despues: z.unknown() })
+  .refine((valor) => valor.antes !== undefined && valor.despues !== undefined, {
+    message: 'la edición necesita la carga de antes y la de después',
+  });
+
+/**
+ * Memoria congelada de una versión de puesto: las líneas que su prompt incluye bajo
+ * «Lo que ya sabes», cada una con la lección que la originó. Una versión anterior a
+ * esta forma guarda `{}`, que se lee como memoria vacía.
+ */
+export const memoriaCongelada = z.object({
+  lineas: z
+    .array(z.object({ leccionId: z.string().min(1), texto: z.string().min(1) }))
+    .default([]),
+});
+
+/** Lección que origina una versión de puesto, en `version_puesto.lecciones_origen`. */
+export const leccionesOrigen = z.array(
+  z.object({
+    leccionId: z.string().min(1),
+    senalIds: z.array(z.string().min(1)).default([]),
+    promocionadaPorPersonaId: z.string().min(1),
+  }),
+);
+
 export const umbralesIndicador = z.object({
   aviso: z.number().optional(),
   alerta: z.number().optional(),
@@ -132,6 +163,9 @@ export type BrandVoice = z.infer<typeof brandVoice>;
 export type PoliticaPuesto = z.infer<typeof politicaPuesto>;
 export type BorradorOpaco = z.infer<typeof borradorOpaco>;
 export type ParametrosLeccion = z.infer<typeof parametrosLeccion>;
+export type EdicionBorrador = z.infer<typeof edicionBorrador>;
+export type MemoriaCongelada = z.infer<typeof memoriaCongelada>;
+export type LeccionesOrigen = z.infer<typeof leccionesOrigen>;
 export type DatosReferenciados = z.infer<typeof datosReferenciados>;
 export type CambioDeNivel = z.infer<typeof cambioDeNivel>;
 export type PlanOrganizacion = z.infer<typeof planOrganizacion>;
