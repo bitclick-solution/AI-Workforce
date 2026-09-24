@@ -133,6 +133,26 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     await expect(promesa).rejects.toMatchObject({ codigo });
   }
 
+  /**
+   * Sondea `pg_stat_activity` hasta ver una sesión propia esperando un bloqueo con su
+   * `INSERT` en `promocion` en vuelo. Sustituye una espera de tiempo fijo por una
+   * señal real de la base: la propia sesión siempre ve el texto completo de sus
+   * consultas en `pg_stat_activity`, sin permisos extra.
+   */
+  async function esperaBloqueadaEnInsertDePromocion(cliente: postgres.Sql): Promise<void> {
+    for (let intento = 0; intento < 200; intento++) {
+      const [fila] = await cliente<{ n: string }[]>`
+        select count(*)::text as n from pg_stat_activity
+        where wait_event_type = 'Lock' and query ilike '%insert into promocion%'
+      `;
+      if (Number(fila?.n) > 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    throw new Error(
+      'La sesión de promocionarLeccion nunca llegó a bloquearse en su INSERT de promocion.',
+    );
+  }
+
   it('la decisión «editada» exige la edición y ninguna otra la admite', async () => {
     const aprobacionId = await pedirAprobacion(org);
     await expect(
@@ -374,6 +394,10 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     const senal = await registrarSenalDeEdicion(cliente, org.tenantId, aprobacionId);
     const leccion = await proponerLeccion(cliente, org.tenantId, senal);
 
+    let insertadaDirecta!: () => void;
+    const insertaHecha = new Promise<void>((resolve) => {
+      insertadaDirecta = resolve;
+    });
     let comprometer!: () => void;
     const detenido = new Promise<void>((resolve) => {
       comprometer = resolve;
@@ -386,22 +410,24 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
           ${org.tenantId}, ${leccion.leccionId}, ${org.versionPuestoId}, ${org.personaId}, '{}'::jsonb
         )
       `;
+      // El INSERT ya está hecho (aunque sin confirmar): a partir de aquí, quien
+      // intente insertar la misma lección choca con esta fila y se queda esperando.
+      insertadaDirecta();
       await detenido;
     });
 
-    // Da tiempo a que el INSERT directo llegue al servidor antes de arrancar la
-    // promoción por la aplicación.
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Determinista: el INSERT directo ya se ejecutó (aunque sigue sin confirmar), así
+    // que arrancar la promoción por la aplicación ahora no depende del reloj.
+    await insertaHecha;
     const viaAplicacion = promocionarLeccion(cliente, org.tenantId, {
       leccionId: leccion.leccionId,
       personaId: org.personaId,
       puerta: CERTIFICA,
     });
 
-    // Da tiempo a que `promocionarLeccion` pase su comprobación previa (que todavía
-    // no ve la fila sin confirmar) y llegue a su propio INSERT, que se queda
-    // esperando al índice mientras la transacción directa siga abierta.
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Determinista: espera a que la sesión de `promocionarLeccion` aparezca bloqueada
+    // en su propio INSERT contra el índice único, en vez de adivinar un tiempo fijo.
+    await esperaBloqueadaEnInsertDePromocion(cliente);
     comprometer();
 
     await esperarError(viaAplicacion, 'ya_promocionada');
