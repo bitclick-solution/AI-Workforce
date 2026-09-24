@@ -1,0 +1,69 @@
+{
+  "_nota": "Respuestas grabadas del MCP dinámico contra la instancia de pruebas de Odoo. Datos inventados: ninguna persona, empresa, factura o importe real. Fecha de referencia de las pruebas: 2026-09-21.",
+  "search_records": [
+    {
+      "carga": {
+        "records": [
+          {
+            "id": 42,
+            "name": "F-2026-0412",
+            "partner_id": [7, "Ferretería Ejemplo SA"],
+            "amount_residual": 1840.0,
+            "currency_id": [1, "EUR"],
+            "invoice_date": "2026-08-10",
+            "invoice_date_due": "2026-09-09"
+          },
+          {
+            "id": 43,
+            "name": "F-2026-0418",
+            "partner_id": [9, "Cliente de Pruebas SL"],
+            "amount_residual": 420.5,
+            "currency_id": [1, "EUR"],
+            "invoice_date": "2026-08-19",
+            "invoice_date_due": "2026-09-18"
+          },
+          {
+            "id": 44,
+            "name": "F-2026-0401",
+            "partner_id": [11, "Talleres Imaginarios SA"],
+            "amount_residual": 7600.0,
+            "currency_id": [1, "EUR"],
+            "invoice_date": "2026-06-23",
+            "invoice_date_due": "2026-07-23"
+          },
+          {
+            "id": 45,
+            "name": "F-2026-0425",
+            "partner_id": [9, "Cliente de Pruebas SL"],
+            "amount_residual": 210.0,
+            "currency_id": [1, "EUR"],
+            "invoice_date": "2026-08-22",
+            "invoice_date_due": "2026-09-22"
+          }
+        ],
+        "length": 4
+      }
+    }
+  ],
+  "chatter_post": [
+    { "argumentos": { "res_id": 999999 }, "error": "Record does not exist: account.move(999999,)" },
+    { "argumentos": { "res_id": 888888 }, "error": "Access denied for model account.move" },
+    { "argumentos": { "res_id": 777777 }, "error": "Read timed out after 60s talking to Odoo" },
+    { "carga": { "message_id": 9001, "create_date": "2026-09-21 08:30:00" } }
+  ],
+  "preview_write": [
+    { "carga": { "payload": { "model": "mail.activity", "operation": "create" } } }
+  ],
+  "validate_write": [
+    {
+      "carga": {
+        "approval_status": { "stored": true },
+        "approval_id": "apr-2026-0001",
+        "issues": []
+      }
+    }
+  ],
+  "execute_approved_write": [
+    { "carga": { "activity_id": 5501, "create_date": "2026-09-21 08:31:00" } }
+  ]
+}
