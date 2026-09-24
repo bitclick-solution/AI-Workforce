@@ -24,7 +24,8 @@
     "evals:smoke": "vitest run --config vitest.evals.config.ts"
   },
   "dependencies": {
-    "@aiw/models": "workspace:*"
+    "@aiw/models": "workspace:*",
+    "@aiw/rooms": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",

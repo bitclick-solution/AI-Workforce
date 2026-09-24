@@ -218,6 +218,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/rooms
     devDependencies:
+      '@aiw/evals':
+        specifier: workspace:*
+        version: link:../../packages/evals
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.4
@@ -455,6 +458,9 @@ importers:
       '@aiw/models':
         specifier: workspace:*
         version: link:../models
+      '@aiw/rooms':
+        specifier: workspace:*
+        version: link:../rooms
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
