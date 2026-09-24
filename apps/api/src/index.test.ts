@@ -10,6 +10,7 @@ describe('@aiw/api', () => {
       '@aiw/domain',
       '@aiw/ledger',
       '@aiw/mcp-gateway',
+      '@aiw/rooms',
     ]);
   });
 });
