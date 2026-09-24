@@ -360,6 +360,23 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       await pedirPermiso({ venceEn: new Date(Date.now() - 130_000) });
       expect(await vencerAprobaciones(cliente, org.tenantId, { limite: 1 })).toHaveLength(1);
     });
+
+    it('con identificador vence solo esa aprobación y deja las demás a la rutina', async () => {
+      const mia = await pedirPermiso({ venceEn: new Date(Date.now() - 120_000) });
+      const ajena = await pedirPermiso({ venceEn: new Date(Date.now() - 130_000) });
+
+      const vencidas = await vencerAprobaciones(cliente, org.tenantId, {
+        aprobacionId: mia.id,
+        motivo: 'Vencida sin respuesta durante la ejecución del flujo',
+      });
+      expect(vencidas.map((v) => v.aprobacion.id)).toEqual([mia.id]);
+      expect(vencidas[0]?.carga.motivo).toBe(
+        'Vencida sin respuesta durante la ejecución del flujo',
+      );
+
+      const ajenaLeida = await leer(org.tenantId, ajena.id);
+      expect(ajenaLeida?.decision).toBeNull();
+    });
   });
 
   describe('anotaciones del canal', () => {
