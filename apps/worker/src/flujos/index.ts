@@ -304,16 +304,22 @@ export async function tareaAgente(entrada: EntradaTareaAgente): Promise<Resultad
               if (error instanceof Error && error.name === 'WorkflowExecutionAlreadyStartedError') {
                 return;
               }
-              await internas.senalDeAprendizaje({
-                ...identidad,
-                tipo: 'incidencia',
-                resumen: 'No se pudo lanzar el flujo de aprendizaje de una edición.',
-                detalle: {
-                  aprobacionId,
-                  error: error instanceof Error ? error.message : String(error),
-                },
-                puntuacion: 0,
-              });
+              try {
+                await internas.senalDeAprendizaje({
+                  ...identidad,
+                  tipo: 'incidencia',
+                  resumen: 'No se pudo lanzar el flujo de aprendizaje de una edición.',
+                  detalle: {
+                    aprobacionId,
+                    error: error instanceof Error ? error.message : String(error),
+                  },
+                  puntuacion: 0,
+                });
+              } catch (errorAlAnotar) {
+                // Ni siquiera anotar la incidencia puede tumbar la tarea: la edición
+                // sigue en `decision_aprobacion` y se puede aprender de ella después.
+                if (isCancellation(errorAlAnotar)) throw errorAlAnotar;
+              }
             }
           }
         : undefined,
