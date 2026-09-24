@@ -65,9 +65,9 @@ Presupuesto: 40 €. Consumo real: se registra en la rebanada al abrir el PR. Su
 ## Demo
 
 1. `pnpm dev:up` y `pnpm --filter @aiw/db db:migrar`.
-2. `AIW_PRUEBA_STACK=1 pnpm --filter @aiw/worker demo:sala --auto`.
+2. `AIW_PRUEBA_STACK=1 pnpm --filter @aiw/worker demo:sala --auto`: pregunta, intervención de Cobros, propuesta del Director, clic, puesto en prueba, cadena verificada y recuento del libro.
 
-Para verla en el navegador: `AIW_PRUEBA_STACK=1 pnpm --filter @aiw/worker demo:sala --servir` deja el trabajador en marcha e imprime las variables para `apps/api` y `apps/web`; abre `/panel/sala`.
+En el navegador: `AIW_PRUEBA_STACK=1 pnpm --filter @aiw/worker demo:sala --servir` siembra, deja el trabajador escuchando e imprime el tenant y la persona. Arranca `apps/api` con `AIW_SALA_V0=1`, `AIW_SALA_TOKEN` y `DATABASE_URL`, y `apps/web` con `AIW_SALA_V0=1`, `AIW_API_URL`, `AIW_SALA_TOKEN`, `AIW_SALA_TENANT` y `AIW_SALA_PERSONA`; abre `/panel/sala`. Capturas del recorrido: [propuesta](../producto/capturas/sala-v0-propuesta.png) y [contratado](../producto/capturas/sala-v0-contratado.png).
 
 ## Pregunta abierta
 
