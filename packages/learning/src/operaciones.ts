@@ -764,9 +764,11 @@ export async function revertirVersion(
         (v.id = p.version_activa_id) as activa
       from version_puesto v
       join puesto p on p.tenant_id = v.tenant_id and p.id = ${peticion.puestoId}
-      where v.tenant_id = ${tenantId}
+      where v.tenant_id = ${tenantId} and v.puesto_id = p.id
         and (v.id = ${peticion.aVersionId} or v.id = p.version_activa_id)
     `;
+    // Una versión de otro puesto no sale en la consulta: `destino` queda vacío y
+    // se rechaza como ajena, sin llegar a mover nada.
     const destino = versiones.find((v) => v.id === peticion.aVersionId);
     const actual = versiones.find((v) => v.activa);
     if (!actual) {
@@ -775,7 +777,7 @@ export async function revertirVersion(
         `El puesto ${peticion.puestoId} no tiene versión activa.`,
       );
     }
-    if (!destino || destino.puesto_id !== peticion.puestoId) {
+    if (!destino) {
       throw new ErrorDeAprendizaje(
         'version_ajena',
         `La versión ${peticion.aVersionId} no es del puesto ${peticion.puestoId}.`,
