@@ -26,6 +26,8 @@ Criterio de exclusión: quien haya participado en la definición de las fichas d
 ## Antes de cada sesión
 
 - Arranca el prototipo: `pnpm --filter @aiw/web dev` y abre `http://localhost:3000/prototipo`.
+- **Si vas a usar un teléfono de verdad**, ábrelo por la IP del ordenador en la misma red: `http://<IP-del-ordenador>:3000/prototipo`. El servidor de desarrollo ya autoriza las IP de red de la máquina que lo arranca. Si pasas por un túnel (ngrok, Tailscale), arráncalo con el host declarado: `AIW_DEV_ORIGENES=miTunel.ngrok-free.app pnpm --filter @aiw/web dev`.
+- Comprueba antes de la sesión que **los botones responden** en el dispositivo con el que vas a probar. Si la página se ve bien pero ningún botón hace nada y solo funcionan los enlaces de la barra de arriba, el navegador no está recibiendo el JavaScript: revisa el origen desde el que lo abres.
 - Comparte la pantalla o, mejor, deja que conduzca la persona desde su propio ordenador.
 - Graba la sesión con permiso explícito y grabado. Sin permiso, no se graba y se toman notas.
 - Cierra el prototipo por completo y vuelve a abrirlo entre una persona y otra: el recorrido se reinicia y el reloj vuelve a cero.

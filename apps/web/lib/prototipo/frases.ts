@@ -16,7 +16,11 @@ export interface Respuesta {
 }
 
 function normalizar(frase: string): string {
-  return frase.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  // Rango de marcas diacríticas combinantes. Escrito con escapes a propósito:
+  // con los caracteres literales, cualquier reformateo o recodificación del
+  // fichero puede romperlos sin que se vea en el diff.
+  // prettier-ignore
+  return frase.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
 /** Ejemplos que el prototipo reconoce como una contratación posible. */
