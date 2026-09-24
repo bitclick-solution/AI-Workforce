@@ -10,7 +10,7 @@ Cómo ejecutar, demostrar y diagnosticar la rebanada «Prueba técnica del stack
 
 ## Levantar el entorno
 
-`pnpm dev:up` levanta PostgreSQL, Temporal, Langfuse, Centrifugo, Silo y Mailpit. La primera vez copia `.env.example` a `.env` y sustituye cada `GENERAR` por un valor aleatorio local, incluidos `POSTGRES_PASSWORD` y `DEMO_CONECTOR_SECRETO`. No hay ninguna credencial versionada.
+`pnpm dev:up` levanta PostgreSQL, Temporal, Langfuse, Centrifugo, Silo y Mailpit. La primera vez copia `.env.example` a `.env` y sustituye cada `GENERAR` por un valor aleatorio local, incluidos `POSTGRES_PASSWORD` y `DEMO_CONECTOR_SECRETO`. Si `.env` ya existía de una rebanada anterior, le añade las variables nuevas de `.env.example` sin tocar las que ya tiene; `pnpm dev:up --solo-env` hace solo eso, sin arrancar contenedores. No hay ninguna credencial versionada.
 
 Los mandatos de esta rebanada leen su configuración del entorno de la terminal y **no** leen `.env`. Antes de migrar o de lanzar la demostración, carga `.env` en la terminal, compón `DATABASE_URL` con los valores de PostgreSQL y enciende la bandera. El orden importa: `.env` trae `AIW_PRUEBA_STACK=0`, así que la bandera va después.
 

@@ -40,7 +40,8 @@ if (configuracion.urlBaseDeDatos === undefined) {
   process.exit(1);
 }
 if (!configuracion.conectorDemoConfigurado) {
-  console.error('Falta DEMO_CONECTOR_SECRETO. `pnpm dev:up` lo genera a partir de .env.example.');
+  console.error('Falta DEMO_CONECTOR_SECRETO. `pnpm dev:up` lo añade a .env, también a uno que ya');
+  console.error('existía; después vuelve a cargar .env en esta terminal, como dice el runbook.');
   process.exit(1);
 }
 
