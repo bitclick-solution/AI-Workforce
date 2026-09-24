@@ -15,15 +15,11 @@ export default function PanelDeLaSala() {
   if (!salaActiva(process.env)) notFound();
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-16">
-      <header>
-        <p className="font-mono text-xs uppercase tracking-widest text-neutral-500">
-          Bitclick Solutions
-        </p>
-        <h1 className="text-3xl font-semibold">Sala general</h1>
-        <p className="mt-2 text-neutral-700">
-          Pregunta a tu equipo o pide un agente nuevo. El moderador decide quién responde y el
-          Director de IA prepara las contrataciones para que las confirmes.
+    <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-8">
+      <header className="flex items-baseline justify-between gap-4">
+        <h1 className="text-2xl font-semibold">Sala general</h1>
+        <p className="text-sm text-neutral-500">
+          El moderador decide quién responde; el Director de IA prepara las contrataciones.
         </p>
       </header>
       <VistaDeLaSala />

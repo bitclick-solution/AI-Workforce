@@ -105,3 +105,23 @@ describe('sala en el panel', () => {
     ).toBeUndefined();
   });
 });
+
+describe('detalles de chat', () => {
+  it('iniciales, hora y «respondiendo»', async () => {
+    const { iniciales, horaCorta, esperandoRespuesta } = await import('./sala');
+    expect(iniciales('Conciliación bancaria')).toBe('C');
+    expect(iniciales('Director de IA')).toBe('DI');
+    expect(iniciales('Jesús')).toBe('J');
+    expect(horaCorta('no es fecha')).toBe('');
+    expect(horaCorta('2026-09-24T13:05:00.000Z')).toMatch(/^\d{2}:\d{2}$/);
+    const persona = mensaje({});
+    const nota = mensaje({
+      autor: { tipo: 'plataforma', nombre: 'Moderador' },
+      adjuntos: [{ tipo: 'moderacion' }],
+    });
+    const agente = mensaje({ autor: { tipo: 'puesto', nombre: 'Cobros' } });
+    expect(esperandoRespuesta([persona, nota])).toBe(true);
+    expect(esperandoRespuesta([persona, nota, agente])).toBe(false);
+    expect(esperandoRespuesta([])).toBe(false);
+  });
+});

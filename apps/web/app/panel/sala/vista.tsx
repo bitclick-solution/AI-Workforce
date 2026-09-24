@@ -1,26 +1,40 @@
 'use client';
 
 /**
- * Vista de la sala. Sondea el proxy cada dos segundos hasta que Centrifugo haga el
- * fan-out; el estado sale siempre de la base y de los flujos, nunca de aquí.
+ * Vista de la sala como un chat: burbujas, avatares, hora, la persona a la derecha
+ * y el equipo a la izquierda, lista con desplazamiento propio y el cuadro de
+ * escribir fijo abajo. Sondea el proxy cada dos segundos hasta que Centrifugo haga
+ * el fan-out; el estado sale siempre de la base y de los flujos, nunca de aquí.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   SONDEO_SALA_MS,
   esNotaDelModerador,
-  etiquetaDeAutor,
+  esperandoRespuesta,
+  horaCorta,
+  iniciales,
   propuestaDelMensaje,
   type DatosDeLaSala,
+  type MensajeDeLaSala,
   type PropuestaDeLaSala,
 } from '../../../lib/sala';
+
+type Decidir = (id: string, sentido: 'aprobada' | 'rechazada') => Promise<void>;
+
+const ESTADO_LEGIBLE: Record<string, string> = {
+  pendiente: 'Pendiente de tu confirmación',
+  aprobada: 'Aprobada',
+  ejecutada: 'Contratado',
+  rechazada: 'Descartada',
+};
 
 function TarjetaDePropuesta({
   propuesta,
   decidir,
 }: {
   propuesta: PropuestaDeLaSala;
-  decidir: (id: string, sentido: 'aprobada' | 'rechazada') => Promise<void>;
+  decidir: Decidir;
 }) {
   const { efectos } = propuesta;
   const [enviando, setEnviando] = useState(false);
@@ -30,78 +44,164 @@ function TarjetaDePropuesta({
       setEnviando(false);
     });
   };
+  const disponibles = efectos.herramientas?.disponibles ?? [];
+  const porConectar = efectos.herramientas?.porConectar ?? [];
   return (
     <div
-      className="mt-3 rounded-lg border border-neutral-200 p-4 text-sm text-neutral-700"
+      className="mt-2 overflow-hidden rounded-xl border border-violet-200 bg-white text-sm text-neutral-700 shadow-sm"
       data-testid="propuesta"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <strong className="text-neutral-900">{propuesta.resumen}</strong>
-        <span className="rounded bg-neutral-100 px-2 py-0.5 font-mono text-xs">
+      <div className="flex flex-wrap items-center gap-2 border-b border-violet-100 bg-violet-50 px-4 py-2">
+        <strong className="text-neutral-900">{efectos.puesto?.nombre ?? propuesta.resumen}</strong>
+        <span className="rounded-full bg-white px-2 py-0.5 font-mono text-xs text-violet-700">
           {propuesta.nivelExigido.toUpperCase()}
         </span>
-        <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs">{propuesta.estado}</span>
+        <span className="ml-auto text-xs text-violet-700">
+          {ESTADO_LEGIBLE[propuesta.estado] ?? propuesta.estado}
+        </span>
       </div>
-      {efectos.puesto?.ficha?.mision ? <p className="mt-2">{efectos.puesto.ficha.mision}</p> : null}
-      {efectos.puesto?.ficha?.tareas?.length ? (
-        <ul className="mt-2 list-disc pl-5">
-          {efectos.puesto.ficha.tareas.map((tarea) => (
-            <li key={tarea}>{tarea}</li>
+      <div className="flex flex-col gap-3 px-4 py-3">
+        {efectos.puesto?.ficha?.mision ? (
+          <p className="text-neutral-800">{efectos.puesto.ficha.mision}</p>
+        ) : null}
+        <div className="flex flex-wrap gap-1.5">
+          {disponibles.map((h) => (
+            <span
+              key={h.nombre}
+              title={h.descripcion}
+              className="rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-xs text-emerald-800"
+            >
+              {h.nombre}
+            </span>
           ))}
-        </ul>
-      ) : null}
-      <h3 className="mt-3 font-semibold text-neutral-900">Herramientas</h3>
-      <ul className="mt-1 list-disc pl-5">
-        {(efectos.herramientas?.disponibles ?? []).map((h) => (
-          <li key={h.nombre}>
-            <code>{h.nombre}</code>: {h.descripcion}
-          </li>
-        ))}
-        {(efectos.herramientas?.porConectar ?? []).map((h) => (
-          <li key={h.nombre} className="text-neutral-500">
-            <code>{h.nombre}</code>: {h.descripcion} (por conectar)
-          </li>
-        ))}
-      </ul>
-      <h3 className="mt-3 font-semibold text-neutral-900">Guardrails</h3>
-      <ul className="mt-1 list-disc pl-5">
-        {(efectos.guardrails ?? []).map((g) => (
-          <li key={g.clase}>
-            <strong>{g.clase}:</strong> {g.regla}
-          </li>
-        ))}
-      </ul>
-      {efectos.coste ? (
-        <p className="mt-3">
-          Coste: {efectos.coste.eurosMesCliente} € al mes, unas {efectos.coste.tareasMes} tareas.
-          {efectos.reversion?.descripcion ? ` ${efectos.reversion.descripcion}` : ''}
-        </p>
-      ) : null}
-      {propuesta.estado === 'pendiente' ? (
-        <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            disabled={enviando}
-            onClick={() => {
-              pulsar('aprobada');
-            }}
-            className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-50"
-          >
-            Confirmar
-          </button>
-          <button
-            type="button"
-            disabled={enviando}
-            onClick={() => {
-              pulsar('rechazada');
-            }}
-            className="rounded border border-neutral-300 px-4 py-2 disabled:opacity-50"
-          >
-            Descartar
-          </button>
+          {porConectar.map((h) => (
+            <span
+              key={h.nombre}
+              title={`${h.descripcion} (por conectar)`}
+              className="rounded-full border border-dashed border-neutral-300 px-2 py-0.5 font-mono text-xs text-neutral-500"
+            >
+              {h.nombre} · por conectar
+            </span>
+          ))}
         </div>
-      ) : null}
+        <details className="text-xs text-neutral-600">
+          <summary className="cursor-pointer select-none">Guardrails y tareas</summary>
+          <ul className="mt-2 flex flex-col gap-1">
+            {(efectos.puesto?.ficha?.tareas ?? []).map((tarea) => (
+              <li key={tarea}>• {tarea}</li>
+            ))}
+            {(efectos.guardrails ?? []).map((g) => (
+              <li key={g.clase}>
+                <strong className="capitalize">{g.clase}:</strong> {g.regla}
+              </li>
+            ))}
+          </ul>
+        </details>
+        {efectos.coste ? (
+          <p className="text-xs text-neutral-600">
+            {efectos.coste.eurosMesCliente} € al mes · unas {efectos.coste.tareasMes} tareas
+            {efectos.reversion?.descripcion ? ` · ${efectos.reversion.descripcion}` : ''}
+          </p>
+        ) : null}
+        {propuesta.estado === 'pendiente' ? (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={enviando}
+              onClick={() => {
+                pulsar('aprobada');
+              }}
+              className="rounded-full bg-violet-600 px-4 py-1.5 font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+            >
+              Confirmar
+            </button>
+            <button
+              type="button"
+              disabled={enviando}
+              onClick={() => {
+                pulsar('rechazada');
+              }}
+              className="rounded-full border border-neutral-300 px-4 py-1.5 hover:bg-neutral-50 disabled:opacity-50"
+            >
+              Descartar
+            </button>
+          </div>
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+function Avatar({ mensaje }: { mensaje: MensajeDeLaSala }) {
+  const color =
+    mensaje.autor.tipo === 'plataforma'
+      ? 'bg-violet-100 text-violet-700'
+      : 'bg-emerald-100 text-emerald-800';
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${color}`}
+    >
+      {iniciales(mensaje.autor.nombre)}
+    </span>
+  );
+}
+
+function Burbuja({
+  mensaje,
+  propuesta,
+  decidir,
+}: {
+  mensaje: MensajeDeLaSala;
+  propuesta: PropuestaDeLaSala | undefined;
+  decidir: Decidir;
+}) {
+  if (esNotaDelModerador(mensaje)) {
+    return (
+      <li className="flex justify-center" data-testid="moderador">
+        <details className="max-w-[80%] rounded-full bg-neutral-100 px-3 py-1 text-center text-xs text-neutral-500 open:rounded-xl">
+          <summary className="cursor-pointer select-none">Moderador · ver por qué</summary>
+          <p className="mt-1">{mensaje.cuerpo}</p>
+        </details>
+      </li>
+    );
+  }
+
+  const hora = horaCorta(mensaje.creadoEn);
+  if (mensaje.autor.tipo === 'persona') {
+    return (
+      <li className="flex justify-end">
+        <div className="max-w-[75%]">
+          <div className="rounded-2xl rounded-br-md bg-neutral-900 px-4 py-2 text-white">
+            {mensaje.cuerpo}
+          </div>
+          <p className="mt-1 text-right text-[11px] text-neutral-400">
+            {mensaje.autor.nombre} · {hora}
+          </p>
+        </div>
+      </li>
+    );
+  }
+
+  const plataforma = mensaje.autor.tipo === 'plataforma';
+  return (
+    <li className="flex items-end gap-2">
+      <Avatar mensaje={mensaje} />
+      <div className={propuesta ? 'w-full max-w-[85%]' : 'max-w-[75%]'}>
+        <p className="mb-1 text-[11px] text-neutral-500">
+          <span className="font-medium text-neutral-700">{mensaje.autor.nombre}</span>
+          {plataforma ? ' · plataforma' : ' · agente'} · {hora}
+        </p>
+        <div
+          className={`rounded-2xl rounded-bl-md px-4 py-2 ${
+            plataforma ? 'bg-violet-50 text-neutral-800' : 'bg-white text-neutral-800 shadow-sm'
+          }`}
+        >
+          {mensaje.cuerpo}
+        </div>
+        {propuesta ? <TarjetaDePropuesta propuesta={propuesta} decidir={decidir} /> : null}
+      </div>
+    </li>
   );
 }
 
@@ -109,6 +209,9 @@ export function VistaDeLaSala() {
   const [datos, setDatos] = useState<DatosDeLaSala | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [texto, setTexto] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const fondo = useRef<HTMLDivElement>(null);
+  const ultimoVisto = useRef<string | undefined>(undefined);
 
   const leer = useCallback(async () => {
     try {
@@ -135,24 +238,39 @@ export function VistaDeLaSala() {
     };
   }, [leer]);
 
+  // Como en cualquier chat: al llegar un mensaje nuevo, la lista baja hasta él.
+  const mensajes = datos?.mensajes ?? [];
+  const ultimo = mensajes.at(-1)?.id;
+  useEffect(() => {
+    if (ultimo !== undefined && ultimo !== ultimoVisto.current) {
+      ultimoVisto.current = ultimo;
+      fondo.current?.scrollIntoView({ block: 'end' });
+    }
+  }, [ultimo]);
+
   const enviar = async () => {
     const limpio = texto.trim();
-    if (!limpio) return;
-    const respuesta = await fetch('/api/sala/mensajes', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ texto: limpio }),
-    });
-    if (!respuesta.ok) {
-      const cuerpo = (await respuesta.json().catch(() => ({}))) as { error?: string };
-      setError(cuerpo.error ?? 'No se pudo enviar el mensaje.');
-      return;
+    if (!limpio || enviando) return;
+    setEnviando(true);
+    try {
+      const respuesta = await fetch('/api/sala/mensajes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ texto: limpio }),
+      });
+      if (!respuesta.ok) {
+        const cuerpo = (await respuesta.json().catch(() => ({}))) as { error?: string };
+        setError(cuerpo.error ?? 'No se pudo enviar el mensaje.');
+        return;
+      }
+      setTexto('');
+      void leer();
+    } finally {
+      setEnviando(false);
     }
-    setTexto('');
-    void leer();
   };
 
-  const decidir = async (id: string, sentido: 'aprobada' | 'rechazada') => {
+  const decidir: Decidir = async (id, sentido) => {
     const respuesta = await fetch(`/api/sala/propuestas/${id}/decision`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -165,40 +283,68 @@ export function VistaDeLaSala() {
     void leer();
   };
 
+  const participantes = new Set(
+    mensajes.filter((m) => m.autor.tipo === 'puesto').map((m) => m.autor.nombre),
+  );
+
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex h-[calc(100vh-10rem)] min-h-[32rem] flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-100 shadow-sm">
+      <header className="flex items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
+        <span className="text-lg font-semibold text-neutral-400">#</span>
+        <div>
+          <h2 className="font-semibold leading-tight">general</h2>
+          <p className="text-xs text-neutral-500">
+            {participantes.size > 0
+              ? `${[...participantes].join(', ')} · moderador · Director de IA`
+              : 'Moderador · Director de IA'}
+          </p>
+        </div>
+      </header>
+
       {error ? (
         <p
           role="alert"
-          className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+          className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800"
         >
           {error}
         </p>
       ) : null}
-      <ol className="flex flex-col gap-3" data-testid="mensajes">
-        {(datos?.mensajes ?? []).map((mensaje) => {
-          if (esNotaDelModerador(mensaje)) {
-            return (
-              <li key={mensaje.id}>
-                <details className="text-sm text-neutral-500" data-testid="moderador">
-                  <summary>Moderador</summary>
-                  <p className="mt-1">{mensaje.cuerpo}</p>
-                </details>
-              </li>
-            );
-          }
-          const propuesta = datos ? propuestaDelMensaje(mensaje, datos.propuestas) : undefined;
-          return (
-            <li key={mensaje.id} className="rounded-lg border border-neutral-200 p-3">
-              <p className="text-xs text-neutral-500">{etiquetaDeAutor(mensaje)}</p>
-              <p className="mt-1 text-neutral-800">{mensaje.cuerpo}</p>
-              {propuesta ? <TarjetaDePropuesta propuesta={propuesta} decidir={decidir} /> : null}
+
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        {mensajes.length === 0 ? (
+          <p className="mt-16 text-center text-sm text-neutral-500">
+            Pregunta a tu equipo o pide un agente nuevo: «contrata un agente de conciliación en
+            Finanzas».
+          </p>
+        ) : null}
+        <ol className="flex flex-col gap-4" data-testid="mensajes">
+          {mensajes.map((mensaje) => (
+            <Burbuja
+              key={mensaje.id}
+              mensaje={mensaje}
+              propuesta={datos ? propuestaDelMensaje(mensaje, datos.propuestas) : undefined}
+              decidir={decidir}
+            />
+          ))}
+          {esperandoRespuesta(mensajes) ? (
+            <li
+              className="flex items-center gap-2 text-xs text-neutral-500"
+              data-testid="respondiendo"
+            >
+              <span className="flex gap-1" aria-hidden="true">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 [animation-delay:300ms]" />
+              </span>
+              El equipo está respondiendo…
             </li>
-          );
-        })}
-      </ol>
+          ) : null}
+        </ol>
+        <div ref={fondo} />
+      </div>
+
       <form
-        className="flex gap-2"
+        className="flex items-center gap-2 border-t border-neutral-200 bg-white px-3 py-3"
         onSubmit={(evento) => {
           evento.preventDefault();
           void enviar();
@@ -213,11 +359,16 @@ export function VistaDeLaSala() {
           onChange={(evento) => {
             setTexto(evento.target.value);
           }}
-          placeholder="¿Cómo vamos de cobros este mes?"
+          placeholder="Escribe a #general…"
           maxLength={2000}
-          className="flex-1 rounded border border-neutral-300 px-3 py-2"
+          autoComplete="off"
+          className="flex-1 rounded-full border border-neutral-300 bg-neutral-50 px-4 py-2 outline-none focus:border-violet-400 focus:bg-white"
         />
-        <button type="submit" className="rounded bg-neutral-900 px-4 py-2 text-white">
+        <button
+          type="submit"
+          disabled={enviando || texto.trim().length === 0}
+          className="rounded-full bg-neutral-900 px-5 py-2 font-medium text-white disabled:opacity-40"
+        >
           Enviar
         </button>
       </form>

@@ -140,3 +140,33 @@ export function propuestaDelMensaje(
   const id = mensaje.adjuntos.find((a) => a.tipo === 'propuesta_operacion')?.propuestaId;
   return propuestas.find((p) => p.id === id);
 }
+
+/** Iniciales para el avatar: dos letras como máximo, sin tildes raras. */
+export function iniciales(nombre: string): string {
+  const palabras = nombre.split(/\s+/).filter((p) => p.length > 0 && p[0] === p[0]?.toUpperCase());
+  const elegidas = (palabras.length > 0 ? palabras : nombre.split(/\s+/)).slice(0, 2);
+  return (
+    elegidas
+      .map((p) => p[0] ?? '')
+      .join('')
+      .toUpperCase() || '?'
+  );
+}
+
+/** Hora corta de un mensaje, como en cualquier chat. */
+export function horaCorta(iso: string): string {
+  const fecha = new Date(iso);
+  return Number.isNaN(fecha.getTime())
+    ? ''
+    : fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * La sala está «respondiendo» cuando lo último que se ve es de una persona: el
+ * moderador y los agentes todavía no han contestado. La nota del moderador no
+ * cuenta como respuesta, porque la intervención llega después.
+ */
+export function esperandoRespuesta(mensajes: MensajeDeLaSala[]): boolean {
+  const ultimo = [...mensajes].reverse().find((m) => !esNotaDelModerador(m));
+  return ultimo?.autor.tipo === 'persona';
+}
