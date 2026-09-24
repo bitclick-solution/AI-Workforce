@@ -335,6 +335,26 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     expect(Number(contador?.acciones)).toBe(anotadas.length);
   });
 
+  it('una edición idéntica al borrador no produce señal: no hay nada que aprender', async () => {
+    const aprobacionId = await pedirAprobacion(org);
+    await registrarDecision(cliente, org.tenantId, {
+      aprobacionId,
+      sentido: 'editada',
+      edicionPrevia: { antes: ANTES, despues: structuredClone(ANTES) },
+      origen: 'panel',
+    });
+    await esperarError(registrarSenalDeEdicion(cliente, org.tenantId, aprobacionId), 'sin_cambios');
+    const [fila] = await conTenant(
+      cliente,
+      org.tenantId,
+      (tx) => tx<{ n: string }[]>`
+        select count(*)::text as n from senal
+        where tenant_id = ${org.tenantId} and aprobacion_id = ${aprobacionId}
+      `,
+    );
+    expect(Number(fila?.n)).toBe(0);
+  });
+
   it('otra organización no ve ni aprende de una edición ajena', async () => {
     const aprobacionId = await editar(org);
     await esperarError(
