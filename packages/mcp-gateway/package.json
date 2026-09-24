@@ -18,7 +18,16 @@
     "test": "vitest run --passWithNoTests",
     "clean": "rm -rf dist coverage .turbo"
   },
+  "dependencies": {
+    "@aiw/db": "workspace:*",
+    "@aiw/domain": "workspace:*",
+    "@aiw/ledger": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "postgres": "catalog:",
+    "zod": "catalog:"
+  },
   "devDependencies": {
+    "@aiw/connector-demo": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

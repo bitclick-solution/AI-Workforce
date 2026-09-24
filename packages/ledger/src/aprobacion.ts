@@ -612,6 +612,12 @@ export interface OpcionesVencimiento {
   /** Cuántas resolver por pasada. La rutina que la llame irá paginando. */
   limite?: number | undefined;
   motivo?: string | undefined;
+  /**
+   * Solo esta aprobación. Es lo que usa un flujo que venció la suya esperando: la
+   * resuelve igual que la rutina —persona nula, `aprobacion.vencida`— sin tocar las
+   * de las demás tareas.
+   */
+  aprobacionId?: string | undefined;
 }
 
 /**
@@ -635,12 +641,15 @@ export async function vencerAprobaciones(
   const motivo = opciones.motivo ?? 'Vencida sin respuesta de la persona';
 
   const pendientes = await conTenant(cliente, tenantId, async (tx) => {
+    const soloEsta =
+      opciones.aprobacionId === undefined ? tx`` : tx`and a.id = ${opciones.aprobacionId}`;
     return tx<{ id: string }[]>`
       select a.id
       from aprobacion a
       where a.tenant_id = ${tenantId}
         and a.vence_en is not null
         and a.vence_en <= ${ahora}
+        ${soloEsta}
         and not exists (
           select 1 from decision_aprobacion d
           where d.tenant_id = a.tenant_id and d.aprobacion_id = a.id
