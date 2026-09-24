@@ -365,6 +365,49 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     await esperarError(proponerLeccion(cliente, otra.tenantId, senal), 'no_encontrada');
   });
 
+  it('un INSERT directo que gana la carrera también se traduce a ya_promocionada', async () => {
+    // El índice único `(tenant_id, leccion_id)` de `promocion` (migración 0002) es la
+    // red de seguridad de la base: esta prueba deja una promoción a medio confirmar
+    // por SQL directo, sin pasar por `promocionarLeccion`, para que su comprobación
+    // previa no la vea todavía y sea el propio `INSERT` el que choque con el índice.
+    const aprobacionId = await editar(org);
+    const senal = await registrarSenalDeEdicion(cliente, org.tenantId, aprobacionId);
+    const leccion = await proponerLeccion(cliente, org.tenantId, senal);
+
+    let comprometer!: () => void;
+    const detenido = new Promise<void>((resolve) => {
+      comprometer = resolve;
+    });
+    const directa = conTenant(cliente, org.tenantId, async (tx) => {
+      await tx`
+        insert into promocion (
+          tenant_id, leccion_id, version_puesto_resultante_id, decidida_por_persona_id, evidencia
+        ) values (
+          ${org.tenantId}, ${leccion.leccionId}, ${org.versionPuestoId}, ${org.personaId}, '{}'::jsonb
+        )
+      `;
+      await detenido;
+    });
+
+    // Da tiempo a que el INSERT directo llegue al servidor antes de arrancar la
+    // promoción por la aplicación.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const viaAplicacion = promocionarLeccion(cliente, org.tenantId, {
+      leccionId: leccion.leccionId,
+      personaId: org.personaId,
+      puerta: CERTIFICA,
+    });
+
+    // Da tiempo a que `promocionarLeccion` pase su comprobación previa (que todavía
+    // no ve la fila sin confirmar) y llegue a su propio INSERT, que se queda
+    // esperando al índice mientras la transacción directa siga abierta.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    comprometer();
+
+    await esperarError(viaAplicacion, 'ya_promocionada');
+    await directa;
+  });
+
   it('ningún dato personal de la edición llega a lo aprendido ni al libro', async () => {
     const volcado = await conTenant(
       cliente,

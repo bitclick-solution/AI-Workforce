@@ -3,16 +3,21 @@
  *
  * Necesita PostgreSQL: sin `DATABASE_URL` estas pruebas se saltan con un mensaje.
  */
+import { readFileSync } from 'node:fs';
+
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { aplicarMigraciones, comprobarHuellas } from '../migrador.js';
+import { conTenant } from '../cliente.js';
+import { purgarOrganizacion } from '../mantenimiento.js';
+import { aplicarMigraciones, comprobarHuellas, MIGRACIONES, sentenciasDe } from '../migrador.js';
 import {
   NOMBRES_TABLAS,
   NOMBRES_TABLAS_CON_TENANT,
   NOMBRES_TABLAS_PARTICIONADAS,
 } from '../tablas.js';
 import { HAY_BASE_DE_DATOS, MOTIVO_SALTO, conectar } from './entorno.js';
+import { sembrarOrganizacion } from './semilla.js';
 
 const TITULO = HAY_BASE_DE_DATOS
   ? 'migración inicial'
@@ -217,5 +222,84 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     `;
     expect(fila?.rolbypassrls).toBe(false);
     expect(fila?.rolsuper).toBe(false);
+  });
+
+  describe('0002_indice_unico_de_promocion', () => {
+    it('el índice único de promoción es por (tenant_id, leccion_id)', async () => {
+      const [nuevo] = await cliente<{ indexdef: string }[]>`
+        select indexdef from pg_indexes
+        where tablename = 'promocion' and indexname = 'promocion_tenant_leccion_key'
+      `;
+      expect(nuevo?.indexdef).toContain('(tenant_id, leccion_id)');
+
+      const viejo = await cliente<{ indexname: string }[]>`
+        select indexname from pg_indexes
+        where tablename = 'promocion' and indexname = 'promocion_tenant_leccion_version_key'
+      `;
+      expect(viejo).toEqual([]);
+    });
+
+    it('un segundo INSERT de promoción para la misma lección falla en la base aunque la aplicación no lo compruebe', async () => {
+      // `sembrarOrganizacion` ya deja una promoción de `leccionId` sobre
+      // `segundaVersionPuestoId`. Este INSERT es SQL directo, sin pasar por
+      // `promocionarLeccion`: prueba que la base sostiene el invariante ella sola.
+      const org = await sembrarOrganizacion(cliente, 'indice-unico-de-promocion');
+      try {
+        await expect(
+          conTenant(
+            cliente,
+            org.tenantId,
+            (tx) => tx`
+              insert into promocion (
+                tenant_id, leccion_id, version_puesto_resultante_id, decidida_por_persona_id, evidencia
+              ) values (
+                ${org.tenantId}, ${org.leccionId}, ${org.versionPuestoId}, ${org.personaId}, '{}'::jsonb
+              )
+            `,
+          ),
+        ).rejects.toMatchObject({ code: '23505' });
+      } finally {
+        await purgarOrganizacion(cliente, org.tenantId);
+      }
+    });
+
+    it('el reverso de 0002 devuelve el índice compuesto anterior', async () => {
+      const migracion = MIGRACIONES.find((m) => m.nombre === '0002_indice_unico_de_promocion');
+      if (!migracion) throw new Error('Falta el registro de la migración 0002.');
+
+      try {
+        const reverso = readFileSync(migracion.rutaReverso, 'utf8');
+        await cliente.begin(async (tx) => {
+          for (const sentencia of sentenciasDe(reverso)) await tx.unsafe(sentencia);
+        });
+
+        const nuevoTrasReverso = await cliente<{ indexname: string }[]>`
+          select indexname from pg_indexes
+          where tablename = 'promocion' and indexname = 'promocion_tenant_leccion_key'
+        `;
+        expect(nuevoTrasReverso).toEqual([]);
+        const [viejoTrasReverso] = await cliente<{ indexdef: string }[]>`
+          select indexdef from pg_indexes
+          where tablename = 'promocion' and indexname = 'promocion_tenant_leccion_version_key'
+        `;
+        expect(viejoTrasReverso?.indexdef).toContain(
+          '(tenant_id, leccion_id, version_puesto_resultante_id)',
+        );
+      } finally {
+        // Deja la base como la esperan el resto de las pruebas de este fichero: el
+        // reverso no marca `migracion_aplicada`, así que reaplicar el SQL directo no
+        // duplica el registro.
+        const adelante = readFileSync(migracion.ruta, 'utf8');
+        await cliente.begin(async (tx) => {
+          for (const sentencia of sentenciasDe(adelante)) await tx.unsafe(sentencia);
+        });
+      }
+
+      const [nuevoTrasReaplicar] = await cliente<{ indexname: string }[]>`
+        select indexname from pg_indexes
+        where tablename = 'promocion' and indexname = 'promocion_tenant_leccion_key'
+      `;
+      expect(nuevoTrasReaplicar?.indexname).toBe('promocion_tenant_leccion_key');
+    });
   });
 });
