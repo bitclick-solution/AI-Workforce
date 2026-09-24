@@ -11,7 +11,7 @@
  */
 import { uuidV7 } from '@aiw/db';
 import { anotar } from '@aiw/ledger';
-import { proponerContratacion, type PropuestaDeContratacion } from '@aiw/platform-agents';
+import { proponerContratacion, type PropuestaDeContratacion } from '@aiw/operaciones';
 import {
   moderar,
   type AdjuntoDeSala,

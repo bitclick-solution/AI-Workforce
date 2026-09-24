@@ -14,7 +14,7 @@ import {
   NOMBRE_CONECTOR_DEMO,
   REFERENCIA_SECRETO_DEMO,
 } from '@aiw/connector-demo';
-import { CATALOGO } from '@aiw/platform-agents';
+import { CATALOGO } from '@aiw/operaciones';
 import { NOMBRE_SALA_GENERAL } from '@aiw/rooms';
 import type postgres from 'postgres';
 

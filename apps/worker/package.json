@@ -25,7 +25,7 @@
     "@aiw/ledger": "workspace:*",
     "@aiw/mcp-gateway": "workspace:*",
     "@aiw/models": "workspace:*",
-    "@aiw/platform-agents": "workspace:*",
+    "@aiw/operaciones": "workspace:*",
     "@aiw/rooms": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
     "@temporalio/activity": "catalog:",

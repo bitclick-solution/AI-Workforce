@@ -1,0 +1,32 @@
+{
+  "name": "@aiw/operaciones",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Propuestas de operación de organización (ADR-006) y catálogo de plantillas de puesto como dato.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "evals:smoke": "vitest run --config vitest.evals.config.ts",
+    "clean": "rm -rf dist coverage .turbo evals-report"
+  },
+  "dependencies": {
+    "@aiw/domain": "workspace:*",
+    "@aiw/rooms": "workspace:*"
+  },
+  "devDependencies": {
+    "@aiw/evals": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

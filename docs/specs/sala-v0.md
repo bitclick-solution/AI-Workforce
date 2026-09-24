@@ -2,7 +2,7 @@ VIGENTE
 
 # Especificación · Sala v0: sala general con moderador y contratación desde una frase
 
-- Rebanada: [Notion](https://app.notion.com/p/3e05306618988173beb1e47e16a9bb8b) · Ciclo 0 · Tipo Producto · Paquetes `rooms`, `platform-agents`, `web` (más `worker`, `api` y `models`, ver decisión 1) · P0
+- Rebanada: [Notion](https://app.notion.com/p/3e05306618988173beb1e47e16a9bb8b) · Ciclo 0 · Tipo Producto · Paquetes `rooms`, `platform-agents`, `web` (más `operaciones`, `worker`, `api` y `models`, ver decisión 1) · P0
 - Rama: `rebanada/sala-v0`
 - Plan de referencia: _Departamentos y sala común_ y _Ciclo de vida sin código_ del [plan v8](https://claude.ai/artifact/Mf7PeYbaXCnp5wFhQu3XWn); [ADR-003](../adr/ADR-003.md), [ADR-004](../adr/ADR-004.md), [ADR-006](../adr/ADR-006.md), [ADR-014](../adr/ADR-014.md) y [ADR-019](../adr/ADR-019.md) (en Propuesto). Producto: [diez minutos](../producto/experiencia-de-diez-minutos.md) (pasos 5 y «un puesto más»), [finanzas](../producto/finanzas.md) y [Director de IA](../producto/director-de-ia.md).
 - Zona crítica: sí. La ejecución de «contratar» concede la lista blanca de herramientas al puesto nuevo (identidad y permisos) y anota en el libro con `anotar`. No toca prompts de sistema de plataforma: el moderador y el Director v0 no tienen prompt (decisión 2). Sin migración. «Revisión humana obligatoria» marcada.
@@ -14,7 +14,7 @@ Una persona escribe en la sala general. El moderador clasifica el mensaje con la
 ## Paquetes tocados
 
 - `packages/rooms`: moderador puro (clasificación por temas de la ficha, menciones, detección de operación de organización, límite de intervenciones), vocabulario de adjuntos de la sala y nombres de flujos y señales.
-- `apps/platform-agents`: Director de IA v0 puro, catálogo de plantillas de Finanzas como dato versionado (`src/catalogo/plantillas.json`) y política de operaciones evaluada con `decidirPaso` de `@aiw/domain`.
+- `packages/operaciones` (nuevo): Director de IA v0 puro, catálogo de plantillas de Finanzas como dato versionado (`src/catalogo/plantillas.json`) y política de operaciones evaluada con `decidirPaso` de `@aiw/domain`. `apps/platform-agents` solo declara que depende de él.
 - `apps/worker`: flujos `mensajeDeSala` y `propuestaDeOperacion`, sus actividades y la demostración `demo:sala`. `tareaAgente` gana `soloLectura` para las intervenciones.
 - `apps/api` y `apps/web`: rutas de la sala detrás de bandera y token, y la página `/panel/sala`.
 - `packages/models`: el guion de Cobros responde con datos agregados cuando no se le ofrece la herramienta de escritura. El puerto no cambia.
@@ -47,7 +47,7 @@ Una persona escribe en la sala general. El moderador clasifica el mensaje con la
 
 ## Decisiones que el plan no fija
 
-1. **Flujos en el trabajador.** Los agentes de plataforma v0 son funciones puras que exporta `apps/platform-agents` y que el trabajador ejecuta como actividades: así corren en el job de flujos durables de la CI, con PostgreSQL y Temporal, sin tocar `.github/`. El proceso propio de `platform-agents` con su cola llega cuando moderador y Director tengan paso de modelo.
+1. **Flujos en el trabajador y agentes puros en paquetes.** El moderador puro vive en `@aiw/rooms` y el Director puro en `@aiw/operaciones`, un paquete nuevo, para que ninguna aplicación importe otra. El trabajador los ejecuta como actividades: así corren en el job de flujos durables de la CI, con PostgreSQL y Temporal, sin tocar `.github/`. El proceso propio de `apps/platform-agents` con su cola llega cuando moderador y Director tengan paso de modelo.
 2. **Moderador y Director sin modelo en v0.** Deciden con reglas sobre datos (temas de la ficha, menciones, verbos de operación, catálogo de plantillas). Coste cero, sin prompt de sistema y reproducibles. Los agentes de puesto sí usan el puerto de `@aiw/models` tal como está.
 3. **La intervención es de solo lectura.** Responde con datos agregados; convertirla en trabajo con aprobaciones es «De conversación a trabajo», otra rebanada.
 4. **Temas y plantilla de origen en `puesto.ficha`.** Sin migración; la columna de origen del ADR-019 llega con su rebanada.

@@ -1,8 +1,8 @@
 /**
  * Caso dorado del Director de IA: contratar desde una frase.
  *
- * Vive con el Director y no en `@aiw/evals` porque un paquete no importa una
- * aplicación. Evalúa por propiedades, como los casos de puesto: la propuesta trae
+ * Vive con el Director para que el caso y el código que evalúa cambien juntos.
+ * Evalúa por propiedades, como los casos de puesto: la propuesta trae
  * ficha completa, solo concede herramientas que la organización ya autorizó, lista
  * las que faltan, lleva guardrails hasta la clase crítica, coste, nivel N1, estado
  * inicial en prueba y forma de reversión. El día que el Director pase por un
