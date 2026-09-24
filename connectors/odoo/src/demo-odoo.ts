@@ -11,6 +11,7 @@ import { clienteGrabado, clienteHttp, type ClienteMcpDinamico } from './cliente.
 import { hayCredenciales, leerConfiguracion } from './entorno.js';
 import { DIA_DE_LA_GRABACION, cargarGrabaciones } from './grabaciones/index.js';
 import { crearHerramientas } from './herramientas.js';
+import { esProcesoPrincipal } from './proceso.js';
 
 function escribir(linea: string): void {
   process.stdout.write(`${linea}\n`);
@@ -84,10 +85,7 @@ export async function demostrar(): Promise<void> {
   await cliente.cerrar();
 }
 
-const esProcesoPrincipal =
-  process.argv[1] !== undefined && import.meta.url === `file://${process.argv[1]}`;
-
-if (esProcesoPrincipal) {
+if (esProcesoPrincipal(import.meta.url)) {
   demostrar().catch((error: unknown) => {
     process.stderr.write(`La demostración falló: ${String(error)}\n`);
     process.exitCode = 1;

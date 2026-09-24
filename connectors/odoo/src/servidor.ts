@@ -25,6 +25,7 @@ import { leerConfiguracion, redactar, registrar, type ConfiguracionOdoo } from '
 import { ErrorConector, traducirError } from './errores.js';
 import { ESQUEMA_ENTRADA_LISTAR, ESQUEMA_ENTRADA_NOTA } from './esquema-json.js';
 import { NOMBRES, crearHerramientas, type Herramientas } from './herramientas.js';
+import { esProcesoPrincipal } from './proceso.js';
 
 export const NOMBRE_SERVIDOR = 'aiw-conector-odoo';
 export const VERSION_SERVIDOR = '0.0.0';
@@ -142,10 +143,7 @@ export async function principal(entorno = process.env): Promise<void> {
   registrar('Escuchando MCP por stdio.');
 }
 
-const esProcesoPrincipal =
-  process.argv[1] !== undefined && import.meta.url === `file://${process.argv[1]}`;
-
-if (esProcesoPrincipal) {
+if (esProcesoPrincipal(import.meta.url)) {
   principal().catch((error: unknown) => {
     const fallo = traducirError(error, 'El conector de Odoo no arrancó');
     registrar(fallo.message, [process.env['ODOO_CLAVE_API']]);

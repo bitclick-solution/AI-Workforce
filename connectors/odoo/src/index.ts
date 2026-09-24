@@ -33,5 +33,6 @@ export type { Motivo } from './errores.js';
 export * from './esquemas.js';
 export { ESQUEMA_ENTRADA_LISTAR, ESQUEMA_ENTRADA_NOTA } from './esquema-json.js';
 export { NOMBRES, almacenEnMemoria, crearHerramientas, fechaDeCorte } from './herramientas.js';
+export { esProcesoPrincipal } from './proceso.js';
 export type { Herramientas } from './herramientas.js';
 export { CATALOGO, crearServidor, montarConector } from './servidor.js';
