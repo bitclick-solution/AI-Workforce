@@ -35,9 +35,7 @@ export const MIGRACIONES: readonly Migracion[] = [
   },
   {
     nombre: '0002_indice_unico_de_promocion',
-    ruta: fileURLToPath(
-      new URL('../drizzle/0002_indice_unico_de_promocion.sql', import.meta.url),
-    ),
+    ruta: fileURLToPath(new URL('../drizzle/0002_indice_unico_de_promocion.sql', import.meta.url)),
     rutaReverso: fileURLToPath(
       new URL('../drizzle/reverso/0002_indice_unico_de_promocion.sql', import.meta.url),
     ),
