@@ -16,6 +16,7 @@
  */
 import {
   ApplicationFailure,
+  ParentClosePolicy,
   condition,
   defineQuery,
   defineSignal,
@@ -38,6 +39,7 @@ import type {
   ResultadoTareaAgente,
 } from '../bucle/tipos.js';
 import type { Actividades } from '../actividades/index.js';
+import { PREFIJO_FLUJO_APRENDIZAJE, aprendizajeDeSenal } from './aprendizaje.js';
 
 /**
  * Nombre de la señal. Es el mismo valor que `AIW_SENAL_NOMBRE` en `.env.example` y
@@ -260,6 +262,15 @@ export async function tareaAgente(entrada: EntradaTareaAgente): Promise<Resultad
       }
 
       const carga = decisiones.get(aprobacionId);
+      if (carga?.sentido === 'editada') {
+        // La señal dice que se editó, pero no trae lo editado: la carga de la señal
+        // es pequeña a propósito. Lo editado está en la base, junto a la decisión.
+        const conEdicion = await internas.leerDecision({
+          tenantId: entrada.tenantId,
+          aprobacionId,
+        });
+        if (conEdicion) return conEdicion;
+      }
       const decidida: DecisionRecibida = {
         aprobacionId,
         sentido: carga?.sentido ?? 'rechazada',
@@ -271,6 +282,29 @@ export async function tareaAgente(entrada: EntradaTareaAgente): Promise<Resultad
 
     anotarPaso: (peticion) => internas.anotarPaso(peticion),
     senalDeAprendizaje: (peticion) => internas.senalDeAprendizaje(peticion),
+    aprenderDeEdicion:
+      entrada.aprendizaje === true
+        ? async (aprobacionId) => {
+            // Hijo abandonado: el aprendizaje no retrasa la tarea ni la hace fallar,
+            // y sigue aunque la tarea termine antes. Uno por aprobación editada.
+            try {
+              await startChild(aprendizajeDeSenal, {
+                workflowId: `${PREFIJO_FLUJO_APRENDIZAJE}${aprobacionId}`,
+                args: [{ tenantId: entrada.tenantId, aprobacionId }],
+                parentClosePolicy: ParentClosePolicy.ABANDON,
+              });
+            } catch (error) {
+              // Ya hay un flujo para esta edición (la tarea se reinició después de
+              // lanzarlo): el aprendizaje es idempotente por aprobación y la tarea
+              // no debe fallar por eso. Cualquier otro error sí sube.
+              if (!(
+                error instanceof Error && error.name === 'WorkflowExecutionAlreadyStartedError'
+              )) {
+                throw error;
+              }
+            }
+          }
+        : undefined,
     abrirDelegacion: (peticion) => internas.abrirDelegacion(peticion),
 
     /**
@@ -425,3 +459,6 @@ export async function delegacion(entrada: EntradaDelegacion): Promise<ResultadoD
 
 // Sala v0: moderación, intervenciones y propuestas de operación.
 export * from './sala.js';
+
+// Aprendizaje v0: de la edición del borrador a la lección propuesta.
+export * from './aprendizaje.js';

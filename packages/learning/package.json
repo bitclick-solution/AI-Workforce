@@ -22,5 +22,12 @@
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "dependencies": {
+    "@aiw/db": "workspace:*",
+    "@aiw/domain": "workspace:*",
+    "@aiw/ledger": "workspace:*",
+    "postgres": "catalog:",
+    "zod": "catalog:"
   }
 }

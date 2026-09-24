@@ -455,6 +455,9 @@ importers:
 
   packages/evals:
     dependencies:
+      '@aiw/learning':
+        specifier: workspace:*
+        version: link:../learning
       '@aiw/models':
         specifier: workspace:*
         version: link:../models
@@ -485,6 +488,22 @@ importers:
         version: 5.0.1(@types/node@22.20.4)(vite@8.3.0(@types/node@22.20.4)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.13)(yaml@2.9.1))
 
   packages/learning:
+    dependencies:
+      '@aiw/db':
+        specifier: workspace:*
+        version: link:../db
+      '@aiw/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@aiw/ledger':
+        specifier: workspace:*
+        version: link:../ledger
+      postgres:
+        specifier: 'catalog:'
+        version: 3.4.9
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

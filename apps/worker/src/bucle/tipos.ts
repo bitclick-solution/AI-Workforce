@@ -212,6 +212,12 @@ export interface EntradaTareaAgente extends IdentidadDeEjecucion {
   validezAprobacionSegundos?: number | undefined;
   /** Contrato de la delegación que abre el flujo tras las escrituras, si la abre. */
   delegacion?: { puestoDestinoNombre: string; contrato: ContratoDelegacion } | undefined;
+  /**
+   * Aprendizaje v0: una edición del borrador arranca el flujo `aprendizajeDeSenal`.
+   * Lo pone quien arranca la tarea a partir de la bandera `AIW_APRENDIZAJE_V0`,
+   * porque el flujo no puede leer el entorno sin dejar de ser determinista.
+   */
+  aprendizaje?: boolean | undefined;
 }
 
 export interface ResultadoTareaAgente {

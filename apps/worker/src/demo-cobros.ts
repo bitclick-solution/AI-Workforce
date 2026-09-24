@@ -21,7 +21,7 @@ import { Client, Connection } from '@temporalio/client';
 import { verificarCadenaEnBase } from '@aiw/ledger';
 import type postgres from 'postgres';
 
-import { BANDERA, leerConfiguracion } from './configuracion.js';
+import { BANDERA, aprendizajeEncendido, leerConfiguracion } from './configuracion.js';
 import { montarTrabajador } from './trabajador.js';
 import { crearTareaRaiz, sembrarDemostracion } from './semilla.js';
 import { tareaAgente } from './flujos/index.js';
@@ -165,6 +165,9 @@ const mango = await clienteTemporal.workflow.start(tareaAgente, {
         'Haz el seguimiento de cobros de hoy: revisa las facturas vencidas y deja una ' +
         'nota de seguimiento en cada una.',
       validezAprobacionSegundos: 600,
+      // Con AIW_APRENDIZAJE_V0=1, `decidir <id> editada --texto "…"` lanza el flujo
+      // de aprendizaje y deja una lección propuesta para promocionar a mano.
+      aprendizaje: aprendizajeEncendido(),
       delegacion: {
         puestoDestinoNombre: PUESTO_CONCILIACION,
         contrato: {

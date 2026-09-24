@@ -9,7 +9,11 @@
  * reanudación sin depender de un servidor de correo.
  *
  *   pnpm --filter @aiw/worker decidir <aprobacionId> aprobada|rechazada|editada \
- *     [--tenant <tenantId>] [--motivo "..."]
+ *     [--tenant <tenantId>] [--motivo "..."] [--texto "texto editado"]
+ *
+ * Con `editada`, `--texto` sustituye `argumentos.texto` del borrador: es la edición
+ * más común —reescribir la nota antes de aprobarla— y la que el aprendizaje v0
+ * convierte en lección. La edición completa, antes y después, queda en la decisión.
  *
  * El tenant hace falta y no se adivina: las políticas de RLS no dejan leer una
  * aprobación sin saber de quién es, y eso es exactamente lo que se quiere. Sale por
@@ -37,12 +41,13 @@ const aprobacionId = posicionales[0];
 const sentidoBruto = posicionales[1];
 const tenantId = valorDeBandera(argumentos, 'tenant') ?? process.env['AIW_TENANT'];
 const motivo = valorDeBandera(argumentos, 'motivo');
+const textoEditado = valorDeBandera(argumentos, 'texto');
 
 function salirConAyuda(mensaje: string): never {
   console.error(`${mensaje}\n`);
   console.error(
     'Uso: pnpm --filter @aiw/worker decidir <aprobacionId> aprobada|rechazada|editada \\\n' +
-      '       [--tenant <tenantId>] [--motivo "por qué"]',
+      '       [--tenant <tenantId>] [--motivo "por qué"] [--texto "texto editado"]',
   );
   process.exit(1);
 }
@@ -52,6 +57,9 @@ if (!sentidoBruto || !SENTIDOS_DECISION.includes(sentidoBruto as SentidoDecision
   salirConAyuda(`El sentido tiene que ser uno de: ${SENTIDOS_DECISION.join(', ')}.`);
 }
 if (!tenantId) salirConAyuda('Falta el tenant: pásalo con --tenant o en AIW_TENANT.');
+if (sentidoBruto === 'editada' && textoEditado === undefined) {
+  salirConAyuda('Una decisión «editada» necesita la edición: pásala con --texto "…".');
+}
 
 const configuracion = leerConfiguracion();
 if (configuracion.urlBaseDeDatos === undefined) {
@@ -61,11 +69,33 @@ if (configuracion.urlBaseDeDatos === undefined) {
 const sentido = sentidoBruto as SentidoDecision;
 const conexion = crearConexion({ url: configuracion.urlBaseDeDatos });
 
+/** Lee el borrador y devuelve la edición con `argumentos.texto` sustituido. */
+async function edicionDelTexto(texto: string) {
+  const [fila] = await conTenant(
+    conexion.cliente,
+    tenantId as string,
+    (tx) => tx<{ carga: { argumentos?: Record<string, unknown> } | null }[]>`
+      select borrador_opaco->'carga' as carga from aprobacion
+      where tenant_id = ${tenantId as string} and id = ${aprobacionId as string}
+    `,
+  );
+  const antes = fila?.carga;
+  if (!antes || typeof antes.argumentos !== 'object' || antes.argumentos === null) {
+    salirConAyuda('El borrador de esta aprobación no tiene argumentos que editar.');
+  }
+  return { antes, despues: { ...antes, argumentos: { ...antes.argumentos, texto } } };
+}
+
 try {
+  const edicionPrevia =
+    sentido === 'editada' && textoEditado !== undefined
+      ? await edicionDelTexto(textoEditado)
+      : undefined;
   const resultado = await registrarDecision(conexion.cliente, tenantId, {
     aprobacionId,
     sentido,
     ...(motivo === undefined ? {} : { motivo }),
+    ...(edicionPrevia === undefined ? {} : { edicionPrevia }),
     // `plataforma` porque la decisión entra por la línea de mandatos y no por un
     // enlace de correo. El canal no cambia lo que se decide, pero se audita.
     origen: 'plataforma',

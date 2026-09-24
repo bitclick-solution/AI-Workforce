@@ -40,6 +40,7 @@ export * as conciliacion from './puestos/conciliacion.js';
 
 /** Casos dorados de los agentes de plataforma que viven en paquetes. */
 export * as moderador from './plataforma/moderador.js';
+export * as aprendizaje from './plataforma/aprendizaje.js';
 
 export function casoDorado(caso: CasoDorado): CasoDorado {
   if (caso.id.trim() === '') {

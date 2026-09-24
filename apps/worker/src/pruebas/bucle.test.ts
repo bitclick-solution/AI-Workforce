@@ -122,6 +122,21 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('bucle del agente · contra la base y el lib
     return { montaje, resultado, aprobaciones };
   }
 
+  it('una edición que no se pudo leer no ejecuta el borrador original', async () => {
+    // La señal dice «editada», pero la relectura no trae los argumentos editados:
+    // ejecutar lo propuesto sería ejecutar algo que la persona no aprobó.
+    const { montaje, resultado } = await correr({
+      nombre: `Bucle edición ilegible ${Date.now()}`,
+      presupuestoTareaEuros: 1,
+      decisor: (aprobacionId) => ({ aprobacionId, sentido: 'editada', personaId: null }),
+    });
+
+    expect(resultado.escriturasEjecutadas).toBe(0);
+    expect(resultado.escriturasSaltadas).toBe(3);
+    const pasos = await leerPasos(montaje.cliente, montaje.semilla.tenantId, montaje.tareaId);
+    expect(pasos.filter((paso) => paso.tipo === 'herramienta_saltada')).toHaveLength(3);
+  });
+
   it('lee, pide tres aprobaciones y escribe las tres notas', async () => {
     const { montaje, resultado, aprobaciones } = await correr({
       nombre: `Bucle completo ${Date.now()}`,

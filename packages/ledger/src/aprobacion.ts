@@ -38,6 +38,8 @@ export const ACCIONES = {
   enlaceRechazado: 'aprobacion.enlace.rechazado',
   aprobada: 'aprobacion.aprobada',
   rechazada: 'aprobacion.rechazada',
+  /** Aprobada con el borrador editado por la persona: la señal más valiosa del aprendizaje. */
+  editada: 'aprobacion.editada',
   vencida: 'aprobacion.vencida',
   senalEntregada: 'aprobacion.senal.entregada',
 } as const;
@@ -278,9 +280,37 @@ export interface PeticionDeDecision {
    */
   personaId?: string | null | undefined;
   motivo?: string | null | undefined;
+  /**
+   * La carga del borrador antes y después de que la persona la editara. Obligatoria
+   * con el sentido `editada` y prohibida con cualquier otro: una aprobación sin
+   * cambios que trae una «edición» es un error de quien llama, no una señal.
+   */
+  edicionPrevia?: esquemas.EdicionBorrador | undefined;
   origen: OrigenDecision;
   herramienta?: string | null | undefined;
   ahora?: Date | undefined;
+}
+
+/** Valida la edición antes de abrir ninguna transacción. Lanza con el motivo. */
+function validarEdicion(peticion: PeticionDeDecision): esquemas.EdicionBorrador | null {
+  if (peticion.sentido !== 'editada') {
+    if (peticion.edicionPrevia !== undefined) {
+      throw new Error(
+        `Una decisión «${peticion.sentido}» no lleva edición: usa el sentido «editada».`,
+      );
+    }
+    return null;
+  }
+  if (peticion.edicionPrevia === undefined) {
+    throw new Error(
+      'Una decisión «editada» necesita la edición: la carga de antes y la de después.',
+    );
+  }
+  return esquemas.validarCarga(
+    esquemas.edicionBorrador,
+    peticion.edicionPrevia,
+    'decision_aprobacion.edicion_previa',
+  );
 }
 
 /**
@@ -298,6 +328,7 @@ export async function registrarDecision(
   peticion: PeticionDeDecision,
 ): Promise<ResultadoDecision> {
   const ahora = peticion.ahora ?? new Date();
+  const edicion = validarEdicion(peticion);
   const leida = await conTenant(cliente, tenantId, (tx) =>
     leerAprobacion(tx, tenantId, peticion.aprobacionId),
   );
@@ -359,6 +390,7 @@ export async function registrarDecision(
         personaId: decisor,
         sentido: peticion.sentido,
         motivo: peticion.motivo ?? null,
+        edicionPrevia: edicion,
       });
       await anotar(tx, tenantId, {
         actorTipo: 'persona',
@@ -367,7 +399,12 @@ export async function registrarDecision(
         versionPuestoId: leida.versionPuestoId,
         tareaId: leida.tareaId,
         pasoId: leida.pasoId,
-        accion: peticion.sentido === 'rechazada' ? ACCIONES.rechazada : ACCIONES.aprobada,
+        accion:
+          peticion.sentido === 'rechazada'
+            ? ACCIONES.rechazada
+            : peticion.sentido === 'editada'
+              ? ACCIONES.editada
+              : ACCIONES.aprobada,
         herramienta: peticion.herramienta ?? peticion.origen,
         datosReferenciados: [
           { tipo: 'aprobacion', id: leida.id },
@@ -378,7 +415,7 @@ export async function registrarDecision(
         // El nombre de la columna habla de aprobar: solo se rellena cuando de
         // verdad alguien autorizó la acción. En un rechazo nadie autorizó nada, y
         // quién decidió está en `actor_id` y en la fila de la decisión.
-        aprobadaPorPersonaId: peticion.sentido === 'aprobada' ? decisor : null,
+        aprobadaPorPersonaId: peticion.sentido === 'rechazada' ? null : decisor,
         nivelAplicado: leida.nivelExigido,
       });
       return insertada;

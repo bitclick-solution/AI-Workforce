@@ -30,6 +30,7 @@ import {
   vencerAprobaciones,
   anotar,
 } from '@aiw/ledger';
+import { leerEdicion, lineasDeMemoria } from '@aiw/learning';
 import {
   componerPrompt,
   darPasoDeModelo,
@@ -58,6 +59,7 @@ import type {
   SalidaPasoModelo,
 } from '../bucle/tipos.js';
 import { enTenant, type ContextoDeActividades } from './contexto.js';
+import { crearActividadesDeAprendizaje } from './aprendizaje.js';
 import { crearActividadesDeSala } from './sala.js';
 
 /** Acciones del libro que escriben estas actividades. Un solo sitio, se añaden. */
@@ -253,6 +255,25 @@ async function llamarConReintentoGobernado(
  * conexión y el gateway, y una actividad que abre su propia conexión abriría una
  * por reintento.
  */
+/**
+ * Los argumentos que aprobó la persona tras editar el borrador. El borrador de una
+ * herramienta es `{ conector, argumentos }` (lo escribe el bucle); si la edición no
+ * trae argumentos con forma de objeto, no se ejecuta nada distinto de lo propuesto.
+ */
+async function argumentosEditados(
+  contexto: ContextoDeActividades,
+  peticion: { tenantId: string; aprobacionId: string },
+): Promise<Record<string, unknown> | undefined> {
+  const edicion = await enTenant(contexto, peticion.tenantId, (tx) =>
+    leerEdicion(tx, peticion.tenantId, peticion.aprobacionId),
+  );
+  const despues = edicion?.edicion.despues as { argumentos?: unknown } | undefined;
+  const argumentos = despues?.argumentos;
+  return typeof argumentos === 'object' && argumentos !== null && !Array.isArray(argumentos)
+    ? (argumentos as Record<string, unknown>)
+    : undefined;
+}
+
 export function crearActividades(contexto: ContextoDeActividades) {
   return {
     /**
@@ -337,11 +358,12 @@ export function crearActividades(contexto: ContextoDeActividades) {
           {
             prompt: string;
             politica: unknown;
+            memoria_congelada: unknown;
             brand_voice: unknown;
             presupuesto_euros: string;
           }[]
         >`
-          select v.prompt, v.politica, o.brand_voice, t.presupuesto_euros
+          select v.prompt, v.politica, v.memoria_congelada, o.brand_voice, t.presupuesto_euros
           from version_puesto v
           join tarea t on t.tenant_id = v.tenant_id and t.id = ${peticion.tareaId}
           join organizacion o on o.id = v.tenant_id
@@ -365,8 +387,13 @@ export function crearActividades(contexto: ContextoDeActividades) {
           'organizacion.brand_voice',
         );
 
+        // La memoria congelada de la versión entra bajo «Lo que ya sabes». Es parte
+        // de la versión, que es inmutable: la caché por versión sigue siendo válida,
+        // y una lección promocionada llega a la tarea siguiente porque esa tarea
+        // arranca con otra versión, no porque se invalide nada.
+        const memoria = lineasDeMemoria(fila.memoria_congelada);
         const sistema = contexto.cachePrompts.obtener(peticion.versionPuestoId, () =>
-          componerPrompt({ prompt: fila.prompt, brandVoice: voz }),
+          componerPrompt({ prompt: fila.prompt, brandVoice: voz, memoria }),
         );
         const limite = Number(fila.presupuesto_euros);
 
@@ -628,6 +655,9 @@ export function crearActividades(contexto: ContextoDeActividades) {
         aprobacionId: leida.id,
         sentido: leida.decision.sentido,
         personaId: leida.decision.personaId,
+        ...(leida.decision.sentido === 'editada'
+          ? { argumentosEditados: await argumentosEditados(contexto, peticion) }
+          : {}),
       };
     },
 
@@ -1020,6 +1050,9 @@ export function crearActividades(contexto: ContextoDeActividades) {
 
     // Sala v0: publicar, moderar, intervenir, proponer y contratar.
     ...crearActividadesDeSala(contexto),
+
+    // Aprendizaje v0: de la edición a la señal y de la señal a la lección.
+    ...crearActividadesDeAprendizaje(contexto),
   };
 }
 

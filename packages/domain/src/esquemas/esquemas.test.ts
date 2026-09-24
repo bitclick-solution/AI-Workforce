@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   borradorOpaco,
+  edicionBorrador,
+  memoriaCongelada,
   nivelAutonomia,
   parametrosLeccion,
   politicaPuesto,
@@ -54,6 +56,21 @@ describe('esquemas de las cargas jsonb', () => {
   it('el mensaje de error nombra la columna que se iba a escribir', () => {
     expect(() => validarCarga(borradorOpaco, { carga: 1 }, 'aprobacion.borrador_opaco')).toThrow(
       /Carga jsonb no válida para aprobacion\.borrador_opaco/,
+    );
+  });
+
+  it('la edición del borrador exige la carga de antes y la de después', () => {
+    expect(edicionBorrador.parse({ antes: { a: 1 }, despues: { a: 2 } })).toEqual({
+      antes: { a: 1 },
+      despues: { a: 2 },
+    });
+    expect(edicionBorrador.safeParse({ antes: { a: 1 } }).success).toBe(false);
+  });
+
+  it('lee la memoria congelada de las versiones anteriores como vacía', () => {
+    expect(memoriaCongelada.parse({})).toEqual({ lineas: [] });
+    expect(memoriaCongelada.safeParse({ lineas: [{ leccionId: '', texto: 'x' }] }).success).toBe(
+      false,
     );
   });
 });

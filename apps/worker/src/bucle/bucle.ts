@@ -70,6 +70,11 @@ export interface OperacionesDelBucle {
   esperarDecision(aprobacionId: string, validezSegundos: number): Promise<DecisionRecibida>;
   anotarPaso(peticion: PeticionAnotarPaso): Promise<void>;
   senalDeAprendizaje(peticion: PeticionSenalDeAprendizaje): Promise<void>;
+  /**
+   * Aprendizaje v0: lanza el flujo que convierte la edición de esta aprobación en
+   * señal y lección. Sin él, la edición se anota como señal genérica del bucle.
+   */
+  aprenderDeEdicion?: ((aprobacionId: string) => Promise<void>) | undefined;
   abrirDelegacion?: ((peticion: PeticionAbrirDelegacion) => Promise<DelegacionAbierta>) | undefined;
   /** Lanza el hijo y espera con el plazo del contrato. Devuelve nulo si venció. */
   esperarDelegacion?:
@@ -376,7 +381,20 @@ export async function ejecutarBucle(
       cuenta.aprobaciones += 1;
       aprobacionId = aprobacion.aprobacionId;
 
-      const decision = await operaciones.esperarDecision(aprobacion.aprobacionId, validez);
+      const recibida = await operaciones.esperarDecision(aprobacion.aprobacionId, validez);
+      // Una edición sin argumentos legibles no se ejecuta nunca con el borrador
+      // original: la persona aprobó otra cosa. Se trata como rechazo, que es el lado
+      // seguro, y queda el motivo en el paso.
+      const decision: DecisionRecibida =
+        recibida.sentido === 'editada' && recibida.argumentosEditados === undefined
+          ? {
+              ...recibida,
+              sentido: 'rechazada',
+              motivo:
+                'La persona editó el borrador, pero la edición no se pudo leer: ' +
+                'no se ejecuta el borrador original.',
+            }
+          : recibida;
 
       if (decision.sentido === 'rechazada') {
         const paso = siguientePaso();
@@ -407,13 +425,19 @@ export async function ejecutarBucle(
         // Lo que había antes de que la persona lo cambiara es la señal más valiosa
         // del aprendizaje: se ejecuta lo editado y se aprende de la diferencia.
         argumentos = decision.argumentosEditados ?? llamada.argumentos;
-        await operaciones.senalDeAprendizaje({
-          ...identidad,
-          tipo: 'correccion',
-          resumen: `La persona editó la llamada a ${herramienta.nombre} antes de aprobarla.`,
-          detalle: { antes: llamada.argumentos, despues: argumentos },
-          puntuacion: -0.3,
-        });
+        if (operaciones.aprenderDeEdicion) {
+          // Una sola señal por edición: la registra el flujo de aprendizaje, con la
+          // diferencia saneada, y no el bucle con los argumentos en crudo.
+          await operaciones.aprenderDeEdicion(aprobacion.aprobacionId);
+        } else {
+          await operaciones.senalDeAprendizaje({
+            ...identidad,
+            tipo: 'correccion',
+            resumen: `La persona editó la llamada a ${herramienta.nombre} antes de aprobarla.`,
+            detalle: { antes: llamada.argumentos, despues: argumentos },
+            puntuacion: -0.3,
+          });
+        }
       } else {
         await operaciones.senalDeAprendizaje({
           ...identidad,
