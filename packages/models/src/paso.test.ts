@@ -197,7 +197,7 @@ describe('paso de modelo · el bucle se queda en casa', () => {
     });
 
     expect(paso.llamadas).toHaveLength(0);
-    expect(paso.texto).toContain('facturas vencidas por');
+    expect(paso.texto).toMatch(/facturas? vencidas? por/);
   });
 });
 

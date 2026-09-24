@@ -79,6 +79,6 @@ describe('guion de Cobros en la sala (solo lectura)', () => {
   });
 
   it('cuenta las que pasan de 30 días', () => {
-    expect(resumirCartera(VENCIDAS)).toContain('1 pasan de 30 días');
+    expect(resumirCartera(VENCIDAS)).toContain('1 pasa de 30 días');
   });
 });

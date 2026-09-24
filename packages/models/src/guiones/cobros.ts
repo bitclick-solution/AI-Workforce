@@ -75,9 +75,12 @@ export function resumirCartera(facturas: readonly FacturaParaNota[]): string {
   const importe = facturas.reduce((suma, factura) => suma + factura.importe_pendiente, 0);
   const antigua = Math.max(...facturas.map((factura) => factura.dias_vencida));
   const masDe30 = facturas.filter((factura) => factura.dias_vencida > 30).length;
+  const cuantas =
+    facturas.length === 1 ? '1 factura vencida' : `${facturas.length} facturas vencidas`;
+  const pasan = masDe30 === 1 ? '1 pasa' : `${masDe30} pasan`;
   return (
-    `Este mes hay ${facturas.length} facturas vencidas por ${importe.toFixed(2)} € en total; ` +
-    `la más antigua lleva ${antigua} días y ${masDe30} pasan de 30 días. ` +
+    `Este mes hay ${cuantas} por ${importe.toFixed(2)} € en total; ` +
+    `la más antigua lleva ${antigua} días y ${pasan} de 30 días. ` +
     'Si quieres, preparo una nota de seguimiento para cada una y te la paso para aprobar.'
   );
 }

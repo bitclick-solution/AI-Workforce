@@ -186,7 +186,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
     });
     const respuesta = mensajes[2];
     expect(respuesta?.autor_puesto_id).toBe(montaje.semilla.cobros.puestoId);
-    expect(respuesta?.cuerpo).toMatch(/\d+ facturas vencidas por [\d.]+ €/);
+    expect(respuesta?.cuerpo).toMatch(/\d+ facturas? vencidas? por [\d.]+ €/);
     expect(respuesta?.cuerpo).not.toMatch(/F-2026|S\.L\./);
 
     const [fila] = await conTenant(
