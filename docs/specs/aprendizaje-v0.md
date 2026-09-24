@@ -17,6 +17,7 @@ Cuando una persona edita el borrador de un agente antes de aprobarlo, esa edici�
 - `apps/worker`: flujo durable `aprendizajeDeSenal` (señal → lección) y sus actividades; la tarea lo arranca como hijo abandonado cuando la decisión es `editada`; `leerContexto` compone el prompt con la memoria congelada de la versión; CLI `aprendizaje` para promocionar y revertir a mano; demo de un comando.
 - `packages/ledger`: `registrarDecision` acepta `edicionPrevia` con sentido `editada` y anota `aprobacion.editada`.
 - `packages/evals`: caso dorado `aprendizaje-001` y la puerta del Evaluador (`certificarPromocion`).
+- De paso, sin lógica nueva: `packages/domain` gana los esquemas `edicionBorrador`, `memoriaCongelada` y `leccionesOrigen` para las columnas `jsonb` que se empiezan a escribir; `.github/workflows/ci.yml` añade `@aiw/learning` al job «Base de datos» para que sus pruebas de integración corran en la CI.
 
 ## Endpoints, flujos y datos
 
@@ -24,7 +25,7 @@ Cuando una persona edita el borrador de un agente antes de aprobarlo, esa edici�
 - `decision_aprobacion.edicion_previa` guarda `{ antes, despues }`: la carga original del borrador y la editada (decisión 2).
 - Flujo `aprendizajeDeSenal(tenantId, aprobacionId)`, identificador `aprendizaje-<aprobacionId>`: actividad `registrarSenalDeEdicion` → actividad `proponerLeccion`. Idempotente por aprobación y por señal; reintentos de Temporal sin duplicar filas.
 - Acciones del libro: `aprobacion.editada`, `aprendizaje.senal.registrada`, `aprendizaje.leccion.propuesta`, `aprendizaje.leccion.promocionada`, `aprendizaje.promocion.bloqueada`, `aprendizaje.version.revertida`. Todas por `anotar`, que suma al contador.
-- CLI: `pnpm --filter @aiw/worker aprendizaje promocionar <leccionId> --persona <personaId>` y `pnpm --filter @aiw/worker aprendizaje revertir <puestoId> --a <versionId> --persona <personaId>`.
+- CLI (`src/demo-aprendizaje-cli.ts`): `pnpm --filter @aiw/worker aprendizaje expediente <puestoId>`, `… aprendizaje promocionar <leccionId> --persona <personaId>` y `… aprendizaje revertir <puestoId> --a <versionId> --persona <personaId>`, todos con `--tenant`. `decidir <aprobacionId> editada --texto "…"` escribe la edición desde la línea de mandatos, que es lo que el panel hará después.
 
 ## Criterios de hecho
 
@@ -65,11 +66,14 @@ Cuando una persona edita el borrador de un agente antes de aprobarlo, esa edici�
 ## Demo reproducible
 
 ```bash
-pnpm dev:up && pnpm --filter @aiw/db db:migrar
-AIW_APRENDIZAJE_V0=1 pnpm --filter @aiw/worker demo:aprendizaje
+pnpm dev:up    # solo hace falta PostgreSQL; la demo aplica las migraciones
+AIW_APRENDIZAJE_V0=1 pnpm --filter @aiw/worker demo:aprendizaje          # espera a que promociones tú
+AIW_APRENDIZAJE_V0=1 pnpm --filter @aiw/worker demo:aprendizaje --auto   # promociona sola, para grabar
 ```
 
-Siembra Finanzas, crea una tarea de Cobros con una aprobación de nota, registra la edición de Jesús («Le recordamos que su factura…» → «Te escribo para recordarte que tu factura…»), ejecuta el flujo de aprendizaje, imprime la lección, la promociona con la persona supervisora, arranca la tarea siguiente con la versión 2 y enseña la lección en su prompt, revierte a la versión 1 y enseña que desaparece, y termina con la cadena de auditoría verificada y el contador.
+Sin `--auto`, la demo imprime el mandato `aprendizaje promocionar …` y espera a que lo ejecutes en otra terminal: la promoción la hace una persona. Siembra Finanzas, crea una tarea de Cobros con una aprobación de nota, registra la edición de Jesús («Le recordamos que su factura…» → «Te escribo para recordarte que tu factura…»), ejecuta el flujo de aprendizaje, imprime la lección, la promociona con la persona supervisora, arranca la tarea siguiente con la versión 2 y enseña la lección en su prompt, revierte a la versión 1 y enseña que desaparece, y termina con la cadena de auditoría verificada y el contador.
+
+La demo llama a las dos actividades del flujo `aprendizajeDeSenal` en su orden, sin servidor de Temporal. El flujo durable, arrancado desde la tarea como hijo, se prueba contra Temporal en `apps/worker/src/pruebas/aprendizaje.test.ts` y se ve con `demo:cobros` y `decidir <id> editada --texto "…"` con la bandera encendida.
 
 ## Presupuesto de tokens
 

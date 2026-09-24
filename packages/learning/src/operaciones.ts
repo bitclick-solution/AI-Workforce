@@ -67,7 +67,8 @@ export class ErrorDeAprendizaje extends Error {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function exigirUuid(valor: string, que: string): void {
-  if (!UUID.test(valor)) throw new ErrorDeAprendizaje('no_encontrada', `${que} no es un UUID: ${valor}`);
+  if (!UUID.test(valor))
+    throw new ErrorDeAprendizaje('no_encontrada', `${que} no es un UUID: ${valor}`);
 }
 
 /**
@@ -338,7 +339,10 @@ export async function proponerLeccion(
         and creado_en = ${senal.senalCreadoEn}::text::timestamptz
     `;
     if (!fila) {
-      throw new ErrorDeAprendizaje('no_encontrada', `No hay señal ${senal.senalId} en este tenant.`);
+      throw new ErrorDeAprendizaje(
+        'no_encontrada',
+        `No hay señal ${senal.senalId} en este tenant.`,
+      );
     }
     if (fila.origen !== ORIGEN_EDICION) {
       throw new ErrorDeAprendizaje(
@@ -587,7 +591,10 @@ export async function promocionarLeccion(
 
     const memoriaAnterior = leerMemoriaCongelada(activa.memoria_congelada);
     const memoria: esquemas.MemoriaCongelada = {
-      lineas: [...memoriaAnterior.lineas, { leccionId: leccion.id, texto: String(parametros.valor) }],
+      lineas: [
+        ...memoriaAnterior.lineas,
+        { leccionId: leccion.id, texto: String(parametros.valor) },
+      ],
     };
     const resultados = await peticion.puerta({
       tenantId,
@@ -745,7 +752,13 @@ export async function revertirVersion(
     }
 
     const versiones = await tx<
-      { id: string; puesto_id: string; numero: string; lecciones_origen: unknown; activa: boolean }[]
+      {
+        id: string;
+        puesto_id: string;
+        numero: string;
+        lecciones_origen: unknown;
+        activa: boolean;
+      }[]
     >`
       select v.id, v.puesto_id, v.numero, v.lecciones_origen,
         (v.id = p.version_activa_id) as activa
@@ -757,7 +770,10 @@ export async function revertirVersion(
     const destino = versiones.find((v) => v.id === peticion.aVersionId);
     const actual = versiones.find((v) => v.activa);
     if (!actual) {
-      throw new ErrorDeAprendizaje('no_encontrada', `El puesto ${peticion.puestoId} no tiene versión activa.`);
+      throw new ErrorDeAprendizaje(
+        'no_encontrada',
+        `El puesto ${peticion.puestoId} no tiene versión activa.`,
+      );
     }
     if (!destino || destino.puesto_id !== peticion.puestoId) {
       throw new ErrorDeAprendizaje(
@@ -770,7 +786,9 @@ export async function revertirVersion(
     }
 
     const enActual = new Set(leerLeccionesOrigen(actual.lecciones_origen).map((l) => l.leccionId));
-    const enDestino = new Set(leerLeccionesOrigen(destino.lecciones_origen).map((l) => l.leccionId));
+    const enDestino = new Set(
+      leerLeccionesOrigen(destino.lecciones_origen).map((l) => l.leccionId),
+    );
     const retiradas = [...enActual].filter((id) => !enDestino.has(id));
     const repuestas = [...enDestino].filter((id) => !enActual.has(id));
 
@@ -875,9 +893,7 @@ export async function leerExpediente(
       order by l.creado_en
     `;
     const activa = versiones.find((v) => v.id === versionActiva.versionPuestoId);
-    const vigentes = new Set(
-      leerLeccionesOrigen(activa?.lecciones_origen).map((l) => l.leccionId),
-    );
+    const vigentes = new Set(leerLeccionesOrigen(activa?.lecciones_origen).map((l) => l.leccionId));
     return {
       puestoId,
       versionActiva,

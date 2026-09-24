@@ -22,6 +22,19 @@ export interface Configuracion {
   conectorDemoConfigurado: boolean;
 }
 
+/**
+ * Bandera del aprendizaje v0 (docs/specs/aprendizaje-v0.md, decisión 9). Enciende el
+ * arranque del flujo de aprendizaje desde la tarea, la demo y el CLI de promoción.
+ * Apagada, una edición se anota como señal genérica del bucle y nada más.
+ */
+export const BANDERA_APRENDIZAJE = 'AIW_APRENDIZAJE_V0';
+
+export function aprendizajeEncendido(
+  entorno: Record<string, string | undefined> = process.env,
+): boolean {
+  return entorno[BANDERA_APRENDIZAJE] === '1';
+}
+
 /** Cola de tareas de Temporal. Una por rebanada mientras no haya enrutado por puesto. */
 export const COLA_POR_DEFECTO = 'aiw-prueba-stack';
 

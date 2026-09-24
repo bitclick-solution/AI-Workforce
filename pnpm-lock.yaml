@@ -455,6 +455,9 @@ importers:
 
   packages/evals:
     dependencies:
+      '@aiw/learning':
+        specifier: workspace:*
+        version: link:../learning
       '@aiw/models':
         specifier: workspace:*
         version: link:../models

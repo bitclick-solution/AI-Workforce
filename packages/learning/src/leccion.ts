@@ -57,7 +57,10 @@ function describir(cambio: Cambio): string {
  * Lanza si no hay cambios: una «edición» idéntica al borrador no enseña nada, y
  * proponer una lección vacía sería ruido para la persona que promociona.
  */
-export function redactarLeccion(cambios: readonly Cambio[], contexto: ContextoDeLeccion): LeccionRedactada {
+export function redactarLeccion(
+  cambios: readonly Cambio[],
+  contexto: ContextoDeLeccion,
+): LeccionRedactada {
   if (cambios.length === 0) {
     throw new Error('La edición no cambió nada del borrador: no hay lección que proponer.');
   }

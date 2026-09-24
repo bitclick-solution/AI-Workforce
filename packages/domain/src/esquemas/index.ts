@@ -100,9 +100,7 @@ export const edicionBorrador = z
  * esta forma guarda `{}`, que se lee como memoria vacía.
  */
 export const memoriaCongelada = z.object({
-  lineas: z
-    .array(z.object({ leccionId: z.string().min(1), texto: z.string().min(1) }))
-    .default([]),
+  lineas: z.array(z.object({ leccionId: z.string().min(1), texto: z.string().min(1) })).default([]),
 });
 
 /** Lección que origina una versión de puesto, en `version_puesto.lecciones_origen`. */

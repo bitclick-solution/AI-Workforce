@@ -13,7 +13,9 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "clean": "rm -rf dist coverage .turbo",
-    "demo:sala": "tsx src/demo-sala.ts"
+    "demo:sala": "tsx src/demo-sala.ts",
+    "demo:aprendizaje": "tsx src/demo-aprendizaje.ts",
+    "aprendizaje": "tsx src/demo-aprendizaje-cli.ts"
   },
   "dependencies": {
     "@ai-sdk/provider": "catalog:",

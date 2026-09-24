@@ -14,7 +14,12 @@ import {
   sembrarOrganizacion,
   type OrganizacionSembrada,
 } from '@aiw/db/pruebas';
-import { ACCIONES, registrarDecision, solicitarAprobacion, verificarCadenaEnBase } from '@aiw/ledger';
+import {
+  ACCIONES,
+  registrarDecision,
+  solicitarAprobacion,
+  verificarCadenaEnBase,
+} from '@aiw/ledger';
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -131,7 +136,11 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
   it('la decisión «editada» exige la edición y ninguna otra la admite', async () => {
     const aprobacionId = await pedirAprobacion(org);
     await expect(
-      registrarDecision(cliente, org.tenantId, { aprobacionId, sentido: 'editada', origen: 'panel' }),
+      registrarDecision(cliente, org.tenantId, {
+        aprobacionId,
+        sentido: 'editada',
+        origen: 'panel',
+      }),
     ).rejects.toThrow(/necesita la edición/);
     await expect(
       registrarDecision(cliente, org.tenantId, {
@@ -149,7 +158,10 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     });
     expect(aprobada.estado).toBe('registrada');
     // Una aprobación sin edición no es una señal de edición.
-    await esperarError(registrarSenalDeEdicion(cliente, org.tenantId, aprobacionId), 'no_es_edicion');
+    await esperarError(
+      registrarSenalDeEdicion(cliente, org.tenantId, aprobacionId),
+      'no_es_edicion',
+    );
   });
 
   it('recorre edición, señal, lección, promoción, versión nueva y reversión', async () => {
@@ -242,7 +254,8 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       conTenant(
         cliente,
         org.tenantId,
-        (tx) => tx`update version_puesto set prompt = 'otro' where id = ${promocion.versionPuestoId}`,
+        (tx) =>
+          tx`update version_puesto set prompt = 'otro' where id = ${promocion.versionPuestoId}`,
       ),
     ).rejects.toThrow(/inmutable/);
 
@@ -324,7 +337,10 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
 
   it('otra organización no ve ni aprende de una edición ajena', async () => {
     const aprobacionId = await editar(org);
-    await esperarError(registrarSenalDeEdicion(cliente, otra.tenantId, aprobacionId), 'no_es_edicion');
+    await esperarError(
+      registrarSenalDeEdicion(cliente, otra.tenantId, aprobacionId),
+      'no_es_edicion',
+    );
     const senal = await registrarSenalDeEdicion(cliente, org.tenantId, aprobacionId);
     await esperarError(proponerLeccion(cliente, otra.tenantId, senal), 'no_encontrada');
   });

@@ -21,7 +21,10 @@ const PATRONES: readonly { clase: ClaseDatoPersonal; patron: RegExp }[] = [
   { clase: 'iban', patron: /\b[A-Z]{2}\d{2}(?:[ -]?[A-Z0-9]{4}){3,7}(?:[ -]?[A-Z0-9]{1,4})?\b/g },
   { clase: 'tarjeta', patron: /\b(?:\d{4}[ -]?){3}\d{4}\b/g },
   // DNI (8 cifras y letra), NIE (X/Y/Z, 7 cifras y letra) y CIF (letra, 7 cifras y control).
-  { clase: 'documento', patron: /\b(?:\d{8}[A-Z]|[XYZ]\d{7}[A-Z]|[ABCDEFGHJNPQRSUVW]\d{7}[0-9A-J])\b/gi },
+  {
+    clase: 'documento',
+    patron: /\b(?:\d{8}[A-Z]|[XYZ]\d{7}[A-Z]|[ABCDEFGHJNPQRSUVW]\d{7}[0-9A-J])\b/gi,
+  },
   // Teléfonos españoles con o sin prefijo: 9 cifras que empiezan por 6, 7, 8 o 9.
   { clase: 'telefono', patron: /(?:\+34[ -]?)?\b[6789]\d{2}[ -]?\d{3}[ -]?\d{3}\b/g },
 ];

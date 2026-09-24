@@ -18,6 +18,7 @@ import {
   REFERENCIA_SECRETO_DEMO,
 } from '@aiw/connector-demo';
 import { registrarTarifa } from '@aiw/ledger';
+import { versionActivaDe } from '@aiw/learning';
 import { MODELO_PRUEBA, MODELO_PRUEBA_CONCILIACION, PROVEEDOR_PRUEBA } from '@aiw/models';
 import type postgres from 'postgres';
 
@@ -131,4 +132,26 @@ export async function crearTareaRaiz(
     return tarea.id;
   });
   return { tareaId };
+}
+
+/**
+ * Crea la tarea siguiente de un puesto con la versión que esté activa ahora.
+ *
+ * Es el camino por el que una lección promocionada llega al trabajo: la tarea no
+ * elige versión, la toma del puntero `puesto.version_activa_id`, y así la tarea
+ * que arranca después de una promoción usa la versión nueva y la que arranca
+ * después de una reversión, la anterior.
+ */
+export async function crearTareaConVersionActiva(
+  cliente: postgres.Sql,
+  datos: { tenantId: string; puestoId: string; presupuestoEuros: number },
+): Promise<TareaSembrada & { versionPuestoId: string; numeroVersion: number }> {
+  const activa = await conTenant(cliente, datos.tenantId, (tx) =>
+    versionActivaDe(tx, datos.tenantId, datos.puestoId),
+  );
+  const { tareaId } = await crearTareaRaiz(cliente, {
+    ...datos,
+    versionPuestoId: activa.versionPuestoId,
+  });
+  return { tareaId, versionPuestoId: activa.versionPuestoId, numeroVersion: activa.numero };
 }

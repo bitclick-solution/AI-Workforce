@@ -302,7 +302,9 @@ function validarEdicion(peticion: PeticionDeDecision): esquemas.EdicionBorrador 
     return null;
   }
   if (peticion.edicionPrevia === undefined) {
-    throw new Error('Una decisión «editada» necesita la edición: la carga de antes y la de después.');
+    throw new Error(
+      'Una decisión «editada» necesita la edición: la carga de antes y la de después.',
+    );
   }
   return esquemas.validarCarga(
     esquemas.edicionBorrador,

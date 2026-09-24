@@ -118,9 +118,11 @@ describe('redacción de la lección', () => {
   });
 
   it('rechaza cualquier clase fuera del ADR-005, empezando por el modelo base', () => {
-    expect(() => validarParametros({ clase: 'modelo_base', destino: 'puesto', valor: 'x' })).toThrow(
-      /leccion.parametros/,
-    );
-    expect(() => validarParametros({ clase: 'ajuste_fino', destino: 'puesto', valor: 'x' })).toThrow();
+    expect(() =>
+      validarParametros({ clase: 'modelo_base', destino: 'puesto', valor: 'x' }),
+    ).toThrow(/leccion.parametros/);
+    expect(() =>
+      validarParametros({ clase: 'ajuste_fino', destino: 'puesto', valor: 'x' }),
+    ).toThrow();
   });
 });

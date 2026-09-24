@@ -72,7 +72,7 @@ jobs:
       - name: Migración, aislamiento, inmutabilidad, purga, contador, aprobación, gateway y carga reducida
         # Concurrencia 1 a propósito: los paquetes comparten una sola base y alguna
         # suite vacía el libro de auditoría al terminar.
-        run: pnpm --workspace-concurrency=1 --filter @aiw/db --filter @aiw/ledger --filter @aiw/api --filter @aiw/channels --filter @aiw/mcp-gateway test
+        run: pnpm --workspace-concurrency=1 --filter @aiw/db --filter @aiw/ledger --filter @aiw/learning --filter @aiw/api --filter @aiw/channels --filter @aiw/mcp-gateway test
 
   flujos-durables:
     name: Flujos durables
