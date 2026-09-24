@@ -60,6 +60,8 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     });
     tenantId = sembrado.tenantId;
     personaId = sembrado.personaId;
+    // Cada mensaje con su hora: en una sola transacción `now()` es la misma para
+    // todos y el orden por identificador no está garantizado.
     salaId = await conTenant(cliente, tenantId, async (tx) => {
       const [sala] = await tx<{ id: string }[]>`
         insert into sala (tenant_id, ambito, nombre)
@@ -71,11 +73,12 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
         values (${propuestaId}, ${tenantId}, 'contratar', 'plataforma', 'Contratar Conciliación bancaria', 'n1', 'pendiente')
       `;
       await tx`
-        insert into mensaje (tenant_id, sala_id, autor_persona_id, cuerpo)
-        values (${tenantId}, ${id}, ${personaId}, '¿cómo vamos de cobros?')
+        insert into mensaje (tenant_id, sala_id, autor_persona_id, cuerpo, creado_en)
+        values (${tenantId}, ${id}, ${personaId}, '¿cómo vamos de cobros?',
+          now() + interval '1 second')
       `;
       await tx`
-        insert into mensaje (tenant_id, sala_id, cuerpo, adjuntos)
+        insert into mensaje (tenant_id, sala_id, cuerpo, adjuntos, creado_en)
         values (${tenantId}, ${id}, 'Da la palabra a Cobros.',
           ${JSON.stringify([
             { tipo: 'autor_plataforma', agente: 'moderador' },
@@ -86,19 +89,22 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
               motivo: 'm',
               decisionCompleta: { tipo: 'intervenir' },
             },
-          ])}::text::jsonb)
+          ])}::text::jsonb,
+          now() + interval '2 second')
       `;
       await tx`
-        insert into mensaje (tenant_id, sala_id, autor_puesto_id, cuerpo)
-        values (${tenantId}, ${id}, ${sembrado.cobros.puestoId}, 'Este mes hay 3 facturas vencidas.')
+        insert into mensaje (tenant_id, sala_id, autor_puesto_id, cuerpo, creado_en)
+        values (${tenantId}, ${id}, ${sembrado.cobros.puestoId}, 'Este mes hay 3 facturas vencidas.',
+          now() + interval '3 second')
       `;
       await tx`
-        insert into mensaje (tenant_id, sala_id, cuerpo, adjuntos)
+        insert into mensaje (tenant_id, sala_id, cuerpo, adjuntos, creado_en)
         values (${tenantId}, ${id}, 'Propongo contratar Conciliación bancaria.',
           ${JSON.stringify([
             { tipo: 'autor_plataforma', agente: 'director_ia' },
             { tipo: 'propuesta_operacion', propuestaId },
-          ])}::text::jsonb)
+          ])}::text::jsonb,
+          now() + interval '4 second')
       `;
       return id;
     });
