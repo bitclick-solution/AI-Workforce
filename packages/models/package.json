@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./pruebas": {
+      "types": "./src/pruebas/index.ts",
+      "default": "./src/pruebas/index.ts"
     }
   },
   "files": [
@@ -22,5 +26,14 @@
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "dependencies": {
+    "@ai-sdk/mistral": "catalog:",
+    "@anthropic-ai/bedrock-sdk": "catalog:",
+    "@anthropic-ai/sdk": "catalog:",
+    "@anthropic-ai/vertex-sdk": "catalog:",
+    "@aiw/domain": "workspace:*",
+    "ai": "catalog:",
+    "zod": "catalog:"
   }
 }
