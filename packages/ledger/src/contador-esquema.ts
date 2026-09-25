@@ -50,16 +50,86 @@ export const tarifaModelo = pgTable(
     })
       .notNull()
       .default('0'),
+    /**
+     * Plataforma real que sirve el modelo (ADR-017): `bedrock-eu`, `vertex-eu`,
+     * `primera-parte` (usos internos sin datos de clientes) o `ai-sdk` (Mistral,
+     * locales, proveedor determinista de la integración continua). Con default
+     * para que las tarifas de antes de esta rebanada sigan siendo válidas.
+     */
+    plataforma: text('plataforma').notNull().default('primera-parte'),
+    /**
+     * Documental: cuánto es este precio frente a la lista oficial de Anthropic en
+     * primera parte (ADR-018). No participa en `calcularCosteEuros`, que siempre
+     * cobra con los `eurosPorMillon*` de esta fila: es la trazabilidad de por qué
+     * la plataforma cobra lo que cobra, no un factor que se aplique en caliente.
+     */
+    multiplicadorListaOficial: numeric('multiplicador_lista_oficial', {
+      precision: 10,
+      scale: 4,
+    })
+      .notNull()
+      .default('1'),
+    /**
+     * Región concreta del partner (`eu-central-1`, `europe-west1`...). Documental,
+     * como `multiplicadorListaOficial`: no participa en la única de la tarifa, que
+     * ya distingue por `plataforma`. Nula cuando la plataforma no tiene región
+     * (`primera-parte`, `ai-sdk`).
+     */
+    region: text('region'),
+    /**
+     * En qué moneda cotizó el partner el precio de esta fila (ADR-011: el importe
+     * es dato del tenant). `eurosPorMillon*` son siempre el coste real en euros que
+     * usa `calcularCosteEuros`; cuando `monedaOrigen` no es `eur`, esos euros salen
+     * de aplicar `tipoCambioAEuros` al precio de origen, congelado en el momento de
+     * dar de alta la tarifa — igual que el precio, el tipo de cambio no se
+     * recalcula después.
+     */
+    monedaOrigen: text('moneda_origen').notNull().default('eur'),
+    tipoCambioAEuros: numeric('tipo_cambio_a_euros', { precision: 12, scale: 6 })
+      .notNull()
+      .default('1'),
+    /** Precio tal como lo publicó el partner, en `monedaOrigen`. Solo trazabilidad: nulo cuando `monedaOrigen` es `eur`. */
+    precioOrigenPorMillonEntrada: numeric('precio_origen_por_millon_entrada', {
+      precision: 14,
+      scale: 6,
+    }),
+    precioOrigenPorMillonSalida: numeric('precio_origen_por_millon_salida', {
+      precision: 14,
+      scale: 6,
+    }),
+    precioOrigenPorMillonEntradaCache: numeric('precio_origen_por_millon_entrada_cache', {
+      precision: 14,
+      scale: 6,
+    }),
+    /**
+     * Escritura de caché por millón de tokens, a 5 minutos y a 1 hora de TTL. Ya en
+     * euros, igual que el resto de `eurosPorMillon*`. Documental por ahora: el
+     * contador todavía no distingue tokens de escritura de caché en `uso_modelo`
+     * (fuera de alcance de esta rebanada; ver la especificación).
+     */
+    eurosPorMillonEntradaCacheEscritura5m: numeric('euros_por_millon_entrada_cache_escritura_5m', {
+      precision: 14,
+      scale: 6,
+    })
+      .notNull()
+      .default('0'),
+    eurosPorMillonEntradaCacheEscritura1h: numeric('euros_por_millon_entrada_cache_escritura_1h', {
+      precision: 14,
+      scale: 6,
+    })
+      .notNull()
+      .default('0'),
     vigenteDesde: timestamp('vigente_desde', { withTimezone: true }).notNull(),
     /** De dónde sale el precio: lista pública, contrato o acuerdo con el partner. */
     fuente: text('fuente').notNull(),
     ...columnasInmutables(),
   },
   (t) => [
-    uniqueIndex('tarifa_modelo_tenant_modelo_vigencia_key').on(
+    uniqueIndex('tarifa_modelo_tenant_modelo_plataforma_vigencia_key').on(
       t.tenantId,
       t.proveedor,
       t.modelo,
+      t.plataforma,
       t.vigenteDesde,
     ),
     index('tarifa_modelo_tenant_vigencia_idx').on(t.tenantId, t.vigenteDesde.desc()),
@@ -87,6 +157,8 @@ export const usoModelo = pgTable(
     versionPuestoId: uuid('version_puesto_id').notNull(),
     proveedor: text('proveedor').notNull(),
     modelo: text('modelo').notNull(),
+    /** Plataforma real que sirvió la llamada (ADR-017). Con default por lo mismo que en `tarifaModelo`. */
+    plataforma: text('plataforma').notNull().default('primera-parte'),
     tokensEntrada: bigint('tokens_entrada', { mode: 'number' }).notNull().default(0),
     tokensSalida: bigint('tokens_salida', { mode: 'number' }).notNull().default(0),
     tokensEntradaCache: bigint('tokens_entrada_cache', { mode: 'number' }).notNull().default(0),

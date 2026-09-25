@@ -184,6 +184,24 @@ describe('catálogo de tarifas', () => {
     }
   });
 
+  it('las filas reales de Bedrock UE llevan región, moneda de origen y tipo de cambio (decisión de Jesús, 2026-09-25)', () => {
+    const tarifas = tarifasDelCatalogo(catalogo);
+    const bedrock = tarifas.filter((t) => t.plataforma === 'bedrock-eu');
+    expect(bedrock.length).toBeGreaterThanOrEqual(6);
+    for (const tarifa of bedrock) {
+      expect(tarifa.region).toBe('eu-central-1');
+      expect(tarifa.monedaOrigen).toBe('usd');
+      expect(tarifa.tipoCambioAEuros).toBeGreaterThan(0);
+      expect(tarifa.precioOrigenPorMillonEntrada).toBeGreaterThan(0);
+      expect(tarifa.eurosPorMillonEntradaCacheEscritura5m).toBeGreaterThan(0);
+      expect(tarifa.eurosPorMillonEntradaCacheEscritura1h).toBeGreaterThan(0);
+    }
+    const provisionales = bedrock.filter((t) =>
+      ['claude-opus-4-6', 'claude-sonnet-4-6'].includes(t.modelo),
+    );
+    expect(provisionales.length).toBe(2);
+  });
+
   it('un catálogo con un precio negativo se rechaza entero', () => {
     const roto = {
       version: 1,

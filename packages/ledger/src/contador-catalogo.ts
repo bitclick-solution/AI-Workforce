@@ -23,6 +23,23 @@ const tarifaDelCatalogo = z.object({
   eurosPorMillonEntrada: z.number().nonnegative(),
   eurosPorMillonSalida: z.number().nonnegative(),
   eurosPorMillonEntradaCache: z.number().nonnegative().default(0),
+  /** Plataforma real que sirve el modelo (ADR-017). Por defecto, `primera-parte`. */
+  plataforma: z.string().trim().min(1).default('primera-parte'),
+  /** Documental: multiplicador frente a la lista oficial de Anthropic (ADR-018). */
+  multiplicadorListaOficial: z.number().positive().default(1),
+  /** Región concreta del partner (`eu-central-1`...). Documental. */
+  region: z.string().trim().min(1).optional(),
+  /** En qué moneda cotizó el partner el precio de esta fila. Por defecto, `eur`. */
+  monedaOrigen: z.string().trim().min(1).default('eur'),
+  /** Tipo de cambio a euros aplicado a esta fila. Por defecto, 1 (`monedaOrigen` ya es `eur`). */
+  tipoCambioAEuros: z.number().positive().default(1),
+  /** Precio de origen en `monedaOrigen`, solo trazabilidad. */
+  precioOrigenPorMillonEntrada: z.number().nonnegative().optional(),
+  precioOrigenPorMillonSalida: z.number().nonnegative().optional(),
+  precioOrigenPorMillonEntradaCache: z.number().nonnegative().optional(),
+  /** Escritura de caché por millón de tokens, en euros. Documental por ahora (ver la especificación). */
+  eurosPorMillonEntradaCacheEscritura5m: z.number().nonnegative().default(0),
+  eurosPorMillonEntradaCacheEscritura1h: z.number().nonnegative().default(0),
   /** ISO 8601. Se valida como fecha real y no solo como cadena con pinta de fecha. */
   vigenteDesde: z.string().refine((valor) => !Number.isNaN(Date.parse(valor)), {
     message: 'vigenteDesde no es una fecha ISO 8601',
@@ -60,6 +77,22 @@ export function tarifasDelCatalogo(json: unknown): TarifaNueva[] {
     eurosPorMillonEntrada: tarifa.eurosPorMillonEntrada,
     eurosPorMillonSalida: tarifa.eurosPorMillonSalida,
     eurosPorMillonEntradaCache: tarifa.eurosPorMillonEntradaCache,
+    plataforma: tarifa.plataforma,
+    multiplicadorListaOficial: tarifa.multiplicadorListaOficial,
+    ...(tarifa.region !== undefined ? { region: tarifa.region } : {}),
+    monedaOrigen: tarifa.monedaOrigen,
+    tipoCambioAEuros: tarifa.tipoCambioAEuros,
+    ...(tarifa.precioOrigenPorMillonEntrada !== undefined
+      ? { precioOrigenPorMillonEntrada: tarifa.precioOrigenPorMillonEntrada }
+      : {}),
+    ...(tarifa.precioOrigenPorMillonSalida !== undefined
+      ? { precioOrigenPorMillonSalida: tarifa.precioOrigenPorMillonSalida }
+      : {}),
+    ...(tarifa.precioOrigenPorMillonEntradaCache !== undefined
+      ? { precioOrigenPorMillonEntradaCache: tarifa.precioOrigenPorMillonEntradaCache }
+      : {}),
+    eurosPorMillonEntradaCacheEscritura5m: tarifa.eurosPorMillonEntradaCacheEscritura5m,
+    eurosPorMillonEntradaCacheEscritura1h: tarifa.eurosPorMillonEntradaCacheEscritura1h,
     vigenteDesde: new Date(tarifa.vigenteDesde),
     fuente: tarifa.fuente,
   }));

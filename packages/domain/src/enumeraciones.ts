@@ -125,6 +125,36 @@ export const ESTADOS_NOTIFICACION = [
 
 export const ESTADOS_EVENTO_SALIDA = ['pendiente', 'publicado', 'fallido'] as const;
 
+/**
+ * Papel del modelo dentro de la versión de puesto (ADR-018). No es un identificador
+ * de proveedor: es el vocabulario del negocio, y `@aiw/models` lo traduce al
+ * identificador real de cada plataforma (primera parte, Bedrock o Vertex).
+ */
+export const PAPELES_MODELO = ['opus5', 'sonnet5', 'haiku45'] as const;
+
+/**
+ * Clase de paso del bucle del agente (ADR-018). Cada una lleva un nivel de esfuerzo
+ * por defecto en la versión de puesto: bajo para moderador/enrutado/resumen/rutina,
+ * medio para negocio, alto para razonamiento financiero, conciliación y decisiones
+ * de escritura, máximo solo en evals de certificación.
+ */
+export const CLASES_PASO = [
+  'moderador_sala',
+  'enrutado',
+  'resumen',
+  'rutina',
+  'negocio',
+  'razonamiento_financiero',
+  'conciliacion',
+  'decision_escritura',
+  'certificacion',
+] as const;
+
+export const NIVELES_ESFUERZO = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+/** Plataforma real que ejecuta la inferencia (ADR-017). No hay geografía de la UE en primera parte. */
+export const PLATAFORMAS_MODELO = ['bedrock-eu', 'vertex-eu', 'primera-parte', 'ai-sdk'] as const;
+
 export type Plan = (typeof PLANES)[number];
 export type EstadoPuesto = (typeof ESTADOS_PUESTO)[number];
 export type EstadoTarea = (typeof ESTADOS_TAREA)[number];
@@ -132,3 +162,7 @@ export type ResultadoAccion = (typeof RESULTADOS_ACCION)[number];
 export type Nivel = (typeof NIVELES)[number];
 export type Ambito = (typeof AMBITOS)[number];
 export type SentidoDecision = (typeof SENTIDOS_DECISION)[number];
+export type PapelModelo = (typeof PAPELES_MODELO)[number];
+export type ClasePaso = (typeof CLASES_PASO)[number];
+export type NivelEsfuerzo = (typeof NIVELES_ESFUERZO)[number];
+export type PlataformaModelo = (typeof PLATAFORMAS_MODELO)[number];
