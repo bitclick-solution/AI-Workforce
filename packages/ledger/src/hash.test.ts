@@ -116,6 +116,21 @@ describe('normalizarFecha', () => {
   it('rechaza un texto que no reconoce', () => {
     expect(() => normalizarFecha('hace un rato')).toThrow(/no reconocida/);
   });
+
+  it('trunca la fracción de microsegundos de clock_timestamp() igual que new Date(texto)', () => {
+    // El cliente crudo de `postgres` analiza el texto con `new Date(x)` (`postgres.js`,
+    // `types.js`): trunca a milisegundos, no redondea. `.123789` da `.123`, no `.124`;
+    // una fracción que redondeara hacia arriba (aquí también `.999999`, que redondeada
+    // desbordaría al segundo siguiente) es la que distinguía las dos vías antes de
+    // este ajuste.
+    const conMicrosegundos = '2026-09-20 12:45:00.123789+00';
+    expect(normalizarFecha(conMicrosegundos)).toEqual(new Date(conMicrosegundos));
+    expect(normalizarFecha(conMicrosegundos)).toEqual(new Date('2026-09-20T12:45:00.123Z'));
+
+    const alBordeDelSegundo = '2026-09-20 12:45:00.999999+00';
+    expect(normalizarFecha(alBordeDelSegundo)).toEqual(new Date(alBordeDelSegundo));
+    expect(normalizarFecha(alBordeDelSegundo)).toEqual(new Date('2026-09-20T12:45:00.999Z'));
+  });
 });
 
 describe('normalizarImporte', () => {
@@ -159,6 +174,22 @@ describe('calcularHash', () => {
     const conDate = contenido(1);
     const conTexto: ContenidoEntrada = { ...conDate, creadoEn: '2026-09-19 08:00:00+00' };
     expect(calcularHash(conTexto, HASH_GENESIS)).toBe(calcularHash(conDate, HASH_GENESIS));
+  });
+
+  it('con microsegundos que no caen en un múltiplo de milisegundo, sigue sin depender del cliente', () => {
+    // `clock_timestamp()` da microsegundos. El cliente crudo analiza ese texto con
+    // `new Date(texto)` (`postgres.js`); el cliente al que `drizzle-orm/postgres-js`
+    // le ha sustituido el analizador entrega el texto tal cual. Las dos rutas tienen
+    // que acabar en el mismo Date truncado a milisegundos, y por tanto en el mismo hash.
+    const textoDePostgres = '2026-09-19 08:00:00.123789+00';
+    const conTexto: ContenidoEntrada = { ...contenido(1), creadoEn: textoDePostgres };
+    const conDateDelClienteCrudo: ContenidoEntrada = {
+      ...contenido(1),
+      creadoEn: new Date(textoDePostgres),
+    };
+    expect(calcularHash(conTexto, HASH_GENESIS)).toBe(
+      calcularHash(conDateDelClienteCrudo, HASH_GENESIS),
+    );
   });
 });
 

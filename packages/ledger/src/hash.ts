@@ -89,6 +89,13 @@ const TEXTO_TIMESTAMPTZ =
  * cliente crudo de `postgres`— o como el texto de Postgres sin analizar —cliente al
  * que `drizzle-orm/postgres-js` le ha sustituido el analizador—. Sin desplazamiento
  * de zona en el texto se asume UTC, que es como arranca la sesión de la aplicación.
+ *
+ * `clock_timestamp()` da microsegundos, pero un `Date` de JavaScript solo tiene
+ * milisegundos: el cliente crudo de `postgres` analiza el texto con `new Date(x)`
+ * (`postgres.js`, `types.js`), que trunca la fracción de segundo a sus tres primeras
+ * cifras, no la redondea. Aquí se trunca igual, para que las dos vías den el mismo
+ * `Date` para la misma marca de tiempo aunque la fracción no caiga en un múltiplo de
+ * milisegundo.
  */
 export function normalizarFecha(valor: FechaEntrada): Date {
   if (valor instanceof Date) return valor;
@@ -98,7 +105,7 @@ export function normalizarFecha(valor: FechaEntrada): Date {
     throw new Error(`Fecha de entrada de auditoría no reconocida: ${valor}`);
   }
   const [, anio, mes, dia, hora, minuto, segundo, fraccion, signo, horaZona, minutoZona] = encaje;
-  const milisegundos = fraccion ? Math.round(Number(`0.${fraccion}`) * 1000) : 0;
+  const milisegundos = fraccion ? Number(fraccion.slice(0, 3).padEnd(3, '0')) : 0;
   const desplazamientoMin =
     signo === undefined
       ? 0
