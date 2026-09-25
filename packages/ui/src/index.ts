@@ -55,3 +55,31 @@ export type { CampoProps } from './campo';
 
 export { Porque } from './porque';
 export type { PorqueProps } from './porque';
+
+export { AvatarDeAgente, AvatarDePersona } from './avatar';
+export type {
+  AvatarDeAgenteProps,
+  AvatarDePersonaProps,
+  ColorDeAvatar,
+  EstadoDeAvatar,
+  GestoDeAgente,
+  PuestoConEmblema,
+  TamanoDeAvatar,
+} from './avatar';
+
+export { TarjetaDeWidget } from './tarjeta-de-widget';
+export type { TarjetaDeWidgetProps } from './tarjeta-de-widget';
+
+export { Indicador } from './indicador';
+export type { IndicadorProps, TonoDeIndicador } from './indicador';
+
+export { ListaDeAvisos } from './lista-de-avisos';
+export type { ListaDeAvisosProps } from './lista-de-avisos';
+
+export { AvisoDeAprobacion } from './aviso-de-aprobacion';
+export type { AvisoDeAprobacionProps } from './aviso-de-aprobacion';
+
+export { AVATARES_PASTEL, PALETA_CLARA, PALETA_OSCURA, TINTA_AVATAR } from './paleta';
+export type { PaletaDeModo } from './paleta';
+
+export { ratioDeContraste } from './contraste';

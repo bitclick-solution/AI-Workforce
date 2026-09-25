@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '../../../packages/ui/src/tema.css';
 
 /* Los componentes de @aiw/ui viven fuera de esta aplicación: sin esto, Tailwind
    no ve sus clases y el panel se sirve sin estilos. */

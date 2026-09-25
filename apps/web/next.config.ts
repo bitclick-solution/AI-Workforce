@@ -10,6 +10,9 @@ const raiz = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // No generamos AGENTS.md/CLAUDE.md: este repo ya tiene los suyos, y no se
+  // tocan sin rebanada y aprobación de Jesús.
+  agentRules: false,
   // Imagen autocontenida para el bundle SaaS y on-premise.
   output: 'standalone',
   outputFileTracingRoot: raiz,
