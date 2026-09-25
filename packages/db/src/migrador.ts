@@ -33,6 +33,11 @@ export const MIGRACIONES: readonly Migracion[] = [
       new URL('../drizzle/reverso/0001_contador_uso_de_modelos.sql', import.meta.url),
     ),
   },
+  {
+    nombre: '0002_modelos_v1',
+    ruta: fileURLToPath(new URL('../drizzle/0002_modelos_v1.sql', import.meta.url)),
+    rutaReverso: fileURLToPath(new URL('../drizzle/reverso/0002_modelos_v1.sql', import.meta.url)),
+  },
 ];
 
 export function huellaDe(contenido: string): string {

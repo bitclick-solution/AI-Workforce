@@ -7,13 +7,32 @@
  */
 import { z } from 'zod';
 
-import { AMBITOS, NIVELES, PLANES, SENTIDOS_DECISION } from '../enumeraciones.js';
+import {
+  AMBITOS,
+  CLASES_PASO,
+  NIVELES,
+  NIVELES_ESFUERZO,
+  PAPELES_MODELO,
+  PLANES,
+  SENTIDOS_DECISION,
+} from '../enumeraciones.js';
 
-export { AMBITOS, NIVELES, PLANES, SENTIDOS_DECISION };
+export {
+  AMBITOS,
+  CLASES_PASO,
+  NIVELES,
+  NIVELES_ESFUERZO,
+  PAPELES_MODELO,
+  PLANES,
+  SENTIDOS_DECISION,
+};
 
 export const nivelAutonomia = z.enum(NIVELES);
 export const ambito = z.enum(AMBITOS);
 export const sentidoDecision = z.enum(SENTIDOS_DECISION);
+export const papelModelo = z.enum(PAPELES_MODELO);
+export const claseDePaso = z.enum(CLASES_PASO);
+export const nivelEsfuerzo = z.enum(NIVELES_ESFUERZO);
 
 /**
  * Plan comercial de la organización. Es una columna `text` y no un tipo `enum` de
@@ -53,6 +72,23 @@ export const politicaPuesto = z.object({
   guardiasEntrada: z.array(z.string()).default([]),
   guardiasSalida: z.array(z.string()).default([]),
   clasesProhibidas: z.array(z.string()).default([]),
+});
+
+/**
+ * Configuración de modelo de una versión de puesto (ADR-018): modelo, esfuerzo por
+ * clase de paso y modelo de respaldo. Es dato inmutable de la versión, igual que la
+ * política: cambiar de modelo o de esfuerzo por defecto es una promoción y crea una
+ * versión nueva, nunca una edición de esta.
+ *
+ * `modeloRespaldo` puede repetir `modelo`: significa que el puesto no tiene
+ * respaldo real y una tarea con rechazo del clasificador falla como paso no
+ * reintentable sin segundo intento (ADR-018). No hay respaldo de servidor en
+ * Bedrock ni en Vertex: lo ejecuta el cliente.
+ */
+export const configuracionModeloPuesto = z.object({
+  modelo: papelModelo,
+  modeloRespaldo: papelModelo.nullable().default(null),
+  esfuerzoPorClasePaso: z.partialRecord(claseDePaso, nivelEsfuerzo).default({}),
 });
 
 /** Borrador de aprobación: carga opaca para el plano de control (ADR-001). */
@@ -130,6 +166,7 @@ export const cambioDeNivel = z.object({
 
 export type BrandVoice = z.infer<typeof brandVoice>;
 export type PoliticaPuesto = z.infer<typeof politicaPuesto>;
+export type ConfiguracionModeloPuesto = z.infer<typeof configuracionModeloPuesto>;
 export type BorradorOpaco = z.infer<typeof borradorOpaco>;
 export type ParametrosLeccion = z.infer<typeof parametrosLeccion>;
 export type DatosReferenciados = z.infer<typeof datosReferenciados>;

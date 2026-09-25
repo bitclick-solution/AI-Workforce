@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   borradorOpaco,
+  configuracionModeloPuesto,
   nivelAutonomia,
   parametrosLeccion,
   politicaPuesto,
@@ -49,6 +50,37 @@ describe('esquemas de las cargas jsonb', () => {
     expect(() =>
       parametrosLeccion.parse({ clase: 'modelo_base', destino: 'puesto', valor: 'gpt' }),
     ).toThrow();
+  });
+
+  it('valida la configuración de modelo de una versión de puesto (ADR-018)', () => {
+    const configuracion = validarCarga(
+      configuracionModeloPuesto,
+      {
+        modelo: 'sonnet5',
+        modeloRespaldo: 'haiku45',
+        esfuerzoPorClasePaso: { negocio: 'medium', conciliacion: 'high' },
+      },
+      'version_puesto.configuracion_modelo',
+    );
+    expect(configuracion.modelo).toBe('sonnet5');
+    expect(configuracion.modeloRespaldo).toBe('haiku45');
+    expect(configuracion.esfuerzoPorClasePaso.conciliacion).toBe('high');
+  });
+
+  it('el respaldo es opcional: un puesto sin segundo intento lo deja en nulo', () => {
+    const configuracion = configuracionModeloPuesto.parse({ modelo: 'opus5' });
+    expect(configuracion.modeloRespaldo).toBeNull();
+    expect(configuracion.esfuerzoPorClasePaso).toEqual({});
+  });
+
+  it('rechaza un papel de modelo que no es de los tres del ADR-018', () => {
+    expect(() =>
+      validarCarga(
+        configuracionModeloPuesto,
+        { modelo: 'gpt-5' },
+        'version_puesto.configuracion_modelo',
+      ),
+    ).toThrow(/version_puesto\.configuracion_modelo/);
   });
 
   it('el mensaje de error nombra la columna que se iba a escribir', () => {
