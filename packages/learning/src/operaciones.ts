@@ -71,6 +71,23 @@ function exigirUuid(valor: string, que: string): void {
     throw new ErrorDeAprendizaje('no_encontrada', `${que} no es un UUID: ${valor}`);
 }
 
+/** Código de PostgreSQL para la violación de una restricción de unicidad. */
+const UNICIDAD_VIOLADA = '23505';
+
+/**
+ * El índice único `promocion_tenant_leccion_key` es la red de seguridad de la base:
+ * la comprobación previa de `promocionarLeccion` evita la versión de puesto de sobra
+ * en el camino normal, pero quien inserte en `promocion` sin pasar por ahí —o gane la
+ * carrera contra ella— choca aquí igual.
+ */
+function esViolacionDeUnicidad(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === UNICIDAD_VIOLADA
+  );
+}
+
 /**
  * Serializa dentro de la transacción las operaciones sobre la misma clave. Es lo que
  * impide que dos reintentos simultáneos inserten dos señales para una edición o dos
@@ -643,17 +660,26 @@ export async function promocionarLeccion(
     `;
     if (!version) throw new Error('La versión nueva del puesto no se insertó.');
 
-    const [promocion] = await tx<{ id: string }[]>`
-      insert into promocion (
-        tenant_id, leccion_id, version_puesto_resultante_id, decidida_por_persona_id,
-        evidencia, resultados_eval
-      ) values (
-        ${tenantId}, ${leccion.id}, ${version.id}, ${peticion.personaId},
-        ${json({ senalIds, versionAnteriorId: activa.id, motivo: peticion.motivo ?? null, manual: true })}::text::jsonb,
-        ${json(resultados)}::text::jsonb
-      )
-      returning id
-    `;
+    let promocion: { id: string } | undefined;
+    try {
+      [promocion] = await tx<{ id: string }[]>`
+        insert into promocion (
+          tenant_id, leccion_id, version_puesto_resultante_id, decidida_por_persona_id,
+          evidencia, resultados_eval
+        ) values (
+          ${tenantId}, ${leccion.id}, ${version.id}, ${peticion.personaId},
+          ${json({ senalIds, versionAnteriorId: activa.id, motivo: peticion.motivo ?? null, manual: true })}::text::jsonb,
+          ${json(resultados)}::text::jsonb
+        )
+        returning id
+      `;
+    } catch (error) {
+      if (!esViolacionDeUnicidad(error)) throw error;
+      throw new ErrorDeAprendizaje(
+        'ya_promocionada',
+        `La lección ${leccion.id} ya se promocionó. Para recuperarla, vuelve a su versión.`,
+      );
+    }
     if (!promocion) throw new Error('La promoción no se insertó.');
 
     await tx`

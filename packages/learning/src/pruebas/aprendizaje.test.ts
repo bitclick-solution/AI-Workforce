@@ -133,6 +133,26 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     await expect(promesa).rejects.toMatchObject({ codigo });
   }
 
+  /**
+   * Sondea `pg_stat_activity` hasta ver una sesión propia esperando un bloqueo con su
+   * `INSERT` en `promocion` en vuelo. Sustituye una espera de tiempo fijo por una
+   * señal real de la base: la propia sesión siempre ve el texto completo de sus
+   * consultas en `pg_stat_activity`, sin permisos extra.
+   */
+  async function esperaBloqueadaEnInsertDePromocion(cliente: postgres.Sql): Promise<void> {
+    for (let intento = 0; intento < 200; intento++) {
+      const [fila] = await cliente<{ n: string }[]>`
+        select count(*)::text as n from pg_stat_activity
+        where wait_event_type = 'Lock' and query ilike '%insert into promocion%'
+      `;
+      if (Number(fila?.n) > 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    throw new Error(
+      'La sesión de promocionarLeccion nunca llegó a bloquearse en su INSERT de promocion.',
+    );
+  }
+
   it('la decisión «editada» exige la edición y ninguna otra la admite', async () => {
     const aprobacionId = await pedirAprobacion(org);
     await expect(
@@ -363,6 +383,55 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     );
     const senal = await registrarSenalDeEdicion(cliente, org.tenantId, aprobacionId);
     await esperarError(proponerLeccion(cliente, otra.tenantId, senal), 'no_encontrada');
+  });
+
+  it('un INSERT directo que gana la carrera también se traduce a ya_promocionada', async () => {
+    // El índice único `(tenant_id, leccion_id)` de `promocion` (migración 0002) es la
+    // red de seguridad de la base: esta prueba deja una promoción a medio confirmar
+    // por SQL directo, sin pasar por `promocionarLeccion`, para que su comprobación
+    // previa no la vea todavía y sea el propio `INSERT` el que choque con el índice.
+    const aprobacionId = await editar(org);
+    const senal = await registrarSenalDeEdicion(cliente, org.tenantId, aprobacionId);
+    const leccion = await proponerLeccion(cliente, org.tenantId, senal);
+
+    let insertadaDirecta!: () => void;
+    const insertaHecha = new Promise<void>((resolve) => {
+      insertadaDirecta = resolve;
+    });
+    let comprometer!: () => void;
+    const detenido = new Promise<void>((resolve) => {
+      comprometer = resolve;
+    });
+    const directa = conTenant(cliente, org.tenantId, async (tx) => {
+      await tx`
+        insert into promocion (
+          tenant_id, leccion_id, version_puesto_resultante_id, decidida_por_persona_id, evidencia
+        ) values (
+          ${org.tenantId}, ${leccion.leccionId}, ${org.versionPuestoId}, ${org.personaId}, '{}'::jsonb
+        )
+      `;
+      // El INSERT ya está hecho (aunque sin confirmar): a partir de aquí, quien
+      // intente insertar la misma lección choca con esta fila y se queda esperando.
+      insertadaDirecta();
+      await detenido;
+    });
+
+    // Determinista: el INSERT directo ya se ejecutó (aunque sigue sin confirmar), así
+    // que arrancar la promoción por la aplicación ahora no depende del reloj.
+    await insertaHecha;
+    const viaAplicacion = promocionarLeccion(cliente, org.tenantId, {
+      leccionId: leccion.leccionId,
+      personaId: org.personaId,
+      puerta: CERTIFICA,
+    });
+
+    // Determinista: espera a que la sesión de `promocionarLeccion` aparezca bloqueada
+    // en su propio INSERT contra el índice único, en vez de adivinar un tiempo fijo.
+    await esperaBloqueadaEnInsertDePromocion(cliente);
+    comprometer();
+
+    await esperarError(viaAplicacion, 'ya_promocionada');
+    await directa;
   });
 
   it('ningún dato personal de la edición llega a lo aprendido ni al libro', async () => {

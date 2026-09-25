@@ -110,11 +110,9 @@ export const promocion = pgTable(
     ...columnasInmutables(),
   },
   (t) => [
-    uniqueIndex('promocion_tenant_leccion_version_key').on(
-      t.tenantId,
-      t.leccionId,
-      t.versionPuestoResultanteId,
-    ),
+    // Red de seguridad de la base: una lección se promociona una sola vez aunque
+    // quien inserte no pase por `promocionarLeccion` (migración 0002).
+    uniqueIndex('promocion_tenant_leccion_key').on(t.tenantId, t.leccionId),
     index('promocion_tenant_creado_idx').on(t.tenantId, t.creadoEn),
   ],
 );
