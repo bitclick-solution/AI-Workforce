@@ -18,11 +18,13 @@ import type postgres from 'postgres';
 import {
   HASH_GENESIS,
   calcularHash,
+  normalizarFecha,
   normalizarImporte,
   verificarCadena,
   type ContenidoEntrada,
   type DatoReferenciado,
   type EslabonVerificable,
+  type FechaEntrada,
   type ResultadoVerificacion,
 } from './hash.js';
 
@@ -112,7 +114,7 @@ export async function anotar(
   // marca. La hora sale de la base y no del proceso porque el panel ordena por
   // `creado_en` y la cadena por `numero_orden`: con relojes distintos en cada
   // instancia de la aplicación, los dos órdenes podrían no coincidir.
-  const [reloj] = await tx<{ ahora: Date }[]>`
+  const [reloj] = await tx<{ ahora: FechaEntrada }[]>`
     select pg_advisory_xact_lock(hashtextextended(${tenantId}, 0)), clock_timestamp() as ahora
   `;
   if (!reloj) throw new Error('La base no devolvió la hora de la entrada.');
@@ -164,7 +166,7 @@ export async function anotar(
   };
   const hash = calcularHash(contenido, hashAnterior);
 
-  const filas = await tx<{ id: string; creado_en: Date }[]>`
+  const filas = await tx<{ id: string; creado_en: FechaEntrada }[]>`
     insert into entrada_auditoria (
       tenant_id, numero_orden, actor_tipo, actor_id, puesto_id, version_puesto_id,
       tarea_id, paso_id, accion, herramienta, datos_referenciados, resultado,
@@ -187,14 +189,20 @@ export async function anotar(
 
   await sumarAlContador(tx, tenantId, fila.creado_en, costeEuros, incrementos);
 
-  return { id: fila.id, numeroOrden, hash, hashAnterior, creadoEn: fila.creado_en };
+  return {
+    id: fila.id,
+    numeroOrden,
+    hash,
+    hashAnterior,
+    creadoEn: normalizarFecha(fila.creado_en),
+  };
 }
 
 /** El contador es una proyección por periodo: toda acción suma una unidad. */
 export async function sumarAlContador(
   tx: postgres.TransactionSql,
   tenantId: string,
-  momento: Date,
+  momento: FechaEntrada,
   costeEuros: number,
   incrementos: Incrementos = {},
 ): Promise<void> {
@@ -219,7 +227,7 @@ export async function sumarAlContador(
 interface FilaEntrada {
   tenant_id: string;
   numero_orden: string;
-  creado_en: Date;
+  creado_en: FechaEntrada;
   actor_tipo: ContenidoEntrada['actorTipo'];
   actor_id: string | null;
   puesto_id: string | null;
