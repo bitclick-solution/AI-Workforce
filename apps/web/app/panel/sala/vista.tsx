@@ -6,6 +6,7 @@
  * escribir fijo abajo. Sondea el proxy cada dos segundos hasta que Centrifugo haga
  * el fan-out; el estado sale siempre de la base y de los flujos, nunca de aquí.
  */
+import { AvatarDeAgente, AvatarDePersona, Boton } from '@aiw/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
@@ -13,7 +14,6 @@ import {
   esNotaDelModerador,
   esperandoRespuesta,
   horaCorta,
-  iniciales,
   propuestaDelMensaje,
   type DatosDeLaSala,
   type MensajeDeLaSala,
@@ -48,28 +48,28 @@ function TarjetaDePropuesta({
   const porConectar = efectos.herramientas?.porConectar ?? [];
   return (
     <div
-      className="mt-2 overflow-hidden rounded-xl border border-violet-200 bg-white text-sm text-neutral-700 shadow-sm"
+      className="mt-2 overflow-hidden rounded-xl border border-linea bg-superficie text-sm text-texto-2 shadow-sm"
       data-testid="propuesta"
     >
-      <div className="flex flex-wrap items-center gap-2 border-b border-violet-100 bg-violet-50 px-4 py-2">
-        <strong className="text-neutral-900">{efectos.puesto?.nombre ?? propuesta.resumen}</strong>
-        <span className="rounded-full bg-white px-2 py-0.5 font-mono text-xs text-violet-700">
+      <div className="flex flex-wrap items-center gap-2 border-b border-linea bg-acento-suave px-4 py-2">
+        <strong className="text-texto">{efectos.puesto?.nombre ?? propuesta.resumen}</strong>
+        <span className="rounded-full bg-superficie px-2 py-0.5 font-mono text-xs text-acento">
           {propuesta.nivelExigido.toUpperCase()}
         </span>
-        <span className="ml-auto text-xs text-violet-700">
+        <span className="ml-auto text-xs text-acento">
           {ESTADO_LEGIBLE[propuesta.estado] ?? propuesta.estado}
         </span>
       </div>
       <div className="flex flex-col gap-3 px-4 py-3">
         {efectos.puesto?.ficha?.mision ? (
-          <p className="text-neutral-800">{efectos.puesto.ficha.mision}</p>
+          <p className="text-texto">{efectos.puesto.ficha.mision}</p>
         ) : null}
         <div className="flex flex-wrap gap-1.5">
           {disponibles.map((h) => (
             <span
               key={h.nombre}
               title={h.descripcion}
-              className="rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-xs text-emerald-800"
+              className="rounded-full bg-correcto-suave px-2 py-0.5 font-mono text-xs text-texto-correcto"
             >
               {h.nombre}
             </span>
@@ -78,13 +78,13 @@ function TarjetaDePropuesta({
             <span
               key={h.nombre}
               title={`${h.descripcion} (por conectar)`}
-              className="rounded-full border border-dashed border-neutral-300 px-2 py-0.5 font-mono text-xs text-neutral-500"
+              className="rounded-full border border-dashed border-linea px-2 py-0.5 font-mono text-xs text-texto-3"
             >
               {h.nombre} · por conectar
             </span>
           ))}
         </div>
-        <details className="text-xs text-neutral-600">
+        <details className="text-xs text-texto-2">
           <summary className="cursor-pointer select-none">Guardrails y tareas</summary>
           <ul className="mt-2 flex flex-col gap-1">
             {(efectos.puesto?.ficha?.tareas ?? []).map((tarea) => (
@@ -98,33 +98,31 @@ function TarjetaDePropuesta({
           </ul>
         </details>
         {efectos.coste ? (
-          <p className="text-xs text-neutral-600">
+          <p className="text-xs text-texto-2">
             {efectos.coste.eurosMesCliente} € al mes · unas {efectos.coste.tareasMes} tareas
             {efectos.reversion?.descripcion ? ` · ${efectos.reversion.descripcion}` : ''}
           </p>
         ) : null}
         {propuesta.estado === 'pendiente' ? (
           <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={enviando}
+            <Boton
+              tono="primario"
+              cargando={enviando}
               onClick={() => {
                 pulsar('aprobada');
               }}
-              className="rounded-full bg-violet-600 px-4 py-1.5 font-medium text-white hover:bg-violet-700 disabled:opacity-50"
             >
               Confirmar
-            </button>
-            <button
-              type="button"
+            </Boton>
+            <Boton
+              tono="secundario"
               disabled={enviando}
               onClick={() => {
                 pulsar('rechazada');
               }}
-              className="rounded-full border border-neutral-300 px-4 py-1.5 hover:bg-neutral-50 disabled:opacity-50"
             >
               Descartar
-            </button>
+            </Boton>
           </div>
         ) : null}
       </div>
@@ -133,17 +131,12 @@ function TarjetaDePropuesta({
 }
 
 function Avatar({ mensaje }: { mensaje: MensajeDeLaSala }) {
-  const color =
-    mensaje.autor.tipo === 'plataforma'
-      ? 'bg-violet-100 text-violet-700'
-      : 'bg-emerald-100 text-emerald-800';
   return (
-    <span
-      aria-hidden="true"
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${color}`}
-    >
-      {iniciales(mensaje.autor.nombre)}
-    </span>
+    <AvatarDeAgente
+      nombre={mensaje.autor.nombre}
+      color={mensaje.autor.tipo === 'plataforma' ? 'lila' : 'menta'}
+      tamano="pequeno"
+    />
   );
 }
 
@@ -159,7 +152,7 @@ function Burbuja({
   if (esNotaDelModerador(mensaje)) {
     return (
       <li className="flex justify-center" data-testid="moderador">
-        <details className="max-w-[80%] rounded-full bg-neutral-100 px-3 py-1 text-center text-xs text-neutral-500 open:rounded-xl">
+        <details className="max-w-[80%] rounded-full bg-superficie-2 px-3 py-1 text-center text-xs text-texto-3 open:rounded-xl">
           <summary className="cursor-pointer select-none">Moderador · ver por qué</summary>
           <p className="mt-1">{mensaje.cuerpo}</p>
         </details>
@@ -170,15 +163,16 @@ function Burbuja({
   const hora = horaCorta(mensaje.creadoEn);
   if (mensaje.autor.tipo === 'persona') {
     return (
-      <li className="flex justify-end">
+      <li className="flex items-end justify-end gap-2">
         <div className="max-w-[75%]">
-          <div className="rounded-2xl rounded-br-md bg-neutral-900 px-4 py-2 text-white">
+          <div className="rounded-2xl rounded-br-md bg-persona px-4 py-2 text-sobre-persona">
             {mensaje.cuerpo}
           </div>
-          <p className="mt-1 text-right text-[11px] text-neutral-400">
+          <p className="mt-1 text-right text-[11px] text-texto-3">
             {mensaje.autor.nombre} · {hora}
           </p>
         </div>
+        <AvatarDePersona nombre={mensaje.autor.nombre} tamano="pequeno" />
       </li>
     );
   }
@@ -188,13 +182,13 @@ function Burbuja({
     <li className="flex items-end gap-2">
       <Avatar mensaje={mensaje} />
       <div className={propuesta ? 'w-full max-w-[85%]' : 'max-w-[75%]'}>
-        <p className="mb-1 text-[11px] text-neutral-500">
-          <span className="font-medium text-neutral-700">{mensaje.autor.nombre}</span>
+        <p className="mb-1 text-[11px] text-texto-3">
+          <span className="font-medium text-texto-2">{mensaje.autor.nombre}</span>
           {plataforma ? ' · plataforma' : ' · agente'} · {hora}
         </p>
         <div
           className={`rounded-2xl rounded-bl-md px-4 py-2 ${
-            plataforma ? 'bg-violet-50 text-neutral-800' : 'bg-white text-neutral-800 shadow-sm'
+            plataforma ? 'bg-acento-suave text-texto' : 'bg-superficie text-texto shadow-sm'
           }`}
         >
           {mensaje.cuerpo}
@@ -288,12 +282,12 @@ export function VistaDeLaSala() {
   );
 
   return (
-    <section className="flex h-[calc(100vh-10rem)] min-h-[32rem] flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-100 shadow-sm">
-      <header className="flex items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
-        <span className="text-lg font-semibold text-neutral-400">#</span>
+    <section className="flex h-[calc(100vh-10rem)] min-h-[32rem] flex-col overflow-hidden rounded-2xl border border-linea bg-superficie-2 shadow-sm">
+      <header className="flex items-center gap-3 border-b border-linea bg-superficie px-4 py-3">
+        <span className="text-lg font-semibold text-texto-3">#</span>
         <div>
-          <h2 className="font-semibold leading-tight">general</h2>
-          <p className="text-xs text-neutral-500">
+          <h2 className="font-titulos font-semibold leading-tight text-texto">general</h2>
+          <p className="text-xs text-texto-3">
             {participantes.size > 0
               ? `${[...participantes].join(', ')} · moderador · Director de IA`
               : 'Moderador · Director de IA'}
@@ -304,7 +298,7 @@ export function VistaDeLaSala() {
       {error ? (
         <p
           role="alert"
-          className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800"
+          className="border-b border-peligro bg-peligro-suave px-4 py-2 text-sm text-peligro"
         >
           {error}
         </p>
@@ -312,7 +306,7 @@ export function VistaDeLaSala() {
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {mensajes.length === 0 ? (
-          <p className="mt-16 text-center text-sm text-neutral-500">
+          <p className="mt-16 text-center text-sm text-texto-3">
             Pregunta a tu equipo o pide un agente nuevo: «contrata un agente de conciliación en
             Finanzas».
           </p>
@@ -327,14 +321,11 @@ export function VistaDeLaSala() {
             />
           ))}
           {esperandoRespuesta(mensajes) ? (
-            <li
-              className="flex items-center gap-2 text-xs text-neutral-500"
-              data-testid="respondiendo"
-            >
+            <li className="flex items-center gap-2 text-xs text-texto-3" data-testid="respondiendo">
               <span className="flex gap-1" aria-hidden="true">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 [animation-delay:300ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-texto-3" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-texto-3 [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-texto-3 [animation-delay:300ms]" />
               </span>
               El equipo está respondiendo…
             </li>
@@ -344,7 +335,7 @@ export function VistaDeLaSala() {
       </div>
 
       <form
-        className="flex items-center gap-2 border-t border-neutral-200 bg-white px-3 py-3"
+        className="flex items-center gap-2 border-t border-linea bg-superficie px-3 py-3"
         onSubmit={(evento) => {
           evento.preventDefault();
           void enviar();
@@ -362,15 +353,11 @@ export function VistaDeLaSala() {
           placeholder="Escribe a #general…"
           maxLength={2000}
           autoComplete="off"
-          className="flex-1 rounded-full border border-neutral-300 bg-neutral-50 px-4 py-2 outline-none focus:border-violet-400 focus:bg-white"
+          className="flex-1 rounded-full border border-linea bg-superficie-2 px-4 py-2 text-texto outline-none focus:border-acento focus:bg-superficie"
         />
-        <button
-          type="submit"
-          disabled={enviando || texto.trim().length === 0}
-          className="rounded-full bg-neutral-900 px-5 py-2 font-medium text-white disabled:opacity-40"
-        >
+        <Boton type="submit" disabled={enviando || texto.trim().length === 0} ancho="auto">
           Enviar
-        </button>
+        </Boton>
       </form>
     </section>
   );

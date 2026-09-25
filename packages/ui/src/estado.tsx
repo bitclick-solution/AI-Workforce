@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { cn } from './cn';
+import { TEMA } from './tema';
 
 export interface EstadoProps {
   titulo: string;
@@ -9,15 +10,15 @@ export interface EstadoProps {
   'data-testid'?: string | undefined;
 }
 
-/** Tarjeta mínima de estado. Sustituida por el sistema de diseño en la rebanada del Diseñador. */
+/** Tarjeta mínima de estado. */
 export function Estado({ titulo, children, className, ...rest }: EstadoProps) {
   return (
     <section
-      className={cn('rounded-lg border border-neutral-300 p-4', className)}
+      className={cn(TEMA.superficie.tarjeta, 'p-4', className)}
       data-testid={rest['data-testid']}
     >
-      <h2 className="text-lg font-semibold">{titulo}</h2>
-      {children ? <div className="mt-2 text-sm text-neutral-700">{children}</div> : null}
+      <h2 className={cn(TEMA.texto.titulo, 'text-lg')}>{titulo}</h2>
+      {children ? <div className={cn(TEMA.texto.cuerpo, 'mt-2 text-sm')}>{children}</div> : null}
     </section>
   );
 }

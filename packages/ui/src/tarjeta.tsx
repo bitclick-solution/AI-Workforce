@@ -42,7 +42,7 @@ export function Tarjeta({
         {cabecera ? <div className="flex flex-wrap items-center gap-2">{cabecera}</div> : null}
       </div>
       {children ? <div className="mt-4">{children}</div> : null}
-      {pie ? <div className="mt-5 border-t border-neutral-200 pt-4">{pie}</div> : null}
+      {pie ? <div className="mt-5 border-t border-linea pt-4">{pie}</div> : null}
     </section>
   );
 }

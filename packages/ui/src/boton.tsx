@@ -42,7 +42,13 @@ export function Boton({
       disabled={disabled === true || cargando}
       aria-busy={cargando || undefined}
       aria-label={etiquetaAccesible}
-      className={cn(TEMA.boton.base, TEMA.boton[tono], ancho === 'completo' && 'w-full', className)}
+      className={cn(
+        TEMA.boton.base,
+        TEMA.foco,
+        TEMA.boton[tono],
+        ancho === 'completo' && 'w-full',
+        className,
+      )}
     >
       {cargando ? t('ui.boton.cargando') : children}
     </button>

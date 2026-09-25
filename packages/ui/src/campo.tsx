@@ -55,7 +55,7 @@ export function Campo({
 
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
-      <label htmlFor={id} className="text-sm font-medium text-neutral-900">
+      <label htmlFor={id} className={TEMA.campo.etiqueta}>
         {etiqueta}
         {opcional ? (
           <span className={cn(TEMA.texto.apagado, 'ml-1 font-normal')}>
@@ -74,7 +74,7 @@ export function Campo({
         </p>
       ) : null}
       {error ? (
-        <p id={idError} className="text-xs font-medium text-red-700">
+        <p id={idError} className={TEMA.campo.error}>
           {t('ui.campo.error')}: {error}
         </p>
       ) : null}

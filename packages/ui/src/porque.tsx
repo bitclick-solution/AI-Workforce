@@ -33,14 +33,17 @@ export function Porque({
   const idRegion = `${id}-region`;
 
   return (
-    <div className={cn('rounded-lg border border-neutral-200', className)}>
+    <div className={cn('rounded-lg border border-linea', className)}>
       <button
         type="button"
         id={id}
         aria-expanded={abierto}
         aria-controls={idRegion}
         onClick={() => setAbierto((anterior) => !anterior)}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+        className={cn(
+          TEMA.foco,
+          'font-texto flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-texto',
+        )}
       >
         <span>{titulo ?? t('ui.porque.titulo')}</span>
         <span className={cn(TEMA.texto.apagado, 'text-xs font-normal')}>
@@ -52,7 +55,7 @@ export function Porque({
         role="region"
         aria-labelledby={id}
         hidden={!abierto}
-        className="border-t border-neutral-200 px-3 py-3 text-sm text-neutral-700"
+        className={cn(TEMA.texto.cuerpo, 'border-t border-linea px-3 py-3 text-sm')}
       >
         {children}
       </div>

@@ -1,0 +1,133 @@
+/**
+ * Tokens «Oficina cercana» (ADR-020): la fuente de verdad visual del panel y
+ * de la sala. Los valores en claro y en `@media (prefers-color-scheme: dark)`
+ * tienen que coincidir con `paleta.ts`; si cambian aquí, cambian allí.
+ *
+ * El modo sigue la preferencia del sistema por defecto. `data-tema="claro"` o
+ * `data-tema="oscuro"` en `<html>` la sustituye cuando la persona elige a mano.
+ */
+@theme {
+  --color-fondo: #f7f5fb;
+  --color-superficie: #ffffff;
+  --color-superficie-2: #f1eef7;
+  --color-linea: #e4e0ee;
+  --color-texto: #221a30;
+  --color-texto-2: #5b5070;
+  --color-texto-3: #6e6485;
+  --color-alerta: #e08a1e;
+  --color-texto-alerta: #7a4300;
+  --color-alerta-suave: #ffe2b8;
+  --color-sobre-alerta: #1e1403;
+  --color-peligro: #b42318;
+  --color-sobre-peligro: #ffffff;
+  --color-peligro-suave: #fbe3df;
+  --color-correcto-suave: #ddf3e8;
+  --color-texto-correcto: #17613d;
+  --color-persona: #2a2238;
+  --color-sobre-persona: #ffffff;
+  --color-inactivo: #cfc8dc;
+  --color-acento: #5b3fc4;
+  --color-acento-suave: #ece7fc;
+  --color-sobre-acento: #ffffff;
+  --color-coral: #b8401f;
+  --color-coral-suave: #fbe5de;
+  --color-sobre-coral: #ffffff;
+  --color-azul: #2f62d1;
+  --color-azul-suave: #e3ecfb;
+  --color-sobre-azul: #ffffff;
+
+  /* Fondos pastel y tinta del avatar de agente. Fijos: no cambian con el modo. */
+  --color-avatar-melocoton: #fbd3bc;
+  --color-avatar-menta: #bfe8d0;
+  --color-avatar-cielo: #cadffa;
+  --color-avatar-lila: #d9cff7;
+  --color-avatar-limon: #f2e3a0;
+  --color-avatar-rosa: #f6cadb;
+  --color-avatar-tinta: #2a2238;
+  --color-avatar-emblema: #ffffff;
+
+  /* `next/font` fija --fuente-titulos y --fuente-texto en <html>; si faltan
+     (Storybook, pruebas), cae a una pila del sistema. */
+  --font-titulos: var(--fuente-titulos), ui-sans-serif, system-ui, sans-serif;
+  --font-texto: var(--fuente-texto), ui-sans-serif, system-ui, sans-serif;
+
+  /* Radio 14 sobre un avatar de 48: la misma proporción a cualquier tamaño. */
+  --radius-avatar: 29.1667%;
+
+  --animate-girar: girar 2.4s linear infinite;
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema='claro']) {
+    --color-fondo: #17131f;
+    --color-superficie: #211b2c;
+    --color-superficie-2: #2a2338;
+    --color-linea: #3a3148;
+    --color-texto: #f2edf8;
+    --color-texto-2: #bdb2cd;
+    --color-texto-3: #a397b6;
+    --color-alerta: #f2a43a;
+    --color-texto-alerta: #ffd49a;
+    --color-alerta-suave: #3d2a12;
+    --color-sobre-alerta: #1e1403;
+    --color-peligro: #ff8a80;
+    --color-sobre-peligro: #1a0a08;
+    --color-peligro-suave: #3c1e19;
+    --color-correcto-suave: #1f3a2f;
+    --color-texto-correcto: #9fe3bd;
+    --color-persona: #e4ddf0;
+    --color-sobre-persona: #1a1330;
+    --color-inactivo: #4a4160;
+    --color-acento: #b8a2ff;
+    --color-acento-suave: #2e2550;
+    --color-sobre-acento: #1a1330;
+    --color-coral: #ff9c85;
+    --color-coral-suave: #44221a;
+    --color-sobre-coral: #2a0e07;
+    --color-azul: #9db8ff;
+    --color-azul-suave: #1f2b4d;
+    --color-sobre-azul: #0e1733;
+  }
+}
+
+:root[data-tema='claro'] {
+  color-scheme: light;
+}
+
+:root[data-tema='oscuro'] {
+  color-scheme: dark;
+  --color-fondo: #17131f;
+  --color-superficie: #211b2c;
+  --color-superficie-2: #2a2338;
+  --color-linea: #3a3148;
+  --color-texto: #f2edf8;
+  --color-texto-2: #bdb2cd;
+  --color-texto-3: #a397b6;
+  --color-alerta: #f2a43a;
+  --color-texto-alerta: #ffd49a;
+  --color-alerta-suave: #3d2a12;
+  --color-sobre-alerta: #1e1403;
+  --color-peligro: #ff8a80;
+  --color-sobre-peligro: #1a0a08;
+  --color-peligro-suave: #3c1e19;
+  --color-correcto-suave: #1f3a2f;
+  --color-texto-correcto: #9fe3bd;
+  --color-persona: #e4ddf0;
+  --color-sobre-persona: #1a1330;
+  --color-inactivo: #4a4160;
+  --color-acento: #b8a2ff;
+  --color-acento-suave: #2e2550;
+  --color-sobre-acento: #1a1330;
+  --color-coral: #ff9c85;
+  --color-coral-suave: #44221a;
+  --color-sobre-coral: #2a0e07;
+  --color-azul: #9db8ff;
+  --color-azul-suave: #1f2b4d;
+  --color-sobre-azul: #0e1733;
+}

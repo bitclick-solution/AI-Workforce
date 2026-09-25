@@ -14,6 +14,8 @@ export type ClaveDeTexto =
   | 'ui.aviso.error'
   | 'ui.aviso.necesita-persona'
   | 'ui.aviso.informacion'
+  | 'ui.aviso.aprobar'
+  | 'ui.aviso.rechazar'
   | 'ui.campo.error'
   | 'ui.campo.opcional'
   | 'ui.porque.titulo'
@@ -21,7 +23,13 @@ export type ClaveDeTexto =
   | 'ui.porque.ocultar'
   | 'ui.duracion.horas'
   | 'ui.duracion.minutos'
-  | 'ui.duracion.segundos';
+  | 'ui.duracion.segundos'
+  | 'ui.widget.quitar'
+  | 'ui.listaDeAvisos.vacio'
+  | 'ui.avatar.teNecesita'
+  | 'ui.avatar.trabajando'
+  | 'ui.avatar.enEspera'
+  | 'ui.avatar.personaSinNombre';
 
 export type Diccionario = Partial<Record<ClaveDeTexto, string>>;
 
@@ -31,6 +39,8 @@ const CASTELLANO: Record<ClaveDeTexto, string> = {
   'ui.aviso.error': 'Algo ha fallado',
   'ui.aviso.necesita-persona': 'Necesita a una persona',
   'ui.aviso.informacion': 'Para que lo sepas',
+  'ui.aviso.aprobar': 'Aprobar',
+  'ui.aviso.rechazar': 'Rechazar',
   'ui.campo.error': 'Error',
   'ui.campo.opcional': 'opcional',
   'ui.porque.titulo': 'Por qué lo hice',
@@ -39,6 +49,12 @@ const CASTELLANO: Record<ClaveDeTexto, string> = {
   'ui.duracion.horas': '{valor} h',
   'ui.duracion.minutos': '{valor} min',
   'ui.duracion.segundos': '{valor} s',
+  'ui.widget.quitar': 'Quitar «{titulo}» del panel',
+  'ui.listaDeAvisos.vacio': 'No hay avisos pendientes.',
+  'ui.avatar.teNecesita': 'Te necesita',
+  'ui.avatar.trabajando': 'Trabajando',
+  'ui.avatar.enEspera': 'En espera',
+  'ui.avatar.personaSinNombre': 'Persona sin nombre',
 };
 
 const INGLES: Diccionario = {
@@ -52,6 +68,14 @@ const INGLES: Diccionario = {
   'ui.porque.titulo': 'Why I did it',
   'ui.porque.mostrar': 'See why I did it',
   'ui.porque.ocultar': 'Hide why I did it',
+  'ui.aviso.aprobar': 'Approve',
+  'ui.aviso.rechazar': 'Reject',
+  'ui.widget.quitar': 'Remove "{titulo}" from the panel',
+  'ui.listaDeAvisos.vacio': 'No notices pending.',
+  'ui.avatar.teNecesita': 'Needs you',
+  'ui.avatar.trabajando': 'Working',
+  'ui.avatar.enEspera': 'On hold',
+  'ui.avatar.personaSinNombre': 'Unnamed person',
 };
 
 const DICCIONARIOS: Record<Idioma, Diccionario> = { es: CASTELLANO, en: INGLES };
