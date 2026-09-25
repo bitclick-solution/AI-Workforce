@@ -15,10 +15,12 @@ import type postgres from 'postgres';
 
 import {
   HASH_GENESIS,
-  calcularHash,
+  hashCoincide,
+  normalizarFecha,
   type ContenidoEntrada,
   type DatoReferenciado,
   type EslabonVerificable,
+  type FechaEntrada,
 } from './hash.js';
 
 export const FORMATOS_EXPORTACION = ['csv', 'json', 'jsonl'] as const;
@@ -115,7 +117,7 @@ export interface OpcionesExportacion {
 
 interface FilaEntradaLeida {
   numero_orden: string;
-  creado_en: Date;
+  creado_en: FechaEntrada;
   actor_tipo: ContenidoEntrada['actorTipo'];
   actor_id: string | null;
   puesto_id: string | null;
@@ -250,7 +252,7 @@ export function verificarRango(
         anclada: true,
       };
     }
-    if (calcularHash(eslabon, anterior) !== eslabon.hash) {
+    if (!hashCoincide(eslabon, anterior, eslabon.hash)) {
       return {
         valida: false,
         entradas: eslabones.length,
@@ -295,7 +297,7 @@ function aEslabon(fila: FilaEntradaLeida, tenantId: string): EslabonVerificable 
 function aFilaExportada(fila: FilaEntradaLeida): FilaExportada {
   return {
     numero_orden: Number(fila.numero_orden),
-    creado_en: fila.creado_en.toISOString(),
+    creado_en: normalizarFecha(fila.creado_en).toISOString(),
     actor_tipo: fila.actor_tipo,
     actor_id: fila.actor_id,
     puesto_id: fila.puesto_id,

@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./puestos/cobros": {
+      "types": "./src/puestos/cobros.ts",
+      "default": "./src/puestos/cobros.ts"
     }
   },
   "files": [
@@ -19,13 +23,15 @@
     "clean": "rm -rf dist coverage .turbo",
     "evals:smoke": "vitest run --config vitest.evals.config.ts"
   },
+  "dependencies": {
+    "@aiw/learning": "workspace:*",
+    "@aiw/models": "workspace:*",
+    "@aiw/rooms": "workspace:*",
+    "zod": "catalog:"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
-  },
-  "dependencies": {
-    "@aiw/models": "workspace:*",
-    "zod": "catalog:"
   }
 }

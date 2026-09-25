@@ -114,7 +114,7 @@ ninguna clave de AWS de larga duración que revocar.
    `workflow_dispatch` disparado con `main` como rama seleccionada, que es
    justo el job **Bedrock UE · integración** de `ci.yml`
    (`if: (github.event_name == 'schedule' || github.event_name ==
-   'workflow_dispatch') && github.ref == 'refs/heads/main'`).
+'workflow_dispatch') && github.ref == 'refs/heads/main'`).
 
 3. Nómbralo `aiw-ci-bedrock`, adjúntale la política `AIWBedrockInvocarUE` de la
    sección anterior. Sin ningún otro permiso.

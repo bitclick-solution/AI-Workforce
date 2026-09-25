@@ -1,128 +1,89 @@
-/**
- * Caso dorado del puesto Cobros (ADR-018: `crear_nota_seguimiento` es una escritura
- * N1, así que decide con el papel `opus5` y esfuerzo alto de `decision_escritura`).
- *
- * Corre contra el servidor simulado de `@aiw/models/pruebas`, no contra Bedrock ni
- * Vertex reales: no hay credenciales de la UE todavía (runbook de funciones
- * ausentes). Es lo que exige `vitest.evals.config.ts` — determinista, sin llamar a
- * ningún modelo de verdad — y prueba de punta a punta que el puesto decide con la
- * forma de salida correcta: el adaptador de Anthropic, el esquema estricto y el
- * evaluador de casos dorados encajan. El criterio de hecho «pasa con el proveedor
- * real» queda pendiente en el PR con los pasos exactos para activarlo.
- */
-import { crearAdaptadorAnthropic, clienteSimulado } from '@aiw/models';
+import { describe, expect, it } from 'vitest';
+
 import {
-  iniciarServidorSimulado,
-  respuestaDeTexto,
-  type ServidorSimulado,
-} from '@aiw/models/pruebas';
-import { afterEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+  AL_DIA,
+  CASO_COBROS,
+  PROHIBIDAS,
+  VENCIDAS,
+  ejecutarCasoCobros,
+  evaluarNotas,
+} from '../src/puestos/cobros.js';
 
-import { casoDoradoEstructurado, evaluarCasoDoradoEstructurado } from '../src/index.js';
-
-const decisionCobros = z.object({
-  proponerNota: z.boolean(),
-  motivo: z.string().min(1),
-});
-
-type DecisionCobros = z.infer<typeof decisionCobros>;
-
-interface FacturaVencida {
-  numero: string;
-  cliente: string;
-  importeEuros: number;
-  diasVencido: number;
-}
-
-async function decidirCobros(
-  factura: FacturaVencida,
-  esperado: DecisionCobros,
-): Promise<{ obtenido: DecisionCobros; cerrar: () => Promise<void> }> {
-  const servidor: ServidorSimulado = await iniciarServidorSimulado(
-    respuestaDeTexto(JSON.stringify(esperado)),
-  );
-  const puesto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
-    papel: 'opus5',
-    plataforma: 'bedrock-eu',
-    configuracion: { esfuerzoPorClasePaso: {} },
+/**
+ * Primer caso dorado por puesto. Determinista y sin coste: el agente que se evalúa
+ * es el guion del proveedor de prueba, el mismo que corre el bucle en la CI.
+ *
+ * Además de comprobar que el caso pasa, se comprueba que el evaluador **sabe
+ * fallar**. Un evaluador que siempre dice sí no evalúa nada, y es el error más fácil
+ * de cometer y el más difícil de ver: por eso cada regla tiene aquí su
+ * contraejemplo.
+ */
+describe('evals de humo · puesto Cobros', () => {
+  it('el agente propone una nota correcta por cada factura vencida', () => {
+    const resultado = ejecutarCasoCobros();
+    expect(resultado.diagnostico).toContain(CASO_COBROS);
+    expect(resultado.superado).toBe(true);
+    expect(resultado.puntuacion).toBe(1);
   });
 
-  const resultado = await puesto.completar({
-    clasePaso: 'decision_escritura',
-    sistema:
-      'Eres el puesto Cobros. Decides si proponer una nota de seguimiento por factura vencida.',
-    mensajes: [
-      {
-        rol: 'user',
-        contenido: `Factura ${factura.numero} de ${factura.cliente}: ${factura.importeEuros} € vencida hace ${factura.diasVencido} días.`,
-      },
-    ],
-    esquemaSalida: decisionCobros,
-  });
-
-  if (resultado.tipo !== 'ok' || resultado.salida === undefined) {
-    throw new Error(
-      `El puesto Cobros no devolvió una decisión válida: ${JSON.stringify(resultado)}`,
+  it('falla si se deja una factura vencida sin nota', () => {
+    const resultado = evaluarNotas(
+      VENCIDAS.slice(0, 2).map((factura) => ({
+        factura_id: factura.id,
+        numero: factura.numero,
+        texto: `Hola. La factura ${factura.numero} de ${factura.importe_pendiente.toFixed(2)} € está vencida. ¿Nos confirmas el pago?`,
+      })),
     );
-  }
-  return { obtenido: resultado.salida, cerrar: servidor.cerrar };
-}
-
-describe('caso dorado · Cobros', () => {
-  let cerrar: (() => Promise<void>) | undefined;
-
-  afterEach(async () => {
-    await cerrar?.();
-    cerrar = undefined;
+    expect(resultado.superado).toBe(false);
+    expect(resultado.diagnostico).toContain('sin nota');
   });
 
-  it('propone una nota de seguimiento para una factura vencida', async () => {
-    const esperado: DecisionCobros = {
-      proponerNota: true,
-      motivo: 'Factura vencida hace más de 30 días sin pago registrado.',
-    };
-    const caso = casoDoradoEstructurado({
-      id: 'cobros-001',
-      puesto: 'Cobros',
-      entrada: {
-        numero: 'F-2026-014',
-        cliente: 'Cliente de prueba',
-        importeEuros: 1200,
-        diasVencido: 45,
-      },
-      esperado,
-    });
-    const { obtenido, cerrar: cerrarServidor } = await decidirCobros(
-      caso.entrada as FacturaVencida,
-      esperado,
-    );
-    cerrar = cerrarServidor;
-
-    const resultadoEval = evaluarCasoDoradoEstructurado(caso, obtenido);
-    expect(resultadoEval.superado, resultadoEval.diagnostico).toBe(true);
+  it('falla si propone una nota para una factura que está al día', () => {
+    const notas = [
+      ...VENCIDAS.map((factura) => ({
+        factura_id: factura.id,
+        numero: factura.numero,
+        texto: `Hola. La factura ${factura.numero} de ${factura.importe_pendiente.toFixed(2)} € está vencida. ¿Nos confirmas el pago?`,
+      })),
+      ...AL_DIA.slice(0, 1).map((factura) => ({
+        factura_id: factura.id,
+        numero: factura.numero,
+        texto: `Hola. La factura ${factura.numero} de ${factura.importe_pendiente.toFixed(2)} €. ¿Nos confirmas el pago?`,
+      })),
+    ];
+    const resultado = evaluarNotas(notas);
+    expect(resultado.superado).toBe(false);
+    expect(resultado.diagnostico).toContain('notas de más');
   });
 
-  it('no propone ninguna nota para una factura que todavía no ha vencido', async () => {
-    const esperado: DecisionCobros = { proponerNota: false, motivo: 'La factura no está vencida.' };
-    const caso = casoDoradoEstructurado({
-      id: 'cobros-002',
-      puesto: 'Cobros',
-      entrada: {
-        numero: 'F-2026-020',
-        cliente: 'Cliente de prueba',
-        importeEuros: 500,
-        diasVencido: -5,
-      },
-      esperado,
-    });
-    const { obtenido, cerrar: cerrarServidor } = await decidirCobros(
-      caso.entrada as FacturaVencida,
-      esperado,
+  it('falla si una nota no dice qué factura ni cuánto se debe', () => {
+    const resultado = evaluarNotas(
+      VENCIDAS.map((factura) => ({
+        factura_id: factura.id,
+        numero: factura.numero,
+        texto: 'Hola. Tienes un pago pendiente. ¿Nos confirmas cuándo lo haces?',
+      })),
     );
-    cerrar = cerrarServidor;
+    expect(resultado.superado).toBe(false);
+    expect(resultado.diagnostico).toContain('número y el importe');
+  });
 
-    const resultadoEval = evaluarCasoDoradoEstructurado(caso, obtenido);
-    expect(resultadoEval.superado, resultadoEval.diagnostico).toBe(true);
+  it('falla si la nota amenaza, aunque lo diga todo lo demás', () => {
+    const resultado = evaluarNotas(
+      VENCIDAS.map((factura) => ({
+        factura_id: factura.id,
+        numero: factura.numero,
+        texto:
+          `Hola. La factura ${factura.numero} de ${factura.importe_pendiente.toFixed(2)} € ` +
+          'sigue sin pagar. Te aplicaremos un recargo y pasaremos el asunto al abogado. ' +
+          '¿Nos confirmas el pago?',
+      })),
+    );
+    expect(resultado.superado).toBe(false);
+    expect(resultado.diagnostico).toContain('tono');
+  });
+
+  it('la lista de palabras prohibidas no está vacía: si no, la regla no existe', () => {
+    expect(PROHIBIDAS.length).toBeGreaterThan(5);
   });
 });

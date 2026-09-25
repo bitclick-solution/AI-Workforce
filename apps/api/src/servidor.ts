@@ -19,6 +19,14 @@ import {
   lectorConBaseDeDatos,
   type RespuestaContador,
 } from './rutas/contador.js';
+import {
+  atenderSala,
+  configuracionSalaDesdeEntorno,
+  puertoSala,
+  type ClienteDeFlujos,
+  type ConfiguracionSala,
+  type PuertoSala,
+} from './rutas/sala.js';
 
 export const PUERTO_POR_DEFECTO = 3002;
 
@@ -26,6 +34,48 @@ export interface OpcionesServidor {
   entorno?: Record<string, string | undefined> | undefined;
   /** Conexión ya abierta. Si falta, se abre con `DATABASE_URL` y el rol de aplicación. */
   conexion?: Conexion | undefined;
+  /** Puerto de la sala ya construido. Solo para pruebas. */
+  puertoSala?: PuertoSala | undefined;
+}
+
+/** Tope del cuerpo de una petición: un mensaje de sala cabe de sobra. */
+const TOPE_CUERPO = 16 * 1024;
+
+/** Lee el cuerpo JSON. Uno que no es JSON o que pasa del tope se trata como vacío. */
+async function leerJson(peticion: IncomingMessage): Promise<unknown> {
+  const trozos: Buffer[] = [];
+  let tamano = 0;
+  for await (const trozo of peticion) {
+    const buffer = trozo as Buffer;
+    tamano += buffer.length;
+    if (tamano > TOPE_CUERPO) return undefined;
+    trozos.push(buffer);
+  }
+  try {
+    return JSON.parse(Buffer.concat(trozos).toString('utf8')) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Abre el cliente de Temporal de la sala. Solo se importa si se usa. */
+async function abrirFlujos(configuracion: ConfiguracionSala) {
+  const { Client, Connection } = await import('@temporalio/client');
+  const conexion = await Connection.connect({ address: configuracion.temporal.direccion });
+  const cliente = new Client({ connection: conexion, namespace: configuracion.temporal.espacio });
+  return {
+    async arrancar(nombre: string, opciones: { cola: string; id: string; args: unknown[] }) {
+      await cliente.workflow.start(nombre, {
+        taskQueue: opciones.cola,
+        workflowId: opciones.id,
+        args: opciones.args,
+      });
+    },
+    async senalar(id: string, senal: string, carga: unknown) {
+      await cliente.workflow.getHandle(id).signal(senal, carga);
+    },
+    cerrar: () => conexion.close(),
+  };
 }
 
 export interface ApiEnMarcha {
@@ -70,6 +120,36 @@ export function crearApi(opciones: OpcionesServidor = {}): {
     );
   }
 
+  // Sala v0: otra línea, y el módulo decide si la ruta existe. El cliente de
+  // Temporal se abre con la primera escritura, no al arrancar la API.
+  const configuracionSala = configuracionSalaDesdeEntorno(entorno);
+  let flujosAbiertos: Awaited<ReturnType<typeof abrirFlujos>> | undefined;
+  if (conexion && configuracionSala) {
+    const flujos: ClienteDeFlujos = {
+      async arrancar(nombre, opciones) {
+        flujosAbiertos ??= await abrirFlujos(configuracionSala);
+        await flujosAbiertos.arrancar(nombre, opciones);
+      },
+      async senalar(id, senal, carga) {
+        flujosAbiertos ??= await abrirFlujos(configuracionSala);
+        await flujosAbiertos.senalar(id, senal, carga);
+      },
+    };
+    const puerto = opciones.puertoSala ?? puertoSala(conexion.cliente, flujos, configuracionSala);
+    manejadores.push(async (peticion) =>
+      atenderSala(
+        {
+          metodo: peticion.method,
+          url: peticion.url,
+          cabeceras: peticion.headers,
+          cuerpo: peticion.method === 'POST' ? await leerJson(peticion) : undefined,
+        },
+        configuracionSala,
+        puerto,
+      ),
+    );
+  }
+
   const servidor = createServer((peticion, respuesta) => {
     void (async () => {
       try {
@@ -107,6 +187,7 @@ export function crearApi(opciones: OpcionesServidor = {}): {
   return {
     servidor,
     cerrarConexion: async () => {
+      await flujosAbiertos?.cerrar();
       if (opciones.conexion === undefined && conexion) await conexion.cerrar();
     },
   };

@@ -90,6 +90,54 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     });
   }
 
+  describe('decidir editada', () => {
+    it('guarda la carga de antes y la de después, y la anota como edición', async () => {
+      const pedida = await pedirPermiso();
+      const edicion = { antes: { importe: 1200 }, despues: { importe: 1150 } };
+      const resultado = await registrarDecision(cliente, org.tenantId, {
+        aprobacionId: pedida.id,
+        sentido: 'editada',
+        edicionPrevia: edicion,
+        origen: 'panel',
+      });
+      expect(resultado.estado).toBe('registrada');
+      const [fila] = await conTenant(
+        cliente,
+        org.tenantId,
+        (tx) => tx<{ edicion_previa: unknown }[]>`
+          select edicion_previa from decision_aprobacion
+          where tenant_id = ${org.tenantId} and aprobacion_id = ${pedida.id}
+        `,
+      );
+      expect(fila?.edicion_previa).toEqual(edicion);
+      expect(await accionesDelLibro(org.tenantId, pedida.id)).toEqual([
+        ACCIONES.solicitada,
+        ACCIONES.editada,
+      ]);
+    });
+
+    it('sin edición, o con edición y otro sentido, no escribe nada', async () => {
+      const pedida = await pedirPermiso();
+      await expect(
+        registrarDecision(cliente, org.tenantId, {
+          aprobacionId: pedida.id,
+          sentido: 'editada',
+          origen: 'panel',
+        }),
+      ).rejects.toThrow(/necesita la edición/);
+      await expect(
+        registrarDecision(cliente, org.tenantId, {
+          aprobacionId: pedida.id,
+          sentido: 'rechazada',
+          edicionPrevia: { antes: 1, despues: 2 },
+          origen: 'panel',
+        }),
+      ).rejects.toThrow(/no lleva edición/);
+      expect(await accionesDelLibro(org.tenantId, pedida.id)).toEqual([ACCIONES.solicitada]);
+      expect((await leer(org.tenantId, pedida.id))?.decision).toBeNull();
+    });
+  });
+
   describe('solicitar', () => {
     it('inserta la aprobación y la anota en el mismo movimiento', async () => {
       const pedida = await pedirPermiso();
@@ -359,6 +407,23 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       await pedirPermiso({ venceEn: new Date(Date.now() - 120_000) });
       await pedirPermiso({ venceEn: new Date(Date.now() - 130_000) });
       expect(await vencerAprobaciones(cliente, org.tenantId, { limite: 1 })).toHaveLength(1);
+    });
+
+    it('con identificador vence solo esa aprobación y deja las demás a la rutina', async () => {
+      const mia = await pedirPermiso({ venceEn: new Date(Date.now() - 120_000) });
+      const ajena = await pedirPermiso({ venceEn: new Date(Date.now() - 130_000) });
+
+      const vencidas = await vencerAprobaciones(cliente, org.tenantId, {
+        aprobacionId: mia.id,
+        motivo: 'Vencida sin respuesta durante la ejecución del flujo',
+      });
+      expect(vencidas.map((v) => v.aprobacion.id)).toEqual([mia.id]);
+      expect(vencidas[0]?.carga.motivo).toBe(
+        'Vencida sin respuesta durante la ejecución del flujo',
+      );
+
+      const ajenaLeida = await leer(org.tenantId, ajena.id);
+      expect(ajenaLeida?.decision).toBeNull();
     });
   });
 

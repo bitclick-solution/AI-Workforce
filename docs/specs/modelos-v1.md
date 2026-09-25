@@ -5,7 +5,7 @@ VIGENTE
 - Rebanada: [Notion](https://app.notion.com/p/3e55306618988139a316d4a55aad983c) · Ciclo 1 · Tipo Plataforma · Paquetes `@aiw/models`, `@aiw/domain`, `@aiw/db`, `@aiw/ledger`, `@aiw/evals` · P0
 - Rama: `rebanada/modelos-v1`
 - Plan de referencia: [Plan v8](https://claude.ai/artifact/Mf7PeYbaXCnp5wFhQu3XWn); ADR-002, ADR-007, ADR-017, ADR-018.
-- Zona crítica: sí — `packages/models`, la versión de puesto y el contador (`tarifa_modelo`, `uso_modelo`); migraciones `0002_modelos_v1.sql` y `0003_tarifas_region_moneda.sql`. También `.github/workflows/ci.yml` (nuevo job, cron).
+- Zona crítica: sí — `packages/models`, la versión de puesto y el contador (`tarifa_modelo`, `uso_modelo`); migraciones `0003_modelos_v1.sql` y `0004_tarifas_region_moneda.sql`. También `.github/workflows/ci.yml` (nuevo job, cron).
 
 ## Objetivo
 
@@ -25,10 +25,10 @@ credenciales.
   plataformas y el esquema `configuracionModeloPuesto`.
 - `@aiw/db`: columna `configuracion_modelo` en `version_puesto`; columnas
   `plataforma` y `multiplicador_lista_oficial` en `tarifa_modelo`; columna
-  `plataforma` en `uso_modelo` (migración `0002_modelos_v1.sql`); columnas
+  `plataforma` en `uso_modelo` (migración `0003_modelos_v1.sql`); columnas
   `region`, `moneda_origen`, `tipo_cambio_a_euros`, `precio_origen_por_millon_*` y
   la escritura de caché a 5 minutos/1 hora en `tarifa_modelo`
-  (`0003_tarifas_region_moneda.sql`).
+  (`0004_tarifas_region_moneda.sql`).
 - `@aiw/ledger`: `Tarifa`/`TarifaNueva`/`UsoDeModeloNuevo` con plataforma, región,
   moneda de origen y tipo de cambio opcionales; catálogo de tarifas con las
   tarifas reales de Bedrock UE del 2026-09-25.
@@ -37,8 +37,8 @@ credenciales.
 
 ## Endpoints, flujos y datos
 
-Sin endpoints nuevos. Migraciones `packages/db/drizzle/0002_modelos_v1.sql` y
-`0003_tarifas_region_moneda.sql` (y sus reversos): añaden columnas con `default`
+Sin endpoints nuevos. Migraciones `packages/db/drizzle/0003_modelos_v1.sql` y
+`0004_tarifas_region_moneda.sql` (y sus reversos): añaden columnas con `default`
 o nulas, así que ninguna fila existente cambia de significado. Zona crítica por
 tocar la versión de puesto y el contador.
 
@@ -144,7 +144,7 @@ Ya están en `packages/ledger/src/datos/tarifas-ejemplo.json`, con:
   solo trazabilidad — `calcularCosteEuros` sigue leyendo únicamente
   `eurosPorMillon*`, ya convertidos, igual que antes de esta rebanada.
 - `eurosPorMillonEntradaCacheEscritura5m`/`...1h`: los dos precios de escritura
-  de caché, nuevos en `tarifa_modelo` (migración `0003_tarifas_region_moneda.sql`).
+  de caché, nuevos en `tarifa_modelo` (migración `0004_tarifas_region_moneda.sql`).
   **Documentales por ahora**: `uso_modelo` todavía no distingue tokens de
   escritura de caché de los de entrada normal, así que `calcularCosteEuros` no
   los cobra todavía — cargarlos en la tarifa no cambia ninguna factura existente.

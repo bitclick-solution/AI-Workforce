@@ -96,7 +96,10 @@ mientras se resuelve:
 7. En cuanto la prueba de integración
    (`packages/models/src/adaptadores/anthropic.bedrock.integracion.test.ts`) pase
    en la CI, repite los casos dorados de Cobros y de Conciliación
-   (`packages/evals/smoke/cobros.eval.ts`, `conciliacion.eval.ts`) apuntando al
+   (`packages/evals/smoke/cobros-modelos-v1.eval.ts`,
+   `conciliacion-modelos-v1.eval.ts` — nombrados así para no chocar con los casos
+   dorados del guion del proveedor de prueba que ya viven en `cobros.eval.ts` y
+   `conciliacion.eval.ts`, de la rebanada «Prueba técnica del stack») apuntando al
    cliente real en vez del simulado, para cerrar el criterio de hecho pendiente de
    esta rebanada.
 

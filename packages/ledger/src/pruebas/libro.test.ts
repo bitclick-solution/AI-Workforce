@@ -13,14 +13,16 @@ import {
 import {
   HAY_BASE_DE_DATOS,
   MOTIVO_SALTO,
+  URL_BASE_DE_DATOS,
   conectar,
   sembrarOrganizacion,
   type OrganizacionSembrada,
 } from '@aiw/db/pruebas';
-import type postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { HASH_GENESIS } from '../hash.js';
+import { HASH_GENESIS, calcularHash } from '../hash.js';
 import { anotar, leerCadena, verificarCadenaEnBase } from '../libro.js';
 
 const TITULO = HAY_BASE_DE_DATOS
@@ -112,6 +114,66 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     expect(contador?.tareas).toBe('3');
     expect(contador?.pasos).toBe('10');
     expect(Number(contador?.coste_euros)).toBeCloseTo(0.0132, 4);
+  });
+
+  it('escribe con el cliente crudo y con uno pasado por drizzle() y verifica igual desde cualquiera', async () => {
+    // `drizzle-orm/postgres-js` sustituye, en el mismo objeto de cliente que recibe,
+    // los analizadores de los tipos de fecha: donde el cliente crudo da un `Date`
+    // para `creado_en`, este da el texto de Postgres tal cual. Es justo lo que hace
+    // `crearConexion` con el cliente de la aplicación, y lo que rompía el hash antes
+    // de esta rebanada.
+    if (!URL_BASE_DE_DATOS) throw new Error(MOTIVO_SALTO);
+    const clienteApp = postgres(URL_BASE_DE_DATOS, { max: 1, onnotice: () => undefined });
+    drizzle(clienteApp);
+    try {
+      const deCrudo = await conTenant(cliente, org.tenantId, (tx) =>
+        anotar(tx, org.tenantId, {
+          actorTipo: 'agente',
+          puestoId: org.puestoId,
+          accion: 'serializacion.cliente_crudo',
+          resultado: 'exito',
+        }),
+      );
+      const deApp = await conTenant(clienteApp, org.tenantId, (tx) =>
+        anotar(tx, org.tenantId, {
+          actorTipo: 'agente',
+          puestoId: org.puestoId,
+          accion: 'serializacion.cliente_de_la_aplicacion',
+          resultado: 'exito',
+        }),
+      );
+
+      // Las dos devuelven un Date real: anotar normaliza creadoEn al devolver, tanto
+      // si el cliente que escribió daba Date como si daba el texto de Postgres.
+      expect(deCrudo.creadoEn).toBeInstanceOf(Date);
+      expect(deApp.creadoEn).toBeInstanceOf(Date);
+
+      const cadenaCruda = await leerCadena(cliente, org.tenantId);
+      const cadenaApp = await leerCadena(clienteApp, org.tenantId);
+      expect(cadenaApp.length).toBe(cadenaCruda.length);
+
+      // El cliente pasado por drizzle() lee creado_en como texto; el crudo, como Date.
+      const ultimaApp = cadenaApp[cadenaApp.length - 1];
+      if (!ultimaApp) throw new Error('cadena vacía');
+      expect(typeof ultimaApp.creadoEn).toBe('string');
+
+      for (let i = 0; i < cadenaCruda.length; i += 1) {
+        const eslabonCrudo = cadenaCruda[i];
+        const eslabonApp = cadenaApp[i];
+        if (!eslabonCrudo || !eslabonApp) throw new Error('cadena corta');
+        const anteriorHash = eslabonCrudo.hashAnterior ?? HASH_GENESIS;
+        // El mismo eslabón, leído con cada cliente, da el mismo hash: el cálculo no
+        // depende de si creadoEn llega como Date o como texto de Postgres.
+        expect(calcularHash(eslabonApp, anteriorHash)).toBe(
+          calcularHash(eslabonCrudo, anteriorHash),
+        );
+      }
+
+      expect((await verificarCadenaEnBase(cliente, org.tenantId)).valida).toBe(true);
+      expect((await verificarCadenaEnBase(clienteApp, org.tenantId)).valida).toBe(true);
+    } finally {
+      await clienteApp.end({ timeout: 5 });
+    }
   });
 
   it('dos escrituras a la vez no se pisan el número de orden', async () => {

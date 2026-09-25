@@ -36,13 +36,47 @@ export function leerEnv(ruta = rutaEnv) {
   );
 }
 
+/** Sustituye cada GENERAR por un secreto aleatorio local. */
+function generar(texto) {
+  return texto.replaceAll('GENERAR', () => randomBytes(32).toString('hex'));
+}
+
+/** Nombre de la variable de una línea `NOMBRE=valor`. */
+function nombreDe(linea) {
+  return linea.slice(0, linea.indexOf('=')).trim();
+}
+
 /** Crea .env con secretos aleatorios si no existe. Devuelve true si lo ha creado. */
 export function asegurarEnv() {
   if (existsSync(rutaEnv)) return false;
-  const ejemplo = readFileSync(rutaEjemplo, 'utf8');
-  const generado = ejemplo.replaceAll('GENERAR', () => randomBytes(32).toString('hex'));
-  writeFileSync(rutaEnv, generado, { mode: 0o600 });
+  writeFileSync(rutaEnv, generar(readFileSync(rutaEjemplo, 'utf8')), { mode: 0o600 });
   return true;
+}
+
+/**
+ * Añade a un .env existente las variables de .env.example que le falten, con un
+ * secreto aleatorio donde el ejemplo dice GENERAR. No toca las que ya están: un .env
+ * creado antes de que una rebanada añadiera variables se completa sin perder nada.
+ * Va después de `migrarEnv`, para no generar de nuevo las S3_* que se copian de
+ * MINIO_*. Devuelve los nombres añadidos, nunca los valores.
+ */
+export function completarEnv() {
+  const actuales = leerEnv();
+  const faltan = readFileSync(rutaEjemplo, 'utf8')
+    .split(/\r?\n/)
+    .filter((linea) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(linea))
+    .filter((linea) => !Object.hasOwn(actuales, nombreDe(linea)));
+  if (faltan.length === 0) return [];
+  const bloque = [
+    '',
+    '# Añadido por pnpm dev:up: variables nuevas de .env.example.',
+    ...faltan.map(generar),
+    '',
+  ].join('\n');
+  writeFileSync(rutaEnv, readFileSync(rutaEnv, 'utf8').replace(/\r?\n?$/, '\n') + bloque, {
+    mode: 0o600,
+  });
+  return faltan.map(nombreDe);
 }
 
 /** Añade las variables S3_* a un .env que solo tenga los nombres MINIO_* anteriores. Devuelve las añadidas. */

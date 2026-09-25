@@ -15,6 +15,7 @@ Estas páginas convierten el [plan de construcción v8](https://claude.ai/artifa
 | [Administración](administracion.md)                           | Facturas recibidas, calendario de obligaciones y notificaciones administrativas. Fase 2.                                 |
 | [Director de IA](director-de-ia.md)                           | El agente de plataforma que propone puestos, conexiones, guardrails y cambios de ciclo de vida.                          |
 | [Experiencia de diez minutos](experiencia-de-diez-minutos.md) | Del primer clic a la primera tarea aprobada, paso a paso y con reloj. Es el requisito de producto que mide cada release. |
+| [Guion de prueba del prototipo](prototipo-guion-de-prueba.md) | Las tres tareas, las preguntas y lo que se mide en las cinco sesiones con gerentes sobre el prototipo navegable.         |
 
 Cada ficha tiene las mismas secciones y en el mismo orden: misión, puestos, herramientas mínimas, guardrails por clase de riesgo, niveles iniciales N0 a N3, indicadores y coste estimado. Las cuatro comparten el vocabulario de esta página.
 

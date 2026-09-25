@@ -1,122 +1,95 @@
-/**
- * Caso dorado del puesto Conciliación (ADR-018: conciliación es esfuerzo alto).
- *
- * Igual que el de Cobros: corre contra el servidor simulado de `@aiw/models/pruebas`
- * porque no hay credenciales de Bedrock ni de Vertex en la UE todavía (runbook de
- * funciones ausentes). El criterio de hecho «pasa con el proveedor real» queda
- * pendiente en el PR con los pasos exactos para activarlo.
- */
-import { crearAdaptadorAnthropic, clienteSimulado } from '@aiw/models';
+import { describe, expect, it } from 'vitest';
+
+import { CARTERA } from '../src/puestos/cobros.js';
 import {
-  iniciarServidorSimulado,
-  respuestaDeTexto,
-  type ServidorSimulado,
-} from '@aiw/models/pruebas';
-import { afterEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+  CASO_CONCILIACION,
+  ejecutarCasoConciliacion,
+  evaluarConciliacion,
+} from '../src/puestos/conciliacion.js';
 
-import { casoDoradoEstructurado, evaluarCasoDoradoEstructurado } from '../src/index.js';
+/**
+ * Caso dorado del puesto de Conciliación. Determinista y sin coste, como el de
+ * Cobros, y con un contraejemplo por regla: un evaluador que no sabe fallar no
+ * certifica nada.
+ */
 
-const decisionConciliacion = z.object({
-  facturaId: z.string().nullable(),
-  conciliado: z.boolean(),
-});
-
-type DecisionConciliacion = z.infer<typeof decisionConciliacion>;
-
-interface MovimientoBancario {
-  referencia: string;
-  importeEuros: number;
-  facturasCandidatas: { id: string; importeEuros: number }[];
-}
-
-async function decidirConciliacion(
-  movimiento: MovimientoBancario,
-  esperado: DecisionConciliacion,
-): Promise<{ obtenido: DecisionConciliacion; cerrar: () => Promise<void> }> {
-  const servidor: ServidorSimulado = await iniciarServidorSimulado(
-    respuestaDeTexto(JSON.stringify(esperado)),
-  );
-  const puesto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
-    papel: 'opus5',
-    plataforma: 'vertex-eu',
-    configuracion: { esfuerzoPorClasePaso: {} },
-  });
-
-  const resultado = await puesto.completar({
-    clasePaso: 'conciliacion',
-    sistema: 'Eres el puesto Conciliación. Decides qué factura casa con un movimiento bancario.',
-    mensajes: [
-      {
-        rol: 'user',
-        contenido: `Movimiento ${movimiento.referencia} de ${movimiento.importeEuros} €. Candidatas: ${JSON.stringify(
-          movimiento.facturasCandidatas,
-        )}.`,
-      },
+/** Propuesta correcta para una factura de la cartera. Los contraejemplos la estropean. */
+function propuestaDe(numero: string): Record<string, unknown> {
+  const factura = CARTERA.find((candidata) => candidata.numero === numero);
+  if (!factura) throw new Error(`La cartera no tiene ${numero}.`);
+  return {
+    factura: factura.numero,
+    factura_id: factura.id,
+    cliente: factura.cliente.nombre,
+    importe: factura.importe_pendiente,
+    moneda: factura.moneda,
+    asiento_propuesto: [
+      { cuenta: '572', concepto: 'Bancos', debe: factura.importe_pendiente, haber: 0 },
+      { cuenta: '430', concepto: 'Clientes', debe: 0, haber: factura.importe_pendiente },
     ],
-    esquemaSalida: decisionConciliacion,
-  });
-
-  if (resultado.tipo !== 'ok' || resultado.salida === undefined) {
-    throw new Error(
-      `El puesto Conciliación no devolvió una decisión válida: ${JSON.stringify(resultado)}`,
-    );
-  }
-  return { obtenido: resultado.salida, cerrar: servidor.cerrar };
+    movimiento_bancario: null,
+    estado: 'pendiente_de_extracto',
+  };
 }
 
-describe('caso dorado · Conciliación', () => {
-  let cerrar: (() => Promise<void>) | undefined;
+function informe(...propuestas: Record<string, unknown>[]): string {
+  return JSON.stringify({ resumen: 'Informe de prueba.', propuestas, no_encontradas: [] });
+}
 
-  afterEach(async () => {
-    await cerrar?.();
-    cerrar = undefined;
+describe('evals de humo · puesto Conciliación', () => {
+  it('el agente propone el asiento de la factura pedida y deja el cobro pendiente', () => {
+    const resultado = ejecutarCasoConciliacion();
+    expect(resultado.diagnostico).toContain(CASO_CONCILIACION);
+    expect(resultado.superado).toBe(true);
+    expect(resultado.puntuacion).toBe(1);
   });
 
-  it('concilia el movimiento con la factura del mismo importe', async () => {
-    const esperado: DecisionConciliacion = { facturaId: 'F-2026-014', conciliado: true };
-    const caso = casoDoradoEstructurado({
-      id: 'conciliacion-001',
-      puesto: 'Conciliación',
-      entrada: {
-        referencia: 'MOV-3001',
-        importeEuros: 1200,
-        facturasCandidatas: [
-          { id: 'F-2026-014', importeEuros: 1200 },
-          { id: 'F-2026-020', importeEuros: 500 },
-        ],
-      },
-      esperado,
-    });
-    const { obtenido, cerrar: cerrarServidor } = await decidirConciliacion(
-      caso.entrada as MovimientoBancario,
-      esperado,
-    );
-    cerrar = cerrarServidor;
-
-    const resultadoEval = evaluarCasoDoradoEstructurado(caso, obtenido);
-    expect(resultadoEval.superado, resultadoEval.diagnostico).toBe(true);
+  it('la propuesta correcta de los contraejemplos pasa: si no, no prueban nada', () => {
+    expect(evaluarConciliacion(informe(propuestaDe('F-2026-0001'))).superado).toBe(true);
   });
 
-  it('no concilia cuando ninguna factura candidata cuadra', async () => {
-    const esperado: DecisionConciliacion = { facturaId: null, conciliado: false };
-    const caso = casoDoradoEstructurado({
-      id: 'conciliacion-002',
-      puesto: 'Conciliación',
-      entrada: {
-        referencia: 'MOV-3002',
-        importeEuros: 875,
-        facturasCandidatas: [{ id: 'F-2026-020', importeEuros: 500 }],
-      },
-      esperado,
-    });
-    const { obtenido, cerrar: cerrarServidor } = await decidirConciliacion(
-      caso.entrada as MovimientoBancario,
-      esperado,
+  it('falla si propone asientos de facturas que nadie ha pedido', () => {
+    const resultado = evaluarConciliacion(
+      informe(propuestaDe('F-2026-0001'), propuestaDe('F-2026-0002')),
     );
-    cerrar = cerrarServidor;
+    expect(resultado.superado).toBe(false);
+    expect(resultado.diagnostico).toContain('propuestas de más: F-2026-0002');
+  });
 
-    const resultadoEval = evaluarCasoDoradoEstructurado(caso, obtenido);
-    expect(resultadoEval.superado, resultadoEval.diagnostico).toBe(true);
+  it('falla si el asiento no cuadra por el importe de la factura', () => {
+    const descuadrada = {
+      ...propuestaDe('F-2026-0001'),
+      asiento_propuesto: [
+        { cuenta: '572', concepto: 'Bancos', debe: 1240, haber: 0 },
+        { cuenta: '430', concepto: 'Clientes', debe: 0, haber: 1240 },
+      ],
+    };
+    const resultado = evaluarConciliacion(informe(descuadrada));
+    expect(resultado.superado).toBe(false);
+    expect(resultado.diagnostico).toContain('descuadrados: F-2026-0001');
+  });
+
+  it('falla si dice que ha visto un cobro sin tener el extracto', () => {
+    const inventada = {
+      ...propuestaDe('F-2026-0001'),
+      movimiento_bancario: { fecha: '2026-09-20', importe: 1240.5 },
+      estado: 'conciliada',
+    };
+    const resultado = evaluarConciliacion(informe(inventada));
+    expect(resultado.superado).toBe(false);
+    expect(resultado.diagnostico).toContain('no se inventa el cobro');
+  });
+
+  it('falla si el identificador es de otra factura', () => {
+    const cruzada = { ...propuestaDe('F-2026-0001'), factura_id: 'inv-0002' };
+    const resultado = evaluarConciliacion(informe(cruzada));
+    expect(resultado.superado).toBe(false);
+    expect(resultado.diagnostico).toContain('mal citadas: F-2026-0001');
+  });
+
+  it('falla con puntuación 0 si no entrega JSON, que es el formato del contrato', () => {
+    const resultado = evaluarConciliacion('He conciliado la factura F-2026-0001.');
+    expect(resultado.superado).toBe(false);
+    expect(resultado.puntuacion).toBe(0);
   });
 });

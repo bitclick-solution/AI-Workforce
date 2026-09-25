@@ -2,11 +2,12 @@
 // Arranca el entorno de desarrollo con un solo comando.
 // 1. Si no existe .env, lo crea desde .env.example con secretos aleatorios locales.
 // 2. Si .env tiene nombres antiguos (MINIO_*), añade sus equivalentes S3_*.
-// 3. Ejecuta `docker compose up -d --wait` sobre deploy/compose/docker-compose.dev.yml.
+// 3. Si .env existía, le añade las variables nuevas de .env.example sin tocar las que ya tiene.
+// 4. Ejecuta `docker compose up -d --wait` sobre deploy/compose/docker-compose.dev.yml.
 // Uso: `pnpm dev:up` · `pnpm dev:up --solo-env` (solo prepara .env) · argumentos extra van a docker compose.
 import { spawnSync } from 'node:child_process';
 
-import { asegurarEnv, composeArgs, leerEnv, migrarEnv, raiz } from './env-local.mjs';
+import { asegurarEnv, completarEnv, composeArgs, leerEnv, migrarEnv, raiz } from './env-local.mjs';
 
 const argumentos = process.argv.slice(2);
 const soloEnv = argumentos.includes('--solo-env');
@@ -22,6 +23,10 @@ if (migradas.length > 0) {
   console.log(
     `Añadidas a .env las variables ${migradas.join(', ')} a partir de los nombres MINIO_* anteriores.`,
   );
+}
+const completadas = completarEnv();
+if (completadas.length > 0) {
+  console.log(`Añadidas a .env las variables nuevas de .env.example: ${completadas.join(', ')}.`);
 }
 
 if (soloEnv) process.exit(0);

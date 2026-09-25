@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { HASH_GENESIS, calcularHash, type ContenidoEntrada } from './hash.js';
+import { HASH_GENESIS, calcularHash, normalizarFecha, type ContenidoEntrada } from './hash.js';
 import {
   COLUMNAS_EXPORTACION,
   aCsv,
@@ -177,7 +177,7 @@ function fila(numeroOrden: number): FilaExportada {
   const cuerpo = contenido(numeroOrden);
   return {
     numero_orden: numeroOrden,
-    creado_en: cuerpo.creadoEn.toISOString(),
+    creado_en: normalizarFecha(cuerpo.creadoEn).toISOString(),
     actor_tipo: 'persona',
     actor_id: null,
     puesto_id: null,

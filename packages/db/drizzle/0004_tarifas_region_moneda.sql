@@ -7,7 +7,7 @@
 -- caché (5 minutos y 1 hora de TTL) que Anthropic publica y que `tarifa_modelo`
 -- todavía no tenía. Ninguna columna participa en `calcularCosteEuros`: siguen
 -- siendo los `euros_por_millon_*` de la fila los que fijan el coste real, igual que
--- desde `0002_modelos_v1.sql`.
+-- desde `0003_modelos_v1.sql`.
 --
 -- Todas las columnas llevan `default` o son nulas: ninguna tarifa ya registrada
 -- cambia de significado.

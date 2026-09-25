@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "fuente": "Plan v8, Ciclo de vida sin código, catálogo de operaciones",
+  "niveles": {
+    "organizacion.contratar": "n1",
+    "organizacion.crear_departamento": "n1",
+    "organizacion.dar_de_baja": "n1"
+  },
+  "clasesProhibidas": [],
+  "caducidadDias": 7,
+  "diasDePrueba": 30
+}

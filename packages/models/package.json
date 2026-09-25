@@ -23,18 +23,19 @@
     "test:integracion:bedrock": "vitest run src/adaptadores/anthropic.bedrock.integracion.test.ts",
     "clean": "rm -rf dist coverage .turbo"
   },
-  "devDependencies": {
-    "@types/node": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
-  },
   "dependencies": {
     "@ai-sdk/mistral": "catalog:",
+    "@ai-sdk/provider": "catalog:",
     "@anthropic-ai/bedrock-sdk": "catalog:",
     "@anthropic-ai/sdk": "catalog:",
     "@anthropic-ai/vertex-sdk": "catalog:",
     "@aiw/domain": "workspace:*",
     "ai": "catalog:",
     "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

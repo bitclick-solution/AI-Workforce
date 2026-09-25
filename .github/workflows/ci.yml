@@ -112,10 +112,47 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
-      - name: Migración, aislamiento, inmutabilidad, purga, contador, aprobación y carga reducida
-        # Concurrencia 1 a propósito: los cuatro paquetes comparten una sola base y
-        # alguna suite vacía el libro de auditoría al terminar.
-        run: pnpm --workspace-concurrency=1 --filter @aiw/db --filter @aiw/ledger --filter @aiw/api --filter @aiw/channels test
+      - name: Migración, aislamiento, inmutabilidad, purga, contador, aprobación, gateway y carga reducida
+        # Concurrencia 1 a propósito: los paquetes comparten una sola base y alguna
+        # suite vacía el libro de auditoría al terminar.
+        run: pnpm --workspace-concurrency=1 --filter @aiw/db --filter @aiw/ledger --filter @aiw/learning --filter @aiw/api --filter @aiw/channels --filter @aiw/mcp-gateway test
+
+  flujos-durables:
+    name: Flujos durables
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16-trixie
+        env:
+          # Base efímera del runner, sin contraseña a propósito: así no hay ninguna
+          # credencial escrita en el repositorio, ni siquiera de juguete.
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: aiworkforce
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/aiworkforce
+      # El secreto del conector de demostración se genera en el runner y muere con él.
+      # Que sea aleatorio importa: la prueba de secretos rastrea su valor por las trazas
+      # y el libro, y un valor fijo escrito aquí sería una credencial en el repositorio.
+      DEMO_CONECTOR_SECRETO: ${{ github.run_id }}-${{ github.run_attempt }}-demo
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - name: Migrar la base antes de los flujos
+        run: pnpm --filter @aiw/db db:migrar
+      - name: Bucle, políticas, presupuesto, durabilidad, reintentos y delegación
+        # `@temporalio/testing` descarga su servidor de pruebas la primera vez. Si no
+        # pudiera, las pruebas que lo necesitan se saltan diciendo por qué y el resto
+        # —bucle, políticas, presupuesto, auditoría y empaquetado del flujo— corre igual.
+        run: pnpm --filter @aiw/worker test
 
   # Un millón de filas tarda lo suyo: solo corre si el PR toca el esquema, y a mano
   # desde la pestaña de acciones cuando alguien quiera volver a medir.

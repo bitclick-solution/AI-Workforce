@@ -1,4 +1,4 @@
--- Reverso de Modelos v1. Deja la base como estaba antes de `0002_modelos_v1.sql`:
+-- Reverso de Modelos v1. Deja la base como estaba antes de `0003_modelos_v1.sql`:
 -- sin las columnas de modelo, esfuerzo y plataforma, y con la única de
 -- `tarifa_modelo` como antes.
 do $$

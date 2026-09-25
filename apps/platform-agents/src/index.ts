@@ -6,7 +6,10 @@ import { PAQUETE as rooms } from '@aiw/rooms';
  *
  * Agentes de plataforma: moderador de sala, supervisor de departamento y Director de IA.
  *
- * Esta rebanada solo fija la frontera de la aplicación. Sin lógica de negocio todavía.
+ * Sala v0: el Director de IA puro y su catálogo de plantillas como dato. El
+ * moderador vive en `@aiw/rooms`, que es donde el ADR-004 pone la moderación. Los
+ * dos se ejecutan como actividades del trabajador hasta que tengan paso de modelo
+ * (docs/specs/sala-v0.md, decisión 1).
  */
 export const APLICACION = {
   nombre: '@aiw/platform-agents',
@@ -17,3 +20,6 @@ export const APLICACION = {
 } as const;
 
 export type Aplicacion = typeof APLICACION;
+
+// Sala v0
+export * from './director.js';

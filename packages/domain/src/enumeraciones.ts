@@ -156,6 +156,9 @@ export const NIVELES_ESFUERZO = ['low', 'medium', 'high', 'xhigh', 'max'] as con
 export const PLATAFORMAS_MODELO = ['bedrock-eu', 'vertex-eu', 'primera-parte', 'ai-sdk'] as const;
 
 export type Plan = (typeof PLANES)[number];
+export type EstadoPuesto = (typeof ESTADOS_PUESTO)[number];
+export type EstadoTarea = (typeof ESTADOS_TAREA)[number];
+export type ResultadoAccion = (typeof RESULTADOS_ACCION)[number];
 export type Nivel = (typeof NIVELES)[number];
 export type Ambito = (typeof AMBITOS)[number];
 export type SentidoDecision = (typeof SENTIDOS_DECISION)[number];

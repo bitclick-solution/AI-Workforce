@@ -34,15 +34,22 @@ export const MIGRACIONES: readonly Migracion[] = [
     ),
   },
   {
-    nombre: '0002_modelos_v1',
-    ruta: fileURLToPath(new URL('../drizzle/0002_modelos_v1.sql', import.meta.url)),
-    rutaReverso: fileURLToPath(new URL('../drizzle/reverso/0002_modelos_v1.sql', import.meta.url)),
+    nombre: '0002_indice_unico_de_promocion',
+    ruta: fileURLToPath(new URL('../drizzle/0002_indice_unico_de_promocion.sql', import.meta.url)),
+    rutaReverso: fileURLToPath(
+      new URL('../drizzle/reverso/0002_indice_unico_de_promocion.sql', import.meta.url),
+    ),
   },
   {
-    nombre: '0003_tarifas_region_moneda',
-    ruta: fileURLToPath(new URL('../drizzle/0003_tarifas_region_moneda.sql', import.meta.url)),
+    nombre: '0003_modelos_v1',
+    ruta: fileURLToPath(new URL('../drizzle/0003_modelos_v1.sql', import.meta.url)),
+    rutaReverso: fileURLToPath(new URL('../drizzle/reverso/0003_modelos_v1.sql', import.meta.url)),
+  },
+  {
+    nombre: '0004_tarifas_region_moneda',
+    ruta: fileURLToPath(new URL('../drizzle/0004_tarifas_region_moneda.sql', import.meta.url)),
     rutaReverso: fileURLToPath(
-      new URL('../drizzle/reverso/0003_tarifas_region_moneda.sql', import.meta.url),
+      new URL('../drizzle/reverso/0004_tarifas_region_moneda.sql', import.meta.url),
     ),
   },
 ];

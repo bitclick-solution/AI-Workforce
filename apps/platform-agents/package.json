@@ -10,17 +10,25 @@
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
-    "clean": "rm -rf dist coverage .turbo"
+    "clean": "rm -rf dist coverage .turbo",
+    "evals:smoke": "vitest run --config vitest.evals.config.ts"
   },
   "dependencies": {
     "@aiw/domain": "workspace:*",
     "@aiw/rooms": "workspace:*"
   },
   "devDependencies": {
+    "@aiw/evals": "workspace:*",
     "@types/node": "catalog:",
     "tsup": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
   }
 }

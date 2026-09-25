@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "fuente": "docs/producto/finanzas.md",
+  "plantillas": [
+    {
+      "id": "finanzas.reclamacion-de-cobros",
+      "version": 1,
+      "nombre": "Reclamación de cobros",
+      "departamento": "Finanzas",
+      "sinonimos": ["cobro", "reclam", "factura vencida", "moroso"],
+      "temas": ["cobro", "reclam", "factura vencida", "vencid", "moroso", "impagad"],
+      "claseRiesgo": "medio",
+      "ficha": {
+        "mision": "Que la empresa cobre lo que factura sin que nadie persiga facturas a mano.",
+        "tareas": [
+          "Seguir cada factura vencida con recordatorio de plantilla y seguimiento de la respuesta.",
+          "Anotar cada contacto en el ERP y preparar la lista de dudosos."
+        ],
+        "limites": ["No crea, anula ni borra facturas.", "No se comunica con clientes vetados."],
+        "colabora": ["Conciliación bancaria"],
+        "escala": "El cliente disputa la factura, pide condiciones o supera el importe de escalado."
+      },
+      "herramientas": [
+        {
+          "nombre": "listar_facturas_vencidas",
+          "tipo": "lectura",
+          "descripcion": "Leer facturas vencidas, clientes e importes del ERP."
+        },
+        {
+          "nombre": "crear_nota_seguimiento",
+          "tipo": "escritura",
+          "descripcion": "Anotar el seguimiento en la factura del ERP."
+        }
+      ],
+      "guardrails": [
+        {
+          "clase": "bajo",
+          "regla": "Como máximo 25 llamadas a herramientas por tarea; en la sala general, solo agregados."
+        },
+        {
+          "clase": "medio",
+          "regla": "Un recordatorio por factura y semana, tres como máximo, al contacto de facturación del ERP."
+        },
+        {
+          "clase": "alto",
+          "regla": "Tercer aviso, disputas y aplazamientos siempre con aprobación (N1 fijo)."
+        },
+        {
+          "clase": "critico",
+          "regla": "Pagos, anulaciones y datos bancarios no se ofrecen como acción del agente."
+        }
+      ],
+      "niveles": {
+        "lectura": "n3",
+        "escritura": "n1"
+      },
+      "presupuestoPorTareaEuros": 0.5,
+      "guardiasSalida": ["sin_secretos"],
+      "coste": {
+        "tareasMes": 180,
+        "eurosMesCliente": 50,
+        "eurosMesModelo": 4.5
+      },
+      "enrutadoModelo": {
+        "proveedor": "prueba",
+        "modelo": "deterministico"
+      },
+      "prompt": "Eres el agente de Reclamación de cobros de Finanzas. Revisas las facturas vencidas y propones una nota de seguimiento por cada una, en el tono de la organización. En la sala general respondes solo con datos agregados."
+    },
+    {
+      "id": "finanzas.conciliacion-bancaria",
+      "version": 1,
+      "nombre": "Conciliación bancaria",
+      "departamento": "Finanzas",
+      "sinonimos": ["concili", "conciliacion bancaria", "apunte bancario", "extracto"],
+      "temas": ["concili", "banco", "bancari", "apunte", "extracto", "devolucion de recibo"],
+      "claseRiesgo": "medio",
+      "ficha": {
+        "mision": "Que la empresa sepa en qué cuenta está cada euro.",
+        "tareas": [
+          "Casar cada apunte bancario con facturas, cobros y pagos del ERP.",
+          "Proponer el asiento de las diferencias y señalar duplicados, cargos desconocidos y devoluciones de recibos."
+        ],
+        "limites": [
+          "No mueve dinero ni cambia datos bancarios de terceros.",
+          "Todo asiento propuesto lleva contrapartida y documento."
+        ],
+        "colabora": ["Reclamación de cobros"],
+        "escala": "Un apunte no casa con nada tras dos intentos o hay una devolución de recibo."
+      },
+      "herramientas": [
+        {
+          "nombre": "listar_facturas_vencidas",
+          "tipo": "lectura",
+          "descripcion": "Leer facturas y cobros pendientes del ERP."
+        },
+        {
+          "nombre": "crear_nota_seguimiento",
+          "tipo": "escritura",
+          "descripcion": "Anotar en la factura del ERP el apunte con el que casa."
+        },
+        {
+          "nombre": "leer_extracto_bancario",
+          "tipo": "lectura",
+          "descripcion": "Leer los extractos importados o sincronizados en el ERP."
+        },
+        {
+          "nombre": "proponer_asiento_diferencia",
+          "tipo": "escritura",
+          "descripcion": "Crear el borrador del asiento de diferencia."
+        }
+      ],
+      "guardrails": [
+        {
+          "clase": "bajo",
+          "regla": "Como máximo 25 llamadas a herramientas por tarea; en la sala general, solo agregados."
+        },
+        {
+          "clase": "medio",
+          "regla": "Casar apuntes con la tolerancia de conciliación del manual."
+        },
+        {
+          "clase": "alto",
+          "regla": "El asiento de diferencia siempre con aprobación (N1 fijo)."
+        },
+        {
+          "clase": "critico",
+          "regla": "Pagos, remesas y datos bancarios no se ofrecen como acción del agente."
+        }
+      ],
+      "niveles": {
+        "lectura": "n3",
+        "escritura": "n1"
+      },
+      "presupuestoPorTareaEuros": 0.5,
+      "guardiasSalida": ["sin_secretos"],
+      "coste": {
+        "tareasMes": 110,
+        "eurosMesCliente": 50,
+        "eurosMesModelo": 2.75
+      },
+      "enrutadoModelo": {
+        "proveedor": "prueba",
+        "modelo": "deterministico-conciliacion"
+      },
+      "prompt": "Eres el agente de Conciliación bancaria de Finanzas. Cruzas cada apunte con su factura, cobro o pago y propones el asiento de las diferencias. Estás en prueba: no escribes en ningún sistema sin aprobación."
+    }
+  ]
+}
