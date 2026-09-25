@@ -17,18 +17,19 @@ datos de Anthropic en cada retro de ciclo.
 
 ## Funciones sin equivalente en Bedrock ni en Vertex, y su sustituto
 
-| Función ausente                                                   | Sustituto en esta plataforma                                                                                                                                                                                                                                                                          |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Conector MCP nativo (`mcp_servers` + `mcp_toolset`)               | El gateway MCP propio (`packages/mcp-gateway`), con lista blanca por puesto y nivel.                                                                                                                                                                                                                  |
-| Batches API                                                       | Ninguno todavía: las tareas de esta plataforma son interactivas o programadas por Temporal, no por lotes.                                                                                                                                                                                             |
-| Files API                                                         | El índice de conocimiento propio (ADR-009): el conocimiento entra por ahí, no por un fichero subido a Anthropic.                                                                                                                                                                                      |
-| Fallbacks de servidor (`fallbacks`, `server-side-fallback-*`)     | Se implementan en cliente: `packages/models/src/respaldo.ts` (`completarConRespaldo`), que decide el papel de respaldo con la política del puesto y repite la petición con otro adaptador.                                                                                                            |
-| Presupuestos de tarea (`task_budget`)                             | Los aplica el bucle del agente con el presupuesto de la política del puesto (fuera de esta rebanada: es el bucle quien los hace cumplir, no el puerto de modelo).                                                                                                                                     |
-| Herramientas de servidor de búsqueda, fetch y ejecución de código | El conocimiento entra por el índice propio (ADR-009); no se declaran estas herramientas en las peticiones de `anthropic.ts`.                                                                                                                                                                          |
-| Agent Skills por API (`container.skills`)                         | Las habilidades de un puesto se inyectan en el prompt de su versión (`version_puesto.prompt`, `habilidad_version_puesto`), no se cargan por API.                                                                                                                                                      |
-| Managed Agents                                                    | No se usa: el bucle del agente es código propio sobre este puerto (CLAUDE.md, «fronteras de arquitectura»).                                                                                                                                                                                           |
-| Pensamiento adaptativo y `output_config.effort` en Haiku 4.5      | Ausente en el modelo, no en la plataforma: la API de primera parte tampoco lo admite en Haiku 4.5. El adaptador omite `thinking` y `effort` para el papel `haiku45` (`SIN_PENSAMIENTO_ADAPTATIVO` en `anthropic.ts`) y solo aplica `output_config.format` cuando hace falta salida estructurada.      |
-| Esfuerzo por clase de paso en el AI SDK (Mistral, locales)        | Ausente: ninguno de esos proveedores tiene un parámetro de razonamiento adaptativo equivalente. Por eso la ruta de AI SDK (`adaptadores/ai-sdk.ts`) es para pasos baratos o deterministas, nunca para razonamiento financiero, conciliación o decisiones de escritura, que van siempre por Anthropic. |
+| Función ausente                                                   | Sustituto en esta plataforma                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Conector MCP nativo (`mcp_servers` + `mcp_toolset`)               | El gateway MCP propio (`packages/mcp-gateway`), con lista blanca por puesto y nivel.                                                                                                                                                                                                                                                                                                                          |
+| Batches API                                                       | Ninguno todavía: las tareas de esta plataforma son interactivas o programadas por Temporal, no por lotes.                                                                                                                                                                                                                                                                                                     |
+| Files API                                                         | El índice de conocimiento propio (ADR-009): el conocimiento entra por ahí, no por un fichero subido a Anthropic.                                                                                                                                                                                                                                                                                              |
+| Fallbacks de servidor (`fallbacks`, `server-side-fallback-*`)     | Se implementan en cliente: `packages/models/src/respaldo.ts` (`completarConRespaldo`), que decide el papel de respaldo con la política del puesto y repite la petición con otro adaptador.                                                                                                                                                                                                                    |
+| Presupuestos de tarea (`task_budget`)                             | Los aplica el bucle del agente con el presupuesto de la política del puesto (fuera de esta rebanada: es el bucle quien los hace cumplir, no el puerto de modelo).                                                                                                                                                                                                                                             |
+| Herramientas de servidor de búsqueda, fetch y ejecución de código | El conocimiento entra por el índice propio (ADR-009); no se declaran estas herramientas en las peticiones de `anthropic.ts`.                                                                                                                                                                                                                                                                                  |
+| Agent Skills por API (`container.skills`)                         | Las habilidades de un puesto se inyectan en el prompt de su versión (`version_puesto.prompt`, `habilidad_version_puesto`), no se cargan por API.                                                                                                                                                                                                                                                              |
+| Managed Agents                                                    | No se usa: el bucle del agente es código propio sobre este puerto (CLAUDE.md, «fronteras de arquitectura»).                                                                                                                                                                                                                                                                                                   |
+| Pensamiento adaptativo y `output_config.effort` en Haiku 4.5      | Ausente en el modelo, no en la plataforma: la API de primera parte tampoco lo admite en Haiku 4.5. El adaptador omite `thinking` y `effort` para el papel `haiku45` (`SIN_PENSAMIENTO_ADAPTATIVO` en `anthropic.ts`) y solo aplica `output_config.format` cuando hace falta salida estructurada.                                                                                                              |
+| Esfuerzo por clase de paso en el AI SDK (Mistral, locales)        | Ausente: ninguno de esos proveedores tiene un parámetro de razonamiento adaptativo equivalente. Por eso la ruta de AI SDK (`adaptadores/ai-sdk.ts`) es para pasos baratos o deterministas, nunca para razonamiento financiero, conciliación o decisiones de escritura, que van siempre por Anthropic.                                                                                                         |
+| Opus 5 y Sonnet 5 en Bedrock UE (sin cuota concedida)             | Ausente por cuota, no por la plataforma (decisión de Jesús, 2026-09-25): mientras Bedrock en Frankfurt no conceda la cuota, esos dos papeles se sirven con Opus 4.6 y Sonnet 4.6 (`IDENTIFICADOR_DESNUDO_PROVISIONAL_BEDROCK` en `identificadores.ts`). El esfuerzo `xhigh` tampoco lo admiten esos dos sustitutos (llegó con Opus 4.7): `anthropic.ts` lo baja a `high` solo cuando el papel es provisional. |
 
 ## Cómo comprobar si algo sigue ausente
 
@@ -51,49 +52,49 @@ para cuando llegue:
    región primaria elegida; **`eu-west-1`** (Irlanda) si la cuota de Sonnet 5 no se
    concede en Frankfurt. Acceso concedido a Sonnet 5 en el catálogo de modelos de
    Bedrock de esa región (Opus 5 y Haiku 4.5 quedan para cuando el puesto que los
-   necesite los pida).
-2. Credenciales de AWS con permiso para invocar Bedrock, nada más: un usuario o rol
-   de IAM con las claves de acceso.
-3. Secretos y variables (ver la tabla exacta más abajo): `AIW_BEDROCK_REGION_UE`
-   como variable, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` como secretos. Ya
-   cableados como variables de entorno del job `Pruebas` en `.github/workflows/ci.yml`
-   (`${{ vars.* }}`/`${{ secrets.* }}`): en cuanto Jesús los cargue en GitHub, la
-   prueba de integración empieza a correr sin tocar el workflow otra vez.
+   necesite los pida). Mientras tanto, Opus 5 y Sonnet 5 se sirven en Bedrock con
+   Opus 4.6 y Sonnet 4.6 (fila «Opus 5 y Sonnet 5 en Bedrock UE» de la tabla de
+   arriba) — eso ya funciona con solo el acceso a la familia 4.6, que normalmente
+   no necesita cuota aparte.
+2. Credenciales: **sin claves guardadas en ningún sitio de CI.** En local, la clave
+   de acceso del usuario de IAM `aiw-dev`; en producción, la de `aiw-prod`; en
+   GitHub Actions, el rol `aiw-ci-bedrock` asumido por OIDC. Los tres, la política
+   IAM mínima y la relación de confianza exactas:
+   `docs/runbooks/bedrock-iam-oidc.md`.
+3. Variables: `AIW_BEDROCK_REGION_UE` (variable de repositorio y del `.env`) y,
+   en GitHub Actions, `AWS_ROLE_ARN` (variable de repositorio, no un secreto: sin
+   la relación de confianza de OIDC no sirve para nada). Ya cableadas en el job
+   **Bedrock UE · integración** de `.github/workflows/ci.yml`, que corre una vez
+   al noche o a mano desde la pestaña Actions —nunca en cada PR, para no pagar
+   modelos en cada revisión (decisión de Jesús, 2026-09-25)—: en cuanto Jesús
+   cargue `AWS_ROLE_ARN`, ese job deja de decir «nada que probar» sin tocar el
+   workflow otra vez.
 4. `clienteBedrockDesdeEntorno` (`packages/models/src/adaptadores/clientes.ts`)
    construye el cliente real en cuanto `AIW_BEDROCK_REGION_UE` existe; antes de
    eso, lanza con el nombre exacto de lo que falta.
-5. Comprueba en la consola de Bedrock si Sonnet 5, en `eu-central-1`, se sirve por
-   el identificador bajo demanda (`anthropic.claude-sonnet-5`, la hipótesis de
-   partida) o solo por un perfil de inferencia entre regiones (forma habitual:
-   `eu.anthropic.claude-sonnet-5`). Si hace falta el perfil, fíjalo en la variable
-   `AIW_BEDROCK_MODELO_SONNET5`: `anthropic.bedrock.integracion.test.ts` y
-   cualquier puesto que use `crearAdaptadorAnthropic` lo leen con
-   `identificadorModelo` sin tocar `identificadores.ts`.
-6. Da de alta las tarifas reales de Bedrock UE con `registrarTarifa` en la
-   plataforma `bedrock-eu` (ver `packages/ledger/src/datos/tarifas-ejemplo.json`
-   para el formato): el multiplicador frente a la lista oficial de Anthropic que
-   trae ese fichero es una hipótesis de partida (1, la misma cifra que la lista) y
-   hay que sustituirlo por el precio real de Bedrock en cuanto se conozca.
+5. Comprueba con `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` de `aiw-dev` en local
+   si, en `eu-central-1`, Opus 4.6 y Sonnet 4.6 se sirven por el identificador bajo
+   demanda (`anthropic.claude-opus-4-6`/`anthropic.claude-sonnet-4-6`, la hipótesis
+   de partida) o solo por un perfil de inferencia entre regiones (forma habitual:
+   `eu.anthropic.claude-sonnet-4-6`). Si hace falta el perfil, fíjalo en la
+   variable `AIW_BEDROCK_MODELO_SONNET5`: `anthropic.bedrock.integracion.test.ts`
+   y cualquier puesto que use `crearAdaptadorAnthropic` lo leen con
+   `identificadorModelo` sin tocar `identificadores.ts`. Repite la comprobación
+   cuando Bedrock conceda la cuota de la familia 5: retira entonces las dos
+   entradas de `IDENTIFICADOR_DESNUDO_PROVISIONAL_BEDROCK`.
+6. Las tarifas reales de Bedrock UE (Opus 5.5, Opus 5, Sonnet 5, Opus 4.6, Sonnet
+   4.6, Haiku 4.5, con región, moneda de origen y tipo de cambio) ya están dadas de
+   alta en el catálogo de desarrollo
+   (`packages/ledger/src/datos/tarifas-ejemplo.json`); Operación las carga en cada
+   tenant real con `registrarTarifa`. El tipo de cambio EUR/USD de ese catálogo
+   (0,92) es una referencia de desarrollo — sustitúyelo por el tipo de cambio
+   versionado real antes de facturar con él.
 7. En cuanto la prueba de integración
    (`packages/models/src/adaptadores/anthropic.bedrock.integracion.test.ts`) pase
    en la CI, repite los casos dorados de Cobros y de Conciliación
    (`packages/evals/smoke/cobros.eval.ts`, `conciliacion.eval.ts`) apuntando al
    cliente real en vez del simulado, para cerrar el criterio de hecho pendiente de
    esta rebanada.
-
-### Secretos y variables exactos (GitHub Actions)
-
-En `Settings > Secrets and variables > Actions` del repositorio:
-
-| Nombre                       | Tipo               | Valor                                                                                                         |
-| ---------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `AWS_ACCESS_KEY_ID`          | Secreto            | Clave de acceso del usuario o rol de IAM con permiso de invocar Bedrock.                                      |
-| `AWS_SECRET_ACCESS_KEY`      | Secreto            | Clave secreta de esa misma credencial.                                                                        |
-| `AIW_BEDROCK_REGION_UE`      | Variable           | `eu-central-1` (o `eu-west-1` si aplica la alternativa). No es una credencial: no hace falta que sea secreta. |
-| `AIW_BEDROCK_MODELO_SONNET5` | Variable, opcional | El perfil de inferencia entre regiones, solo si la consola de Bedrock lo exige (paso 5).                      |
-
-Jesús carga estos valores; nadie se los pide por el chat ni los escribe en el
-repositorio, en un PR ni en ningún registro.
 
 ## Activar el proveedor real de Vertex UE
 

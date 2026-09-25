@@ -5,7 +5,7 @@ VIGENTE
 - Rebanada: [Notion](https://app.notion.com/p/3e55306618988139a316d4a55aad983c) · Ciclo 1 · Tipo Plataforma · Paquetes `@aiw/models`, `@aiw/domain`, `@aiw/db`, `@aiw/ledger`, `@aiw/evals` · P0
 - Rama: `rebanada/modelos-v1`
 - Plan de referencia: [Plan v8](https://claude.ai/artifact/Mf7PeYbaXCnp5wFhQu3XWn); ADR-002, ADR-007, ADR-017, ADR-018.
-- Zona crítica: sí — `packages/models`, la versión de puesto (migración `0002_modelos_v1.sql`) y el contador (`tarifa_modelo`, `uso_modelo`).
+- Zona crítica: sí — `packages/models`, la versión de puesto y el contador (`tarifa_modelo`, `uso_modelo`); migraciones `0002_modelos_v1.sql` y `0003_tarifas_region_moneda.sql`. También `.github/workflows/ci.yml` (nuevo job, cron).
 
 ## Objetivo
 
@@ -25,53 +25,116 @@ credenciales.
   plataformas y el esquema `configuracionModeloPuesto`.
 - `@aiw/db`: columna `configuracion_modelo` en `version_puesto`; columnas
   `plataforma` y `multiplicador_lista_oficial` en `tarifa_modelo`; columna
-  `plataforma` en `uso_modelo` (migración `0002_modelos_v1.sql`).
-- `@aiw/ledger`: `Tarifa`/`TarifaNueva`/`UsoDeModeloNuevo` con plataforma opcional;
-  catálogo de tarifas con la plataforma y el multiplicador documental.
+  `plataforma` en `uso_modelo` (migración `0002_modelos_v1.sql`); columnas
+  `region`, `moneda_origen`, `tipo_cambio_a_euros`, `precio_origen_por_millon_*` y
+  la escritura de caché a 5 minutos/1 hora en `tarifa_modelo`
+  (`0003_tarifas_region_moneda.sql`).
+- `@aiw/ledger`: `Tarifa`/`TarifaNueva`/`UsoDeModeloNuevo` con plataforma, región,
+  moneda de origen y tipo de cambio opcionales; catálogo de tarifas con las
+  tarifas reales de Bedrock UE del 2026-09-25.
 - `@aiw/evals`: evaluador de casos dorados de salida estructurada; casos dorados de
   Cobros y de Conciliación.
 
 ## Endpoints, flujos y datos
 
-Sin endpoints nuevos. Migración `packages/db/drizzle/0002_modelos_v1.sql` (y su
-reverso): añade columnas con `default`, así que ninguna fila existente cambia de
-significado. Zona crítica por tocar la versión de puesto y el contador.
+Sin endpoints nuevos. Migraciones `packages/db/drizzle/0002_modelos_v1.sql` y
+`0003_tarifas_region_moneda.sql` (y sus reversos): añaden columnas con `default`
+o nulas, así que ninguna fila existente cambia de significado. Zona crítica por
+tocar la versión de puesto y el contador.
 
-## Región, perfil de inferencia y secretos de Bedrock UE (fijado 2026-09-25)
+## Región, perfil de inferencia y secretos de Bedrock UE (fijado 2026-09-25, revisado 2026-09-25)
 
-Jesús tiene ya cuenta de AWS y ha pedido cuota de Sonnet 5 en Bedrock. Mientras se
-concede, esto es lo que fija esta rebanada para cuando llegue:
+Jesús tiene ya cuenta de AWS y ha pedido cuota de Sonnet 5 y de Opus 5 en Bedrock,
+en Frankfurt, sin concederse todavía. Esto es lo que fija esta rebanada mientras
+llega:
 
 - **Región primaria**: `eu-central-1` (Frankfurt). **Alternativa**: `eu-west-1`
-  (Irlanda), si la cuota de Sonnet 5 no se concede en Frankfurt. Va en la variable
+  (Irlanda), si la cuota no se concede en Frankfurt. Va en la variable
   `AIW_BEDROCK_REGION_UE`, nunca hardcodeada en el código.
-- **Identificador de modelo**: hipótesis de partida `anthropic.claude-sonnet-5`
-  (identificador bajo demanda, sin fecha, tal como fija `identificadores.ts` para
-  el ADR-018). Si el catálogo de modelos de Bedrock en la región contratada solo
-  sirve Sonnet 5 por un **perfil de inferencia entre regiones** (forma habitual en
-  Bedrock: `eu.anthropic.claude-sonnet-5`), se fija en la variable opcional
-  `AIW_BEDROCK_MODELO_SONNET5` sin tocar `identificadores.ts`:
-  `crearAdaptadorAnthropic` acepta `identificadorModelo` para anular el cálculo por
-  papel y plataforma. Cuál de las dos formas hace falta se confirma en la consola
-  de Bedrock una vez concedida la cuota, no se adivina en esta rebanada.
-- **Secretos de GitHub Actions** (`Settings > Secrets and variables > Actions`),
-  en el job `Pruebas` de `ci.yml`:
-  - Secreto `AWS_ACCESS_KEY_ID` y secreto `AWS_SECRET_ACCESS_KEY`: credenciales de
-    un usuario o rol de IAM con permiso de invocar Bedrock en la región elegida,
-    nada más. Ningún otro permiso de la cuenta de AWS.
-  - Variable de repositorio (no secreto: no es una credencial)
-    `AIW_BEDROCK_REGION_UE` con el valor `eu-central-1` (o `eu-west-1` si aplica la
-    alternativa).
-  - Variable de repositorio opcional `AIW_BEDROCK_MODELO_SONNET5`, solo si hace
-    falta el perfil de inferencia entre regiones.
-  - Sin estos tres/cuatro valores, la prueba de integración de
-    `packages/models/src/adaptadores/anthropic.bedrock.integracion.test.ts` se
-    salta sola (`describe.skipIf`) y el job sigue en verde; en cuanto existan, la
-    prueba corre contra el Bedrock real y cierra el criterio de hecho 6.
-  - `.env` local: mismas tres variables (`AIW_BEDROCK_REGION_UE`,
-    `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`), vacías en `.env.example`.
-  - Jesús carga los valores reales; el Constructor no los pide ni los escribe en
-    el repositorio, en el PR ni en ningún registro.
+- **Modelos provisionales** (decisión de Jesús, 2026-09-25): mientras no hay
+  cuota, la matriz del ADR-018 en Bedrock usa estos equivalentes —
+  `identificadores.ts`, tabla `IDENTIFICADOR_DESNUDO_PROVISIONAL_BEDROCK`:
+  - Razonamiento y pasos que deciden escrituras (papel `opus5`): **Opus 4.6**
+    (`claude-opus-4-6`) en vez de Opus 5.
+  - Modelo por defecto de puesto (papel `sonnet5`): **Sonnet 4.6**
+    (`claude-sonnet-4-6`) en vez de Sonnet 5.
+  - Moderador, clasificación, extracción y rutinas (papel `haiku45`): **Haiku
+    4.5**, sin cambios — ya está disponible.
+
+  El modelo sigue siendo dato de la versión de puesto (`configuracionModeloPuesto.modelo`
+  guarda `opus5`/`sonnet5`/`haiku45`, nunca `opus46` ni `sonnet46`): el cambio a
+  la familia 5, cuando Bedrock conceda la cuota, es retirar esa tabla de
+  `identificadores.ts`, no una promoción de ninguna versión de puesto — ninguna
+  versión de puesto llegó a saber que estaba en modo provisional. Solo Bedrock:
+  Vertex y la primera parte siguen resolviendo a la familia 5 objetivo, sin
+  indicio de que tengan la misma limitación de cuota.
+
+  Comprobado con la skill `claude-api` (tabla de esfuerzo y pensamiento):
+  Opus 4.6 y Sonnet 4.6 admiten pensamiento adaptativo igual que la familia 5,
+  pero **no admiten el esfuerzo `xhigh`** (llegó con Opus 4.7). `anthropic.ts`
+  (`esfuerzoSoportado`) baja `xhigh` a `high` solo cuando el papel resuelve hoy a
+  un sustituto provisional; `low`/`medium`/`high`/`max` no cambian.
+
+- **Identificador de modelo**: hipótesis de partida para el identificador bajo
+  demanda de cada papel provisional (`anthropic.claude-opus-4-6`,
+  `anthropic.claude-sonnet-4-6`). Si el catálogo de modelos de Bedrock en la
+  región contratada solo los sirve por un **perfil de inferencia entre
+  regiones** (forma habitual en Bedrock: `eu.anthropic.claude-sonnet-4-6`), se
+  fija en la variable opcional `AIW_BEDROCK_MODELO_SONNET5` sin tocar
+  `identificadores.ts`: `crearAdaptadorAnthropic` acepta `identificadorModelo`
+  para anular el cálculo por papel y plataforma. Cuál de las dos formas hace
+  falta se confirma en la consola de Bedrock, no se adivina en esta rebanada.
+- **Secretos y variables — revisado: sin claves de AWS guardadas en GitHub
+  Actions.** La primera versión de esta sección (misma fecha) proponía
+  `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` como secretos de GitHub Actions;
+  Jesús la corrigió el mismo día: en CI se asume un rol por OIDC, sin ninguna
+  clave guardada. Queda así:
+  - **Local** (`.env`, vacío en `.env.example`): `AIW_BEDROCK_REGION_UE`, y
+    `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` de la cadena estándar de AWS —
+    del usuario de IAM `aiw-dev`.
+  - **Producción**: mismas variables, credenciales del usuario de IAM `aiw-prod`.
+    Nunca las mismas claves que `aiw-dev`.
+  - **GitHub Actions**: variable de repositorio `AIW_BEDROCK_REGION_UE`; variable
+    de repositorio `AWS_ROLE_ARN` con el ARN del rol `aiw-ci-bedrock` (no es un
+    secreto: sin la relación de confianza de OIDC, el ARN solo no sirve para
+    nada); variable opcional `AIW_BEDROCK_MODELO_SONNET5`. El job **Bedrock UE ·
+    integración** de `ci.yml` asume el rol con
+    `aws-actions/configure-aws-credentials` y `permissions: id-token: write`.
+  - La política IAM mínima (`bedrock-mantle:CreateInference`, nada más) y la
+    relación de confianza de OIDC —limitada a este repositorio— están en
+    `docs/runbooks/bedrock-iam-oidc.md`. Jesús crea los dos usuarios y el rol;
+    el Constructor no los pide ni los escribe en el repositorio, en el PR ni en
+    ningún registro.
+  - **Nunca en cada PR**: el job de integración no corre en el job `Pruebas`
+    (decisión de Jesús: no pagar modelos en cada revisión). Corre una vez al
+    día por `cron` o a mano desde la pestaña Actions
+    (`workflow_dispatch`). Sin `AWS_ROLE_ARN` todavía, ese job dice «nada que
+    probar» y sigue en verde; en cuanto exista, cierra el criterio de hecho 6
+    sin más cambio de código ni de workflow.
+
+## Tarifas reales de Bedrock UE (cargadas 2026-09-25)
+
+Precios reales de Bedrock en Frankfurt que dio Jesús el 2026-09-25 (inferencia
+geográfica y entre regiones, en USD por millón de tokens): Opus 5.5, Opus 5,
+Sonnet 5, Opus 4.6, Sonnet 4.6 y Haiku 4.5, cada uno con entrada, salida,
+escritura de caché a 5 minutos, escritura de caché a 1 hora y lectura de caché.
+Ya están en `packages/ledger/src/datos/tarifas-ejemplo.json`, con:
+
+- `region: "eu-central-1"`, `monedaOrigen: "usd"` y `tipoCambioAEuros` (0,92 como
+  referencia de desarrollo: Operación lo sustituye por el tipo de cambio
+  versionado real antes de facturar con estas filas).
+- `precioOrigenPorMillon*`: el precio tal como lo publicó el partner, en USD,
+  solo trazabilidad — `calcularCosteEuros` sigue leyendo únicamente
+  `eurosPorMillon*`, ya convertidos, igual que antes de esta rebanada.
+- `eurosPorMillonEntradaCacheEscritura5m`/`...1h`: los dos precios de escritura
+  de caché, nuevos en `tarifa_modelo` (migración `0003_tarifas_region_moneda.sql`).
+  **Documentales por ahora**: `uso_modelo` todavía no distingue tokens de
+  escritura de caché de los de entrada normal, así que `calcularCosteEuros` no
+  los cobra todavía — cargarlos en la tarifa no cambia ninguna factura existente.
+  Cobrarlos de verdad es una rebanada futura que amplíe `TokensUsados` y
+  `uso_modelo` con los tokens de escritura por TTL.
+- Las dos filas de `claude-opus-4-6` y `claude-sonnet-4-6` son las que se aplican
+  hoy de verdad, mientras dura la sustitución provisional de la sección anterior.
 
 ## Criterios de hecho
 
@@ -88,9 +151,13 @@ concede, esto es lo que fija esta rebanada para cuando llegue:
    respaldo decidido por `configuracion.modeloRespaldo` y ejecutado por el cliente
    (`completarConRespaldo`), nunca reintentado con el mismo modelo — cumplido.
 4. `tarifa_modelo` guarda `plataforma` (Bedrock UE, Vertex UE, primera parte o
-   AI SDK) y `multiplicadorListaOficial` documental; el desglose de caché ya
-   existía (`eurosPorMillonEntradaCache`) y sigue siendo la fuente del cálculo, no
-   el multiplicador — cumplido.
+   AI SDK), `region`, `monedaOrigen`/`tipoCambioAEuros`/`precioOrigenPorMillon*`
+   y `multiplicadorListaOficial`, todo documental; el desglose de caché de
+   lectura ya existía (`eurosPorMillonEntradaCache`) y ahora también el de
+   escritura a 5 minutos y a 1 hora (documental: `uso_modelo` no los cuenta
+   todavía). `calcularCosteEuros` sigue leyendo solo los `eurosPorMillon*` ya
+   convertidos, nunca el multiplicador ni el tipo de cambio en caliente —
+   cumplido. Cargadas las tarifas reales de Bedrock UE del 2026-09-25.
 5. El coste por tarea completada llega a Langfuse por `observadorDesdeEntorno`
    cuando hay credenciales, y no rompe la tarea cuando no las hay (observador nulo)
    — cumplido; activarlo con credenciales reales queda en el runbook.
@@ -98,25 +165,32 @@ concede, esto es lo que fija esta rebanada para cuando llegue:
    esquema estricto, evaluador— contra el servidor simulado en
    `pnpm --filter @aiw/evals evals:smoke` — cumplido con el proveedor simulado.
    Hay además una prueba de integración contra el Bedrock real
-   (`anthropic.bedrock.integracion.test.ts`) que se salta sola sin credenciales, ya
-   cableada en `ci.yml`. **Pendiente con el proveedor real**: la cuota de Sonnet 5
-   en Bedrock está pedida pero no concedida a fecha de esta rebanada; en cuanto se
-   conceda y Jesús cargue los secretos de la sección anterior, la prueba corre sola
-   en la próxima CI sin más cambio de código.
+   (`anthropic.bedrock.integracion.test.ts`) que se salta sola sin credenciales, en
+   un job aparte de `ci.yml` que corre a diario o a mano, nunca en cada PR.
+   **Pendiente con el proveedor real**: la cuota de Sonnet 5 y de Opus 5 en
+   Bedrock está pedida pero no concedida a fecha de esta rebanada; en cuanto
+   Jesús cree el rol `aiw-ci-bedrock` (`docs/runbooks/bedrock-iam-oidc.md`) y
+   cargue `AWS_ROLE_ARN`, la prueba corre sola sin más cambio de código ni de
+   workflow — y ya ejercita algo real hoy mismo, sin esperar a la cuota: los
+   sustitutos provisionales Opus 4.6 y Sonnet 4.6.
 7. Runbook de funciones ausentes en Bedrock o en Vertex, con su sustituto y los
    pasos de activación — cumplido (`docs/runbooks/modelos-funciones-ausentes.md`).
 
 ## Casos de prueba y de eval
 
 - Unitario: identificador de modelo por papel y plataforma (con y sin prefijo
-  `anthropic.`, rechazo de `ai-sdk`); esfuerzo por clase de paso con y sin fijar en
-  el puesto; decisión y ejecución del respaldo tras un rechazo, incluida la lectura
-  y las bifurcaciones del adaptador de Anthropic (pensamiento adaptativo, la
-  excepción de Haiku 4.5, salida estructurada válida e inválida, herramientas
-  estrictas) contra el servidor simulado y contra los clientes reales de Bedrock
-  con `skipAuth`; el adaptador de AI SDK con `MockLanguageModelV4` (texto, salida
-  estructurada, filtro de contenido como rechazo); el observador de Langfuse
-  (autenticación básica, desglose de tokens, fallo del envío) y el observador nulo.
+  `anthropic.`, rechazo de `ai-sdk`, la sustitución provisional de Opus 4.6/Sonnet
+  4.6 en Bedrock y que Haiku 4.5 no la necesita); esfuerzo por clase de paso con y
+  sin fijar en el puesto, y el esfuerzo `xhigh` bajado a `high` solo cuando el
+  papel es provisional; decisión y ejecución del respaldo tras un rechazo,
+  incluida la lectura y las bifurcaciones del adaptador de Anthropic (pensamiento
+  adaptativo, la excepción de Haiku 4.5, salida estructurada válida e inválida,
+  herramientas estrictas) contra el servidor simulado y contra los clientes
+  reales de Bedrock con `skipAuth`; el adaptador de AI SDK con
+  `MockLanguageModelV4` (texto, salida estructurada, filtro de contenido como
+  rechazo); el observador de Langfuse (autenticación básica, desglose de tokens,
+  fallo del envío) y el observador nulo; el catálogo de tarifas trae región,
+  moneda de origen y tipo de cambio en las filas reales de Bedrock UE.
 - Eval: `cobros-001`/`cobros-002` (proponer o no una nota de seguimiento según si
   la factura está vencida) y `conciliacion-001`/`conciliacion-002` (conciliar o no
   un movimiento bancario contra las facturas candidatas), los cuatro en
@@ -131,10 +205,12 @@ concede, esto es lo que fija esta rebanada para cuando llegue:
   `observadorDesdeEntorno` fallan con el nombre exacto de la variable que falta en
   vez de construir un cliente con un valor inventado (prueba en
   `adaptadores/clientes.test.ts`).
-- Integración (se salta sin secretos): `anthropic.bedrock.integracion.test.ts`
-  completa una petición mínima con Sonnet 5 contra el Bedrock real de
+- Integración (se salta sin secretos, y solo corre a diario o a mano, nunca en
+  cada PR): `anthropic.bedrock.integracion.test.ts` completa una petición mínima
+  con el papel `sonnet5` —hoy, Sonnet 4.6— contra el Bedrock real de
   `AIW_BEDROCK_REGION_UE`, siguiendo el mismo patrón `describe.skipIf` que las
-  pruebas de `@aiw/db` contra PostgreSQL sin `DATABASE_URL`.
+  pruebas de `@aiw/db` contra PostgreSQL sin `DATABASE_URL`. Credenciales por
+  OIDC (`aiw-ci-bedrock`), nunca una clave guardada en el repositorio.
 
 ## Fuera de alcance
 
@@ -143,10 +219,17 @@ concede, esto es lo que fija esta rebanada para cuando llegue:
 - Presupuesto de tarea (`task_budget`) y edición/compactación de contexto: los
   aplica el bucle del agente, no el puerto de modelo.
 - Activar credenciales reales de Bedrock UE, de Vertex UE o de Langfuse: pasos en
-  el runbook, pendientes de que Operación las dé de alta.
+  el runbook, pendientes de que Jesús cree los usuarios y el rol de IAM.
 - Departamentos y puestos reales «Cobros» y «Conciliación» como filas de
   `departamento`/`puesto`: los casos dorados de esta rebanada prueban el puerto de
   modelo con su forma de decisión, no siembran el departamento de Finanzas.
+- Cobrar de verdad la escritura de caché: `uso_modelo` no distingue todavía
+  tokens de escritura de caché (a 5 minutos o a 1 hora) de los de entrada normal;
+  las tarifas ya cargadas los traen, pero `calcularCosteEuros` no los usa hasta
+  que una rebanada futura amplíe `TokensUsados` y `uso_modelo`.
+- Confirmar el tipo de cambio EUR/USD versionado real: el catálogo de desarrollo
+  usa 0,92 como referencia; Operación lo sustituye antes de facturar con las
+  tarifas de Bedrock UE.
 
 ## Presupuesto de tokens
 

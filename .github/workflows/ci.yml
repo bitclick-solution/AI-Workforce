@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Bedrock UE real (ADR-017, rebanada «Modelos v1»): una vez al día, no en cada
+    # PR, para no pagar modelos en cada revisión (decisión de Jesús, 2026-09-25).
+    - cron: '17 2 * * *'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -39,19 +43,43 @@ jobs:
   test:
     name: Pruebas
     runs-on: ubuntu-24.04
-    env:
-      # Bedrock UE real (ADR-017, rebanada «Modelos v1»): sin estos tres, la prueba de
-      # integración de @aiw/models se salta sola y el job sigue en verde (ver
-      # docs/runbooks/modelos-funciones-ausentes.md). Región como variable del repositorio,
-      # no como secreto: no es una credencial.
-      AIW_BEDROCK_REGION_UE: ${{ vars.AIW_BEDROCK_REGION_UE }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AIW_BEDROCK_MODELO_SONNET5: ${{ vars.AIW_BEDROCK_MODELO_SONNET5 }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
       - run: pnpm test
+
+  bedrock-integracion:
+    name: Bedrock UE · integración (nocturna o manual)
+    # Nunca en cada PR (decisión de Jesús, 2026-09-25: no pagar modelos en cada
+    # revisión): solo por el cron de arriba o a mano desde la pestaña Actions.
+    # Sin claves de AWS guardadas: el rol aiw-ci-bedrock se asume por OIDC
+    # (docs/runbooks/bedrock-iam-oidc.md). Sin AWS_ROLE_ARN todavía, el job no
+    # falla: solo dice que no hay nada que probar.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - name: Asumir aiw-ci-bedrock por OIDC
+        if: vars.AWS_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AIW_BEDROCK_REGION_UE }}
+      - name: Bedrock UE real
+        if: vars.AWS_ROLE_ARN != ''
+        env:
+          AIW_BEDROCK_REGION_UE: ${{ vars.AIW_BEDROCK_REGION_UE }}
+          AIW_BEDROCK_MODELO_SONNET5: ${{ vars.AIW_BEDROCK_MODELO_SONNET5 }}
+        run: pnpm --filter @aiw/models test:integracion:bedrock
+      - name: Sin AWS_ROLE_ARN todavía
+        if: vars.AWS_ROLE_ARN == ''
+        run: |
+          echo "Falta la variable de repositorio AWS_ROLE_ARN, nada que probar todavía."
+          echo "Ver docs/runbooks/bedrock-iam-oidc.md."
 
   base-de-datos:
     name: Base de datos
