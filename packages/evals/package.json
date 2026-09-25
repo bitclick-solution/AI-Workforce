@@ -23,5 +23,9 @@
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "dependencies": {
+    "@aiw/models": "workspace:*",
+    "zod": "catalog:"
   }
 }

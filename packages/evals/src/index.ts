@@ -53,3 +53,41 @@ export function evaluarCasoDorado(caso: CasoDorado, obtenido: string): Resultado
       : `${caso.id}: se esperaba "${caso.esperado}" y se obtuvo "${obtenido}"`,
   };
 }
+
+/**
+ * Caso dorado de salida estructurada: la entrada y la salida esperada son un
+ * objeto, no una cadena. Los puestos de negocio (Cobros, Conciliación) deciden con
+ * una salida estructurada estricta (ADR-018), no con texto libre que haya que
+ * interpretar.
+ */
+export interface CasoDoradoEstructurado<T> {
+  readonly id: string;
+  readonly puesto: string;
+  readonly entrada: unknown;
+  readonly esperado: T;
+}
+
+export function casoDoradoEstructurado<T>(
+  caso: CasoDoradoEstructurado<T>,
+): CasoDoradoEstructurado<T> {
+  if (caso.id.trim() === '') {
+    throw new Error('Un caso dorado necesita un identificador.');
+  }
+  return caso;
+}
+
+/** Compara por igualdad estructural (JSON), no por referencia: es lo que importa de una salida validada por esquema. */
+export function evaluarCasoDoradoEstructurado<T>(
+  caso: CasoDoradoEstructurado<T>,
+  obtenido: T,
+): ResultadoEval {
+  const superado = JSON.stringify(obtenido) === JSON.stringify(caso.esperado);
+  return {
+    id: caso.id,
+    superado,
+    puntuacion: superado ? 1 : 0,
+    diagnostico: superado
+      ? `${caso.id}: superado`
+      : `${caso.id}: se esperaba ${JSON.stringify(caso.esperado)} y se obtuvo ${JSON.stringify(obtenido)}`,
+  };
+}
