@@ -14,9 +14,17 @@ export const TEMA = {
     apagada: 'bg-superficie-2 text-texto-2',
   },
   texto: {
+    // Sin color: para componerla con un color que decide otra clave de TEMA
+    // (`Indicador`, por tono) sin dejar dos clases `text-*` compitiendo en el
+    // mismo elemento, que es lo que arregla ese color desde otro fichero.
+    tituloBase: 'font-titulos font-semibold tracking-tight',
     titulo: 'font-titulos text-texto font-semibold tracking-tight',
     cuerpo: 'font-texto text-texto',
     apagado: 'font-texto text-texto-3',
+    // Sin color: el texto-3 fijo no pasa la AA sobre los fondos «suaves» de
+    // Aviso. Ahí la etiqueta hereda el color del propio aviso (`Aviso` la
+    // compone con `etiquetaBase`); en el resto de sitios se usa `etiqueta`.
+    etiquetaBase: 'font-texto text-xs font-medium uppercase tracking-widest',
     etiqueta: 'font-texto text-xs font-medium uppercase tracking-widest text-texto-3',
   },
   foco: 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento',

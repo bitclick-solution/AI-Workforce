@@ -27,7 +27,7 @@ export function Indicador({
       data-testid={resto['data-testid']}
     >
       <p className={TEMA.texto.etiqueta}>{etiqueta}</p>
-      <p className={cn(TEMA.texto.titulo, TEMA.indicador[tono], 'mt-1 text-2xl')}>{valor}</p>
+      <p className={cn(TEMA.texto.tituloBase, TEMA.indicador[tono], 'mt-1 text-2xl')}>{valor}</p>
       {ayuda ? <p className={cn(TEMA.texto.apagado, 'mt-1 text-xs')}>{ayuda}</p> : null}
     </div>
   );

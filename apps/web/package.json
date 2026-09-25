@@ -20,9 +20,11 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "catalog:",
+    "@testing-library/react": "^16.1.0",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "jsdom": "^25.0.1",
     "postcss": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",

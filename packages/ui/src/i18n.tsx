@@ -28,7 +28,8 @@ export type ClaveDeTexto =
   | 'ui.listaDeAvisos.vacio'
   | 'ui.avatar.teNecesita'
   | 'ui.avatar.trabajando'
-  | 'ui.avatar.enEspera';
+  | 'ui.avatar.enEspera'
+  | 'ui.avatar.personaSinNombre';
 
 export type Diccionario = Partial<Record<ClaveDeTexto, string>>;
 
@@ -53,6 +54,7 @@ const CASTELLANO: Record<ClaveDeTexto, string> = {
   'ui.avatar.teNecesita': 'Te necesita',
   'ui.avatar.trabajando': 'Trabajando',
   'ui.avatar.enEspera': 'En espera',
+  'ui.avatar.personaSinNombre': 'Persona sin nombre',
 };
 
 const INGLES: Diccionario = {
@@ -73,6 +75,7 @@ const INGLES: Diccionario = {
   'ui.avatar.teNecesita': 'Needs you',
   'ui.avatar.trabajando': 'Working',
   'ui.avatar.enEspera': 'On hold',
+  'ui.avatar.personaSinNombre': 'Unnamed person',
 };
 
 const DICCIONARIOS: Record<Idioma, Diccionario> = { es: CASTELLANO, en: INGLES };

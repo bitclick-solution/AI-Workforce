@@ -50,7 +50,7 @@ export function Aviso({ tipo, titulo, children, accion, className, ...resto }: A
       data-testid={resto['data-testid']}
       className={cn('rounded-xl border p-4 sm:p-5', TEMA.aviso[tipo], className)}
     >
-      <p className={TEMA.texto.etiqueta}>{t(CLAVE[tipo])}</p>
+      <p className={TEMA.texto.etiquetaBase}>{t(CLAVE[tipo])}</p>
       <h3 className="mt-1 text-base font-semibold">{titulo}</h3>
       {children ? <div className="mt-2 text-sm">{children}</div> : null}
       {accion ? <div className="mt-4 flex flex-wrap gap-2">{accion}</div> : null}

@@ -47,9 +47,14 @@ describe('AvatarDePersona', () => {
     expect(html).toContain('>J<');
   });
 
-  it('cae a una silueta cuando no hay nombre', () => {
+  it('cae a una silueta y a un nombre accesible de reserva cuando no hay nombre', () => {
     const html = renderToStaticMarkup(<AvatarDePersona nombre="" />);
     expect(html).toContain('<svg');
-    expect(html).toContain('aria-label=""');
+    expect(html).toContain('aria-label="Persona sin nombre"');
+  });
+
+  it('con solo espacios también cae al nombre accesible de reserva', () => {
+    const html = renderToStaticMarkup(<AvatarDePersona nombre="   " />);
+    expect(html).toContain('aria-label="Persona sin nombre"');
   });
 });

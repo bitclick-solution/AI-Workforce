@@ -196,11 +196,13 @@ export function AvatarDePersona({
   className,
   ...resto
 }: AvatarDePersonaProps) {
+  const t = useTraduccion();
   const texto = iniciales ?? inicialesDeNombre(nombre);
+  const etiquetaAccesible = nombre.trim() === '' ? t('ui.avatar.personaSinNombre') : nombre;
   return (
     <span
       role="img"
-      aria-label={nombre}
+      aria-label={etiquetaAccesible}
       data-testid={resto['data-testid']}
       className={cn(
         TEMA.avatar.base,
