@@ -103,6 +103,16 @@ export interface Tarifa {
   vigenteDesde: Date;
   plataforma?: string | undefined;
   multiplicadorListaOficial?: number | undefined;
+  /** Región concreta del partner (`eu-central-1`...). Documental. */
+  region?: string | null | undefined;
+  monedaOrigen?: string | undefined;
+  tipoCambioAEuros?: number | undefined;
+  precioOrigenPorMillonEntrada?: number | null | undefined;
+  precioOrigenPorMillonSalida?: number | null | undefined;
+  precioOrigenPorMillonEntradaCache?: number | null | undefined;
+  /** Escritura de caché por millón de tokens, en euros. Documental: `uso_modelo` no la cuenta todavía. */
+  eurosPorMillonEntradaCacheEscritura5m?: number | undefined;
+  eurosPorMillonEntradaCacheEscritura1h?: number | undefined;
 }
 
 /** Tokens de una llamada al modelo, tal como los devuelve el proveedor. */
@@ -147,6 +157,14 @@ interface FilaTarifa {
   euros_por_millon_entrada_cache: string;
   plataforma: string;
   multiplicador_lista_oficial: string;
+  region: string | null;
+  moneda_origen: string;
+  tipo_cambio_a_euros: string;
+  precio_origen_por_millon_entrada: string | null;
+  precio_origen_por_millon_salida: string | null;
+  precio_origen_por_millon_entrada_cache: string | null;
+  euros_por_millon_entrada_cache_escritura_5m: string;
+  euros_por_millon_entrada_cache_escritura_1h: string;
   vigente_desde: Date;
 }
 
@@ -160,6 +178,23 @@ function aTarifa(fila: FilaTarifa): Tarifa {
     eurosPorMillonEntradaCache: Number(fila.euros_por_millon_entrada_cache),
     plataforma: fila.plataforma,
     multiplicadorListaOficial: Number(fila.multiplicador_lista_oficial),
+    region: fila.region,
+    monedaOrigen: fila.moneda_origen,
+    tipoCambioAEuros: Number(fila.tipo_cambio_a_euros),
+    precioOrigenPorMillonEntrada:
+      fila.precio_origen_por_millon_entrada === null
+        ? null
+        : Number(fila.precio_origen_por_millon_entrada),
+    precioOrigenPorMillonSalida:
+      fila.precio_origen_por_millon_salida === null
+        ? null
+        : Number(fila.precio_origen_por_millon_salida),
+    precioOrigenPorMillonEntradaCache:
+      fila.precio_origen_por_millon_entrada_cache === null
+        ? null
+        : Number(fila.precio_origen_por_millon_entrada_cache),
+    eurosPorMillonEntradaCacheEscritura5m: Number(fila.euros_por_millon_entrada_cache_escritura_5m),
+    eurosPorMillonEntradaCacheEscritura1h: Number(fila.euros_por_millon_entrada_cache_escritura_1h),
     vigenteDesde: fila.vigente_desde,
   };
 }
@@ -482,7 +517,11 @@ export async function tarifaVigente(
 ): Promise<Tarifa | undefined> {
   const [fila] = await tx<FilaTarifa[]>`
     select id, proveedor, modelo, euros_por_millon_entrada, euros_por_millon_salida,
-           euros_por_millon_entrada_cache, plataforma, multiplicador_lista_oficial, vigente_desde
+           euros_por_millon_entrada_cache, plataforma, multiplicador_lista_oficial, region,
+           moneda_origen, tipo_cambio_a_euros, precio_origen_por_millon_entrada,
+           precio_origen_por_millon_salida, precio_origen_por_millon_entrada_cache,
+           euros_por_millon_entrada_cache_escritura_5m, euros_por_millon_entrada_cache_escritura_1h,
+           vigente_desde
     from tarifa_modelo
     where tenant_id = ${tenantId}
       and proveedor = ${proveedor}
@@ -505,6 +544,19 @@ export interface TarifaNueva {
   plataforma?: string | undefined;
   /** Documental: multiplicador frente a la lista oficial de Anthropic. Por defecto, 1. */
   multiplicadorListaOficial?: number | undefined;
+  /** Región concreta del partner (`eu-central-1`...). Documental. */
+  region?: string | undefined;
+  /** En qué moneda cotizó el partner este precio. Por defecto, `eur`. */
+  monedaOrigen?: string | undefined;
+  /** Tipo de cambio a euros aplicado a esta fila. Por defecto, 1 (`monedaOrigen` ya es `eur`). */
+  tipoCambioAEuros?: number | undefined;
+  /** Precio de origen en `monedaOrigen`, solo trazabilidad. */
+  precioOrigenPorMillonEntrada?: number | undefined;
+  precioOrigenPorMillonSalida?: number | undefined;
+  precioOrigenPorMillonEntradaCache?: number | undefined;
+  /** Escritura de caché por millón de tokens, en euros. Documental por ahora (ver la especificación). */
+  eurosPorMillonEntradaCacheEscritura5m?: number | undefined;
+  eurosPorMillonEntradaCacheEscritura1h?: number | undefined;
   vigenteDesde: Date;
   /** De dónde sale el precio: lista pública, contrato o acuerdo con el partner. */
   fuente: string;
@@ -540,15 +592,44 @@ export async function registrarTarifa(
     tarifa.multiplicadorListaOficial ?? 1,
     'multiplicadorListaOficial',
   );
+  const region = tarifa.region === undefined ? null : exigirTexto(tarifa.region, 'region');
+  const monedaOrigen = exigirTexto(tarifa.monedaOrigen ?? 'eur', 'monedaOrigen');
+  const tipoCambio = exigirPrecio(tarifa.tipoCambioAEuros ?? 1, 'tipoCambioAEuros');
+  const precioOrigenEntrada =
+    tarifa.precioOrigenPorMillonEntrada === undefined
+      ? null
+      : exigirPrecio(tarifa.precioOrigenPorMillonEntrada, 'precioOrigenPorMillonEntrada');
+  const precioOrigenSalida =
+    tarifa.precioOrigenPorMillonSalida === undefined
+      ? null
+      : exigirPrecio(tarifa.precioOrigenPorMillonSalida, 'precioOrigenPorMillonSalida');
+  const precioOrigenCache =
+    tarifa.precioOrigenPorMillonEntradaCache === undefined
+      ? null
+      : exigirPrecio(tarifa.precioOrigenPorMillonEntradaCache, 'precioOrigenPorMillonEntradaCache');
+  const cacheEscritura5m = exigirPrecio(
+    tarifa.eurosPorMillonEntradaCacheEscritura5m ?? 0,
+    'eurosPorMillonEntradaCacheEscritura5m',
+  );
+  const cacheEscritura1h = exigirPrecio(
+    tarifa.eurosPorMillonEntradaCacheEscritura1h ?? 0,
+    'eurosPorMillonEntradaCacheEscritura1h',
+  );
 
   const [insertada] = await tx<{ id: string }[]>`
     insert into tarifa_modelo (
       tenant_id, proveedor, modelo, euros_por_millon_entrada, euros_por_millon_salida,
-      euros_por_millon_entrada_cache, plataforma, multiplicador_lista_oficial,
+      euros_por_millon_entrada_cache, plataforma, multiplicador_lista_oficial, region,
+      moneda_origen, tipo_cambio_a_euros, precio_origen_por_millon_entrada,
+      precio_origen_por_millon_salida, precio_origen_por_millon_entrada_cache,
+      euros_por_millon_entrada_cache_escritura_5m, euros_por_millon_entrada_cache_escritura_1h,
       vigente_desde, fuente
     ) values (
       ${tenantId}, ${proveedor}, ${modelo}, ${entradaPrecio}, ${salidaPrecio},
-      ${cachePrecio}, ${plataforma}, ${multiplicador},
+      ${cachePrecio}, ${plataforma}, ${multiplicador}, ${region},
+      ${monedaOrigen}, ${tipoCambio}, ${precioOrigenEntrada},
+      ${precioOrigenSalida}, ${precioOrigenCache},
+      ${cacheEscritura5m}, ${cacheEscritura1h},
       ${comoIso(tarifa.vigenteDesde, 'vigenteDesde')}::timestamptz, ${fuente}
     )
     returning id

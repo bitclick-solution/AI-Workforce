@@ -69,6 +69,56 @@ export const tarifaModelo = pgTable(
     })
       .notNull()
       .default('1'),
+    /**
+     * Región concreta del partner (`eu-central-1`, `europe-west1`...). Documental,
+     * como `multiplicadorListaOficial`: no participa en la única de la tarifa, que
+     * ya distingue por `plataforma`. Nula cuando la plataforma no tiene región
+     * (`primera-parte`, `ai-sdk`).
+     */
+    region: text('region'),
+    /**
+     * En qué moneda cotizó el partner el precio de esta fila (ADR-011: el importe
+     * es dato del tenant). `eurosPorMillon*` son siempre el coste real en euros que
+     * usa `calcularCosteEuros`; cuando `monedaOrigen` no es `eur`, esos euros salen
+     * de aplicar `tipoCambioAEuros` al precio de origen, congelado en el momento de
+     * dar de alta la tarifa — igual que el precio, el tipo de cambio no se
+     * recalcula después.
+     */
+    monedaOrigen: text('moneda_origen').notNull().default('eur'),
+    tipoCambioAEuros: numeric('tipo_cambio_a_euros', { precision: 12, scale: 6 })
+      .notNull()
+      .default('1'),
+    /** Precio tal como lo publicó el partner, en `monedaOrigen`. Solo trazabilidad: nulo cuando `monedaOrigen` es `eur`. */
+    precioOrigenPorMillonEntrada: numeric('precio_origen_por_millon_entrada', {
+      precision: 14,
+      scale: 6,
+    }),
+    precioOrigenPorMillonSalida: numeric('precio_origen_por_millon_salida', {
+      precision: 14,
+      scale: 6,
+    }),
+    precioOrigenPorMillonEntradaCache: numeric('precio_origen_por_millon_entrada_cache', {
+      precision: 14,
+      scale: 6,
+    }),
+    /**
+     * Escritura de caché por millón de tokens, a 5 minutos y a 1 hora de TTL. Ya en
+     * euros, igual que el resto de `eurosPorMillon*`. Documental por ahora: el
+     * contador todavía no distingue tokens de escritura de caché en `uso_modelo`
+     * (fuera de alcance de esta rebanada; ver la especificación).
+     */
+    eurosPorMillonEntradaCacheEscritura5m: numeric('euros_por_millon_entrada_cache_escritura_5m', {
+      precision: 14,
+      scale: 6,
+    })
+      .notNull()
+      .default('0'),
+    eurosPorMillonEntradaCacheEscritura1h: numeric('euros_por_millon_entrada_cache_escritura_1h', {
+      precision: 14,
+      scale: 6,
+    })
+      .notNull()
+      .default('0'),
     vigenteDesde: timestamp('vigente_desde', { withTimezone: true }).notNull(),
     /** De dónde sale el precio: lista pública, contrato o acuerdo con el partner. */
     fuente: text('fuente').notNull(),
