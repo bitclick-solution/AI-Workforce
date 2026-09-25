@@ -76,6 +76,35 @@ describe('crearAdaptadorAnthropic', () => {
     expect(cuerpo.output_config.effort).toBe('high');
   });
 
+  it('opus5 provisional no baja de high aunque la clase de paso pida menos (decisión de Jesús, 2026-09-25)', async () => {
+    servidor = await iniciarServidorSimulado(respuestaDeTexto('ok'));
+    const puerto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
+      papel: 'opus5',
+      plataforma: 'bedrock-eu',
+      configuracion: { esfuerzoPorClasePaso: { rutina: 'low' } },
+    });
+
+    expect(puerto.modelo).toBe('anthropic.claude-sonnet-4-6');
+    await puerto.completar({ clasePaso: 'rutina', mensajes: [{ rol: 'user', contenido: 'x' }] });
+
+    const cuerpo = servidor.peticiones[0]?.cuerpo as { output_config: { effort: string } };
+    expect(cuerpo.output_config.effort).toBe('high');
+  });
+
+  it('sonnet5 provisional no lleva el suelo de esfuerzo alto: solo opus5 lo necesita', async () => {
+    servidor = await iniciarServidorSimulado(respuestaDeTexto('ok'));
+    const puerto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
+      papel: 'sonnet5',
+      plataforma: 'bedrock-eu',
+      configuracion: { esfuerzoPorClasePaso: { rutina: 'low' } },
+    });
+
+    await puerto.completar({ clasePaso: 'rutina', mensajes: [{ rol: 'user', contenido: 'x' }] });
+
+    const cuerpo = servidor.peticiones[0]?.cuerpo as { output_config: { effort: string } };
+    expect(cuerpo.output_config.effort).toBe('low');
+  });
+
   it('pide pensamiento adaptativo y el esfuerzo de la clase de paso, salvo en Haiku 4.5', async () => {
     servidor = await iniciarServidorSimulado(respuestaDeTexto('ok'));
     const puertoSonnet = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {

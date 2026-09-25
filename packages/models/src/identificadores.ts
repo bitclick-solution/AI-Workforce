@@ -7,13 +7,19 @@
  * `anthropic.`, Vertex y la primera parte llevan el identificador desnudo, nunca
  * con fecha (ADR-018)— y solo vive aquí: el resto del paquete solo conoce papeles.
  *
- * Resolución provisional (decisión de Jesús, 2026-09-25): Bedrock en Frankfurt
- * todavía no tiene cuota concedida para Opus 5 ni para Sonnet 5. Mientras llega,
- * esos dos papeles se sirven en Bedrock con la familia 4.6 (Haiku 4.5 no cambia,
- * ya está disponible). El papel que guarda la versión de puesto sigue siendo
- * `opus5`/`sonnet5` (ADR-018): el cambio a la familia 5, cuando Bedrock conceda la
- * cuota, es retirar esta tabla, no una promoción de ninguna versión de puesto — la
- * versión de puesto nunca supo que estaba en modo provisional.
+ * Resolución provisional (decisión de Jesús, 2026-09-25, revisada el mismo día):
+ * Bedrock en Frankfurt denegó la cuota de Sonnet 5 y la de Opus 4.6; la de Opus
+ * 5.5 está pedida, la de Opus 5 sigue pendiente. Mientras no haya cuota de ningún
+ * Opus, `opus5` y `sonnet5` se sirven los dos con Sonnet 4.6 en Bedrock —el
+ * mismo modelo, con esfuerzo alto para `opus5` como suelo, porque hace el trabajo
+ * de razonamiento y de decisión de escritura con un modelo que no es un Opus—.
+ * Orden de preferencia para volver a un Opus en cuanto haya cuota: Opus 5.5,
+ * Opus 5, Opus 4.6. Haiku 4.5 no cambia, ya está disponible.
+ *
+ * El papel que guarda la versión de puesto sigue siendo `opus5`/`sonnet5`
+ * (ADR-018): el cambio a la familia 5, cuando Bedrock conceda la cuota, es
+ * retirar esta tabla, no una promoción de ninguna versión de puesto — la versión
+ * de puesto nunca supo que estaba en modo provisional.
  */
 import type { PapelModelo, PlataformaModelo } from '@aiw/domain';
 
@@ -25,13 +31,13 @@ const IDENTIFICADOR_DESNUDO_OBJETIVO: Record<PapelModelo, string> = {
 };
 
 /**
- * Sustitución provisional en Bedrock mientras no hay cuota para la familia 5
- * (decisión de Jesús, 2026-09-25). Solo Bedrock: no hay indicio de que Vertex ni
- * la primera parte tengan la misma limitación, así que ahí se sigue pidiendo la
- * familia 5 objetivo.
+ * Sustitución provisional en Bedrock mientras no hay cuota de la familia 5 ni de
+ * ningún Opus (decisión de Jesús, 2026-09-25). Solo Bedrock: no hay indicio de
+ * que Vertex ni la primera parte tengan la misma limitación, así que ahí se sigue
+ * pidiendo la familia 5 objetivo.
  */
 const IDENTIFICADOR_DESNUDO_PROVISIONAL_BEDROCK: Partial<Record<PapelModelo, string>> = {
-  opus5: 'claude-opus-4-6',
+  opus5: 'claude-sonnet-4-6',
   sonnet5: 'claude-sonnet-4-6',
 };
 
@@ -66,9 +72,10 @@ export function identificadorDeModelo(papel: PapelModelo, plataforma: Plataforma
 
 /**
  * `true` cuando el papel, en esa plataforma, lo sirve hoy un sustituto provisional
- * en vez del modelo objetivo del ADR-018 (por ejemplo, Opus 4.6 en Bedrock en vez
- * de Opus 5). Lo usa el adaptador para ajustar lo que el modelo provisional no
- * admite todavía (`anthropic.ts`: el esfuerzo `xhigh`, que llegó con Opus 4.7).
+ * en vez del modelo objetivo del ADR-018 (por ejemplo, Sonnet 4.6 en Bedrock en
+ * vez de Opus 5). Lo usa el adaptador para ajustar lo que el modelo provisional no
+ * admite todavía (`anthropic.ts`: el esfuerzo `xhigh` y el suelo de esfuerzo alto
+ * para `opus5`).
  */
 export function esProvisional(papel: PapelModelo, plataforma: PlataformaModelo): boolean {
   return plataforma === 'bedrock-eu' && papel in IDENTIFICADOR_DESNUDO_PROVISIONAL_BEDROCK;

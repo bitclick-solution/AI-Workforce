@@ -7,16 +7,24 @@ que necesita `@aiw/models` para hablar con Bedrock en `eu-central-1` (decisión 
 Jesús, 2026-09-25). El Constructor no crea nada de esto ni pide ni ve ninguna
 clave: solo deja escrito qué crear y con qué forma.
 
-**Aviso de verificación**: la acción exacta de IAM que usa el cliente Mantle de
-Anthropic (`bedrock-mantle:CreateInference`, servicio "Amazon Bedrock Powered by
-AWS Mantle") viene de una búsqueda hecha el 2026-09-25, no de la documentación
-oficial de AWS: el acceso a `docs.aws.amazon.com` está bloqueado por la política
-de red de este entorno de desarrollo. **Antes de crear la política, ábrela en el
-editor visual de IAM** (`Create policy` → pestaña `JSON` para pegarla, o
-`Visual editor` → servicio **"Bedrock Powered by AWS Mantle"** para ver sus
-acciones y recursos tal como los conoce la consola) y compara: si la consola
-ofrece una acción o un tipo de recurso distinto de los de aquí, usa lo que
-diga la consola, no este documento.
+**Fuente de la acción exacta**: `bedrock-mantle:CreateInference`, del servicio
+IAM "Amazon Bedrock Powered by AWS Mantle" (el prefijo que usa el SDK
+`@anthropic-ai/bedrock-sdk` / `AnthropicBedrockMantle` para invocar Bedrock en
+`eu-central-1`), según el Service Authorization Reference de AWS
+(`https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonbedrock.html`,
+sección "Actions defined by Amazon Bedrock Powered by AWS Mantle") citado por
+la documentación pública de Anthropic sobre el cliente Mantle de Bedrock
+(`https://docs.claude.com/en/api/claude-on-amazon-bedrock`, apartado sobre
+permisos de IAM para el cliente Mantle). **Aviso de verificación**: el acceso
+directo a `docs.aws.amazon.com` está bloqueado por la política de red de este
+entorno de desarrollo, así que esta cita viene de una búsqueda hecha el
+2026-09-25, no de una lectura directa de la página. **Antes de crear la
+política, ábrela en el editor visual de IAM** (`Create policy` → pestaña
+`JSON` para pegarla, o `Visual editor` → servicio **"Bedrock Powered by AWS
+Mantle"** para ver sus acciones y recursos tal como los conoce la consola) y
+compara con las dos páginas citadas arriba: si alguna de las tres ofrece una
+acción o un tipo de recurso distinto de los de aquí, usa esa, no este
+documento.
 
 ## Los tres principales
 
@@ -77,7 +85,8 @@ ninguna clave de AWS de larga duración que revocar.
    (Una cuenta solo necesita este proveedor una vez, lo compartan o no otros
    repositorios.)
 2. **IAM → Roles → Create role → Custom trust policy**, con esta relación de
-   confianza — limitada a este repositorio, tal como pide la decisión de Jesús:
+   confianza — limitada a `main` (decisión de Jesús, 2026-09-25: en los PR no
+   asume el rol, solo en ejecuciones sobre esa rama):
 
    ```json
    {
@@ -91,10 +100,8 @@ ninguna clave de AWS de larga duración que revocar.
          "Action": "sts:AssumeRoleWithWebIdentity",
          "Condition": {
            "StringEquals": {
-             "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
-           },
-           "StringLike": {
-             "token.actions.githubusercontent.com:sub": "repo:bitclick-solution/AI-Workforce:*"
+             "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+             "token.actions.githubusercontent.com:sub": "repo:bitclick-solution/AI-Workforce:ref:refs/heads/main"
            }
          }
        }
@@ -102,11 +109,12 @@ ninguna clave de AWS de larga duración que revocar.
    }
    ```
 
-   Para limitarlo más —por ejemplo, solo a ejecuciones sobre `main`— cambia el
-   `StringLike` por `token.actions.githubusercontent.com:sub` igual a
-   `repo:bitclick-solution/AI-Workforce:ref:refs/heads/main` con `StringEquals`
-   en vez de `StringLike`. Con `workflow_dispatch` manual desde otra rama, esa
-   condición más estrecha lo bloquearía; el `*` de arriba lo permite.
+   Con esta condición, ni un `pull_request` ni un `workflow_dispatch` lanzado
+   desde otra rama pueden asumir el rol — solo el cron semanal o un
+   `workflow_dispatch` disparado con `main` como rama seleccionada, que es
+   justo el job **Bedrock UE · integración** de `ci.yml`
+   (`if: (github.event_name == 'schedule' || github.event_name ==
+   'workflow_dispatch') && github.ref == 'refs/heads/main'`).
 
 3. Nómbralo `aiw-ci-bedrock`, adjúntale la política `AIWBedrockInvocarUE` de la
    sección anterior. Sin ningún otro permiso.

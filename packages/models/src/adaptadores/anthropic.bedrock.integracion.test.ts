@@ -10,13 +10,13 @@
  * el proveedor real»). Pasos exactos para cargarlas:
  * `docs/runbooks/modelos-funciones-ausentes.md`.
  *
- * Sin anular nada, el papel `sonnet5` en Bedrock resuelve hoy a Sonnet 4.6
- * (`identificadores.ts`, decisión de Jesús 2026-09-25: Bedrock en Frankfurt no
- * tiene cuota para la familia 5 todavía), así que esta prueba ya ejercita lo que
- * de verdad hay disponible. `AIW_BEDROCK_MODELO_SONNET5` es opcional y solo hace
- * falta si el catálogo de modelos de Bedrock exige un perfil de inferencia entre
- * regiones (por ejemplo `eu.anthropic.claude-sonnet-4-6`) en vez del identificador
- * bajo demanda.
+ * Sin anular nada, el papel `sonnet5` en Bedrock resuelve hoy al modelo por
+ * defecto provisional (`identificadores.ts`, decisión de Jesús 2026-09-25,
+ * revisada el mismo día: Bedrock en Frankfurt denegó la cuota de la familia 5 y
+ * la de Opus 4.6), así que esta prueba ya ejercita lo que de verdad hay
+ * disponible, sin nombrar aquí qué modelo es. `AIW_BEDROCK_IDENTIFICADOR_MODELO`
+ * es opcional y solo hace falta si el catálogo de modelos de Bedrock exige un
+ * perfil de inferencia entre regiones en vez del identificador bajo demanda.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -31,7 +31,8 @@ const HAY_BEDROCK = Boolean(
 
 const MOTIVO_SALTO =
   'Sin AIW_BEDROCK_REGION_UE, AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY: esta prueba necesita ' +
-  'una cuenta de AWS con Bedrock activado en una región de la UE y cuota concedida para Sonnet 5. ' +
+  'una cuenta de AWS con Bedrock activado en una región de la UE y acceso al modelo por defecto ' +
+  'de puesto (hoy, un sustituto provisional: ver identificadores.ts). ' +
   'Ver docs/runbooks/modelos-funciones-ausentes.md para activarla.';
 
 const TITULO = HAY_BEDROCK
@@ -39,13 +40,13 @@ const TITULO = HAY_BEDROCK
   : `adaptador de Anthropic · Bedrock UE real — SALTADO. ${MOTIVO_SALTO}`;
 
 describe.skipIf(!HAY_BEDROCK)(TITULO, () => {
-  it('completa una petición mínima con Sonnet 5 y devuelve tokens reales', async () => {
+  it('completa una petición mínima con el modelo por defecto de puesto y devuelve tokens reales', async () => {
     const cliente = clienteBedrockDesdeEntorno();
     const puerto = crearAdaptadorAnthropic(cliente, {
       papel: 'sonnet5',
       plataforma: 'bedrock-eu',
       configuracion: { esfuerzoPorClasePaso: { rutina: 'low' } },
-      identificadorModelo: process.env['AIW_BEDROCK_MODELO_SONNET5'],
+      identificadorModelo: process.env['AIW_BEDROCK_IDENTIFICADOR_MODELO'],
     });
 
     const resultado = await puerto.completar({

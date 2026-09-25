@@ -23,9 +23,9 @@ describe('identificadorDeModelo', () => {
     expect(nombreCanonico('opus5')).toBe('claude-opus-5');
   });
 
-  describe('sustitución provisional en Bedrock (decisión de Jesús, 2026-09-25)', () => {
-    it('opus5 y sonnet5 se sirven con la familia 4.6 en Bedrock mientras no hay cuota', () => {
-      expect(identificadorDeModelo('opus5', 'bedrock-eu')).toBe('anthropic.claude-opus-4-6');
+  describe('sustitución provisional en Bedrock (decisión de Jesús, 2026-09-25, revisada el mismo día)', () => {
+    it('opus5 y sonnet5 se sirven los dos con Sonnet 4.6 en Bedrock: sin cuota de ningún Opus', () => {
+      expect(identificadorDeModelo('opus5', 'bedrock-eu')).toBe('anthropic.claude-sonnet-4-6');
       expect(identificadorDeModelo('sonnet5', 'bedrock-eu')).toBe('anthropic.claude-sonnet-4-6');
     });
 

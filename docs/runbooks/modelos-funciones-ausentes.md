@@ -44,44 +44,48 @@ datos de Anthropic en cada retro de ciclo.
 
 ## Activar el proveedor real de Bedrock UE
 
-Estado a 2026-09-25: Jesús tiene ya cuenta de AWS y ha pedido cuota de Sonnet 5 en
-Bedrock; a falta de que se conceda, esto es lo que fija `docs/specs/modelos-v1.md`
-para cuando llegue:
+Estado a 2026-09-25 (revisado el mismo día): Jesús tiene ya cuenta de AWS. AWS
+denegó la cuota de Sonnet 5 y la de Opus 4.6 (pedida como alternativa); Opus 5.5
+está pedida, Opus 5 sigue pendiente. Esto es lo que fija `docs/specs/modelos-v1.md`
+mientras se resuelve:
 
 1. Cuenta de AWS con Amazon Bedrock activado en **`eu-central-1`** (Frankfurt),
-   región primaria elegida; **`eu-west-1`** (Irlanda) si la cuota de Sonnet 5 no se
-   concede en Frankfurt. Acceso concedido a Sonnet 5 en el catálogo de modelos de
-   Bedrock de esa región (Opus 5 y Haiku 4.5 quedan para cuando el puesto que los
-   necesite los pida). Mientras tanto, Opus 5 y Sonnet 5 se sirven en Bedrock con
-   Opus 4.6 y Sonnet 4.6 (fila «Opus 5 y Sonnet 5 en Bedrock UE» de la tabla de
-   arriba) — eso ya funciona con solo el acceso a la familia 4.6, que normalmente
-   no necesita cuota aparte.
+   región primaria elegida; **`eu-west-1`** (Irlanda) si la cuota no se concede
+   en Frankfurt. Mientras tanto, `opus5` y `sonnet5` se sirven los dos con
+   Sonnet 4.6 (fila «Opus 5 y Sonnet 5 en Bedrock UE» de la tabla de arriba) —
+   eso ya funciona con solo el acceso a Sonnet 4.6, que normalmente no necesita
+   cuota aparte. Orden de preferencia para volver a un Opus en cuanto haya
+   cuota: Opus 5.5, Opus 5, Opus 4.6.
 2. Credenciales: **sin claves guardadas en ningún sitio de CI.** En local, la clave
    de acceso del usuario de IAM `aiw-dev`; en producción, la de `aiw-prod`; en
-   GitHub Actions, el rol `aiw-ci-bedrock` asumido por OIDC. Los tres, la política
-   IAM mínima y la relación de confianza exactas:
-   `docs/runbooks/bedrock-iam-oidc.md`.
+   GitHub Actions, el rol `aiw-ci-bedrock` asumido por OIDC, con una relación de
+   confianza que solo admite ejecuciones sobre `main`
+   (`repo:bitclick-solution/AI-Workforce:ref:refs/heads/main`): en un PR, asumir
+   el rol falla. Los tres, la política IAM mínima y la relación de confianza
+   exactas: `docs/runbooks/bedrock-iam-oidc.md`.
 3. Variables: `AIW_BEDROCK_REGION_UE` (variable de repositorio y del `.env`) y,
    en GitHub Actions, `AWS_ROLE_ARN` (variable de repositorio, no un secreto: sin
-   la relación de confianza de OIDC no sirve para nada). Ya cableadas en el job
-   **Bedrock UE · integración** de `.github/workflows/ci.yml`, que corre una vez
-   al noche o a mano desde la pestaña Actions —nunca en cada PR, para no pagar
-   modelos en cada revisión (decisión de Jesús, 2026-09-25)—: en cuanto Jesús
-   cargue `AWS_ROLE_ARN`, ese job deja de decir «nada que probar» sin tocar el
-   workflow otra vez.
+   la relación de confianza de OIDC no sirve para nada) — las dos ya existen.
+   Ya cableadas en el job **Bedrock UE · integración** de
+   `.github/workflows/ci.yml`, que corre solo desde `main`, una vez a la semana
+   o a mano desde la pestaña Actions —nunca en cada PR, para no pagar modelos en
+   cada revisión (decisión de Jesús, 2026-09-25)—.
 4. `clienteBedrockDesdeEntorno` (`packages/models/src/adaptadores/clientes.ts`)
    construye el cliente real en cuanto `AIW_BEDROCK_REGION_UE` existe; antes de
    eso, lanza con el nombre exacto de lo que falta.
 5. Comprueba con `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` de `aiw-dev` en local
-   si, en `eu-central-1`, Opus 4.6 y Sonnet 4.6 se sirven por el identificador bajo
-   demanda (`anthropic.claude-opus-4-6`/`anthropic.claude-sonnet-4-6`, la hipótesis
-   de partida) o solo por un perfil de inferencia entre regiones (forma habitual:
-   `eu.anthropic.claude-sonnet-4-6`). Si hace falta el perfil, fíjalo en la
-   variable `AIW_BEDROCK_MODELO_SONNET5`: `anthropic.bedrock.integracion.test.ts`
-   y cualquier puesto que use `crearAdaptadorAnthropic` lo leen con
-   `identificadorModelo` sin tocar `identificadores.ts`. Repite la comprobación
-   cuando Bedrock conceda la cuota de la familia 5: retira entonces las dos
-   entradas de `IDENTIFICADOR_DESNUDO_PROVISIONAL_BEDROCK`.
+   si, en `eu-central-1`, Sonnet 4.6 se sirve por el identificador bajo demanda
+   (`anthropic.claude-sonnet-4-6`, la hipótesis de partida) o solo por un perfil
+   de inferencia entre regiones (forma habitual: `eu.anthropic.claude-sonnet-4-6`).
+   Si hace falta el perfil, fíjalo en la variable
+   `AIW_BEDROCK_IDENTIFICADOR_MODELO` — nombre neutro a propósito, sin la
+   versión del modelo: la matriz provisional puede volver a cambiar.
+   `anthropic.bedrock.integracion.test.ts` y cualquier puesto que use
+   `crearAdaptadorAnthropic` lo leen con `identificadorModelo` sin tocar
+   `identificadores.ts`. Repite la comprobación cada vez que la matriz
+   provisional cambie de modelo, y retira la sustitución de
+   `IDENTIFICADOR_DESNUDO_PROVISIONAL_BEDROCK` en cuanto Bedrock conceda cuota de
+   la familia 5 o de un Opus.
 6. Las tarifas reales de Bedrock UE (Opus 5.5, Opus 5, Sonnet 5, Opus 4.6, Sonnet
    4.6, Haiku 4.5, con región, moneda de origen y tipo de cambio) ya están dadas de
    alta en el catálogo de desarrollo

@@ -6,9 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    # Bedrock UE real (ADR-017, rebanada «Modelos v1»): una vez al día, no en cada
-    # PR, para no pagar modelos en cada revisión (decisión de Jesús, 2026-09-25).
-    - cron: '17 2 * * *'
+    # Bedrock UE real (ADR-017, rebanada «Modelos v1»): una vez a la semana, no en
+    # cada PR, para no pagar modelos en cada revisión (decisión de Jesús,
+    # 2026-09-25). Lunes 02:17 UTC.
+    - cron: '17 2 * * 1'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -51,11 +52,16 @@ jobs:
   bedrock-integracion:
     name: Bedrock UE · integración (nocturna o manual)
     # Nunca en cada PR (decisión de Jesús, 2026-09-25: no pagar modelos en cada
-    # revisión): solo por el cron de arriba o a mano desde la pestaña Actions.
-    # Sin claves de AWS guardadas: el rol aiw-ci-bedrock se asume por OIDC
-    # (docs/runbooks/bedrock-iam-oidc.md). Sin AWS_ROLE_ARN todavía, el job no
-    # falla: solo dice que no hay nada que probar.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # revisión): solo por el cron de arriba o a mano desde la pestaña Actions, y
+    # solo sobre main — la relación de confianza de OIDC de aiw-ci-bedrock solo
+    # admite ese ref (docs/runbooks/bedrock-iam-oidc.md), así que en un PR
+    # fallaría al asumir el rol.
+    # Sin claves de AWS guardadas: el rol aiw-ci-bedrock se asume por OIDC.
+    # Sin AWS_ROLE_ARN todavía, el job no falla: solo dice que no hay nada que
+    # probar.
+    if: |
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       id-token: write
@@ -73,7 +79,7 @@ jobs:
         if: vars.AWS_ROLE_ARN != ''
         env:
           AIW_BEDROCK_REGION_UE: ${{ vars.AIW_BEDROCK_REGION_UE }}
-          AIW_BEDROCK_MODELO_SONNET5: ${{ vars.AIW_BEDROCK_MODELO_SONNET5 }}
+          AIW_BEDROCK_IDENTIFICADOR_MODELO: ${{ vars.AIW_BEDROCK_IDENTIFICADOR_MODELO }}
         run: pnpm --filter @aiw/models test:integracion:bedrock
       - name: Sin AWS_ROLE_ARN todavía
         if: vars.AWS_ROLE_ARN == ''

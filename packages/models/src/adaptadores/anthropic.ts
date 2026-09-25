@@ -9,11 +9,13 @@
  * modelo. Para el papel `haiku45` no se envía ninguno de los dos; el resto de
  * papeles sí lleva pensamiento adaptativo, como pide el ADR-018.
  *
- * Segunda excepción (decisión de Jesús, 2026-09-25): mientras Bedrock no tenga
- * cuota para la familia 5, Opus 5 y Sonnet 5 se sirven ahí con Opus 4.6 y Sonnet
- * 4.6 (`identificadores.ts`). Esos dos no admiten el esfuerzo `xhigh` —llegó con
- * Opus 4.7—, así que una petición de esfuerzo `xhigh` contra un papel provisional
- * baja a `high`, el nivel más alto que sí admiten.
+ * Segunda excepción (decisión de Jesús, 2026-09-25, revisada el mismo día): sin
+ * cuota de ningún Opus en Bedrock, `opus5` y `sonnet5` se sirven los dos con
+ * Sonnet 4.6 (`identificadores.ts`). Sonnet 4.6 no admite el esfuerzo `xhigh`
+ * —llegó con Opus 4.7—, así que una petición de esfuerzo `xhigh` contra un papel
+ * provisional baja a `high`. Además, `opus5` lleva `high` como suelo: hace el
+ * trabajo de razonamiento y de decisión de escritura con un modelo que no es un
+ * Opus, así que no baja de `high` aunque la clase de paso pida menos.
  */
 import type Anthropic from '@anthropic-ai/sdk';
 import {
@@ -40,9 +42,28 @@ export const MAX_TOKENS_POR_DEFECTO = 16_000;
 /** Papeles que no admiten pensamiento adaptativo ni `output_config.effort` (Haiku 4.5). */
 const SIN_PENSAMIENTO_ADAPTATIVO: ReadonlySet<PapelModelo> = new Set(['haiku45']);
 
-/** `xhigh` (Opus 4.7+) no lo admiten los sustitutos provisionales de la familia 4.6. */
-function esfuerzoSoportado(esfuerzo: NivelEsfuerzo, provisional: boolean): NivelEsfuerzo {
-  return provisional && esfuerzo === 'xhigh' ? 'high' : esfuerzo;
+/** Papel con suelo de esfuerzo alto mientras lo sirve un sustituto provisional (decisión de Jesús, 2026-09-25). */
+const CON_SUELO_DE_ESFUERZO_ALTO: ReadonlySet<PapelModelo> = new Set(['opus5']);
+
+const ORDEN_ESFUERZO: readonly NivelEsfuerzo[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+/**
+ * Ajusta el esfuerzo cuando el papel lo sirve hoy un sustituto provisional:
+ * `xhigh` (Opus 4.7+) no lo admite Sonnet 4.6, y `opus5` no baja de `high` (su
+ * sustituto no es un Opus).
+ */
+function esfuerzoSoportado(
+  esfuerzo: NivelEsfuerzo,
+  papel: PapelModelo,
+  provisional: boolean,
+): NivelEsfuerzo {
+  if (!provisional) return esfuerzo;
+  const conSuelo =
+    CON_SUELO_DE_ESFUERZO_ALTO.has(papel) &&
+    ORDEN_ESFUERZO.indexOf(esfuerzo) < ORDEN_ESFUERZO.indexOf('high')
+      ? 'high'
+      : esfuerzo;
+  return conSuelo === 'xhigh' ? 'high' : conSuelo;
 }
 
 export interface OpcionesAdaptadorAnthropic {
@@ -53,9 +74,9 @@ export interface OpcionesAdaptadorAnthropic {
   /**
    * Anula el identificador de modelo que calcula `identificadorDeModelo`. Hace
    * falta si Bedrock, en la región contratada, solo sirve el modelo por un perfil
-   * de inferencia entre regiones (por ejemplo `eu.anthropic.claude-sonnet-5`) en
-   * vez del identificador bajo demanda: se confirma en el catálogo de modelos de
-   * la consola de Bedrock una vez concedida la cuota, no se adivina aquí.
+   * de inferencia entre regiones (por ejemplo `eu.anthropic.claude-sonnet-4-6`)
+   * en vez del identificador bajo demanda: se confirma en el catálogo de modelos
+   * de la consola de Bedrock, no se adivina aquí.
    */
   identificadorModelo?: string | undefined;
 }
@@ -109,6 +130,7 @@ export function crearAdaptadorAnthropic(
     async completar<T>(peticion: PeticionDeModelo<T>): Promise<RespuestaDeModelo<T>> {
       const esfuerzo = esfuerzoSoportado(
         esfuerzoParaClase(opciones.configuracion, peticion.clasePaso),
+        opciones.papel,
         provisional,
       );
 
