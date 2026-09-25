@@ -1,15 +1,61 @@
 {
   "version": 1,
-  "nota": "Catálogo de desarrollo y de pruebas. Importes de referencia por millón de tokens, sin convertir divisa y sin descuentos. Operación carga los precios reales en cada tenant con registrarTarifa; ningún importe de este fichero llega al cálculo si no se ha dado de alta antes como dato del tenant.",
+  "nota": "Catálogo de desarrollo y de pruebas. Importes de referencia por millón de tokens, sin convertir divisa y sin descuentos. Operación carga los precios reales en cada tenant con registrarTarifa; ningún importe de este fichero llega al cálculo si no se ha dado de alta antes como dato del tenant. Los multiplicadores de Bedrock UE y Vertex UE son 1 (misma cifra que la lista oficial) como hipótesis de partida hasta que Operación confirme el precio real de cada partner (ADR-017): ver el runbook de funciones ausentes en Bedrock o Vertex.",
   "tarifas": [
     {
       "proveedor": "anthropic",
-      "modelo": "claude-sonnet-4-5",
-      "eurosPorMillonEntrada": 3,
-      "eurosPorMillonSalida": 15,
-      "eurosPorMillonEntradaCache": 0.3,
+      "modelo": "claude-opus-5",
+      "eurosPorMillonEntrada": 5,
+      "eurosPorMillonSalida": 25,
+      "eurosPorMillonEntradaCache": 0.5,
+      "plataforma": "bedrock-eu",
+      "multiplicadorListaOficial": 1,
       "vigenteDesde": "2026-09-01T00:00:00.000Z",
-      "fuente": "lista pública (referencia de desarrollo)"
+      "fuente": "lista pública de Anthropic (referencia de desarrollo, pendiente de confirmar precio de Bedrock UE)"
+    },
+    {
+      "proveedor": "anthropic",
+      "modelo": "claude-opus-5",
+      "eurosPorMillonEntrada": 5,
+      "eurosPorMillonSalida": 25,
+      "eurosPorMillonEntradaCache": 0.5,
+      "plataforma": "vertex-eu",
+      "multiplicadorListaOficial": 1,
+      "vigenteDesde": "2026-09-01T00:00:00.000Z",
+      "fuente": "lista pública de Anthropic (referencia de desarrollo, pendiente de confirmar precio de Vertex UE)"
+    },
+    {
+      "proveedor": "anthropic",
+      "modelo": "claude-sonnet-5",
+      "eurosPorMillonEntrada": 2,
+      "eurosPorMillonSalida": 10,
+      "eurosPorMillonEntradaCache": 0.2,
+      "plataforma": "bedrock-eu",
+      "multiplicadorListaOficial": 1,
+      "vigenteDesde": "2026-09-01T00:00:00.000Z",
+      "fuente": "lista pública de Anthropic (referencia de desarrollo, pendiente de confirmar precio de Bedrock UE)"
+    },
+    {
+      "proveedor": "anthropic",
+      "modelo": "claude-sonnet-5",
+      "eurosPorMillonEntrada": 2,
+      "eurosPorMillonSalida": 10,
+      "eurosPorMillonEntradaCache": 0.2,
+      "plataforma": "vertex-eu",
+      "multiplicadorListaOficial": 1,
+      "vigenteDesde": "2026-09-01T00:00:00.000Z",
+      "fuente": "lista pública de Anthropic (referencia de desarrollo, pendiente de confirmar precio de Vertex UE)"
+    },
+    {
+      "proveedor": "anthropic",
+      "modelo": "claude-sonnet-5",
+      "eurosPorMillonEntrada": 2,
+      "eurosPorMillonSalida": 10,
+      "eurosPorMillonEntradaCache": 0.2,
+      "plataforma": "primera-parte",
+      "multiplicadorListaOficial": 1,
+      "vigenteDesde": "2026-09-01T00:00:00.000Z",
+      "fuente": "lista pública de Anthropic (uso interno sin datos de clientes, ADR-017: Revisor en la integración continua, fábrica de agentes, evals)"
     },
     {
       "proveedor": "anthropic",
@@ -17,8 +63,21 @@
       "eurosPorMillonEntrada": 1,
       "eurosPorMillonSalida": 5,
       "eurosPorMillonEntradaCache": 0.1,
+      "plataforma": "bedrock-eu",
+      "multiplicadorListaOficial": 1,
       "vigenteDesde": "2026-09-01T00:00:00.000Z",
-      "fuente": "lista pública (referencia de desarrollo)"
+      "fuente": "lista pública de Anthropic (referencia de desarrollo, pendiente de confirmar precio de Bedrock UE)"
+    },
+    {
+      "proveedor": "anthropic",
+      "modelo": "claude-haiku-4-5",
+      "eurosPorMillonEntrada": 1,
+      "eurosPorMillonSalida": 5,
+      "eurosPorMillonEntradaCache": 0.1,
+      "plataforma": "vertex-eu",
+      "multiplicadorListaOficial": 1,
+      "vigenteDesde": "2026-09-01T00:00:00.000Z",
+      "fuente": "lista pública de Anthropic (referencia de desarrollo, pendiente de confirmar precio de Vertex UE)"
     },
     {
       "proveedor": "mistral",
@@ -26,6 +85,8 @@
       "eurosPorMillonEntrada": 2,
       "eurosPorMillonSalida": 6,
       "eurosPorMillonEntradaCache": 0,
+      "plataforma": "ai-sdk",
+      "multiplicadorListaOficial": 1,
       "vigenteDesde": "2026-09-01T00:00:00.000Z",
       "fuente": "lista pública (referencia de desarrollo)"
     },
@@ -35,6 +96,8 @@
       "eurosPorMillonEntrada": 0.2,
       "eurosPorMillonSalida": 0.6,
       "eurosPorMillonEntradaCache": 0,
+      "plataforma": "ai-sdk",
+      "multiplicadorListaOficial": 1,
       "vigenteDesde": "2026-09-01T00:00:00.000Z",
       "fuente": "lista pública (referencia de desarrollo)"
     },
@@ -44,6 +107,8 @@
       "eurosPorMillonEntrada": 0,
       "eurosPorMillonSalida": 0,
       "eurosPorMillonEntradaCache": 0,
+      "plataforma": "ai-sdk",
+      "multiplicadorListaOficial": 1,
       "vigenteDesde": "2026-09-01T00:00:00.000Z",
       "fuente": "autoalojado: el coste va en la factura de infraestructura, no por token"
     }

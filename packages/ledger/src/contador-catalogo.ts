@@ -23,6 +23,10 @@ const tarifaDelCatalogo = z.object({
   eurosPorMillonEntrada: z.number().nonnegative(),
   eurosPorMillonSalida: z.number().nonnegative(),
   eurosPorMillonEntradaCache: z.number().nonnegative().default(0),
+  /** Plataforma real que sirve el modelo (ADR-017). Por defecto, `primera-parte`. */
+  plataforma: z.string().trim().min(1).default('primera-parte'),
+  /** Documental: multiplicador frente a la lista oficial de Anthropic (ADR-018). */
+  multiplicadorListaOficial: z.number().positive().default(1),
   /** ISO 8601. Se valida como fecha real y no solo como cadena con pinta de fecha. */
   vigenteDesde: z.string().refine((valor) => !Number.isNaN(Date.parse(valor)), {
     message: 'vigenteDesde no es una fecha ISO 8601',
@@ -60,6 +64,8 @@ export function tarifasDelCatalogo(json: unknown): TarifaNueva[] {
     eurosPorMillonEntrada: tarifa.eurosPorMillonEntrada,
     eurosPorMillonSalida: tarifa.eurosPorMillonSalida,
     eurosPorMillonEntradaCache: tarifa.eurosPorMillonEntradaCache,
+    plataforma: tarifa.plataforma,
+    multiplicadorListaOficial: tarifa.multiplicadorListaOficial,
     vigenteDesde: new Date(tarifa.vigenteDesde),
     fuente: tarifa.fuente,
   }));

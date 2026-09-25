@@ -82,7 +82,17 @@ function comoIso(valor: Date, campo: string): string {
   return valor.toISOString();
 }
 
-/** Tarifa aplicable a un uso, tal como sale de `tarifa_modelo`. */
+/** Plataforma por defecto cuando no se especifica ninguna (ADR-017): compatibilidad con datos previos a esta rebanada. */
+export const PLATAFORMA_POR_DEFECTO = 'primera-parte';
+
+/**
+ * Tarifa aplicable a un uso, tal como sale de `tarifa_modelo`.
+ *
+ * `plataforma` y `multiplicadorListaOficial` son opcionales aquí porque
+ * `calcularCosteEuros` nunca los lee: cobra con los `eurosPorMillon*`, que son el
+ * precio real ya contratado. Se admiten como datos opcionales para que una tarifa
+ * construida a mano en una prueba, sin plataforma, siga siendo una `Tarifa` válida.
+ */
 export interface Tarifa {
   id: string;
   proveedor: string;
@@ -91,6 +101,8 @@ export interface Tarifa {
   eurosPorMillonSalida: number;
   eurosPorMillonEntradaCache: number;
   vigenteDesde: Date;
+  plataforma?: string | undefined;
+  multiplicadorListaOficial?: number | undefined;
 }
 
 /** Tokens de una llamada al modelo, tal como los devuelve el proveedor. */
@@ -133,6 +145,8 @@ interface FilaTarifa {
   euros_por_millon_entrada: string;
   euros_por_millon_salida: string;
   euros_por_millon_entrada_cache: string;
+  plataforma: string;
+  multiplicador_lista_oficial: string;
   vigente_desde: Date;
 }
 
@@ -144,6 +158,8 @@ function aTarifa(fila: FilaTarifa): Tarifa {
     eurosPorMillonEntrada: Number(fila.euros_por_millon_entrada),
     eurosPorMillonSalida: Number(fila.euros_por_millon_salida),
     eurosPorMillonEntradaCache: Number(fila.euros_por_millon_entrada_cache),
+    plataforma: fila.plataforma,
+    multiplicadorListaOficial: Number(fila.multiplicador_lista_oficial),
     vigenteDesde: fila.vigente_desde,
   };
 }
@@ -293,6 +309,8 @@ export interface UsoDeModeloNuevo {
   versionPuestoId: string;
   proveedor: string;
   modelo: string;
+  /** Plataforma real que sirvió la llamada (ADR-017). Por defecto, `primera-parte`. */
+  plataforma?: string | undefined;
   tokens: TokensUsados;
   llamadas?: number | undefined;
   /**
@@ -334,6 +352,7 @@ export async function registrarUsoDeModelo(
   if (uso.pasoId !== undefined && uso.pasoId !== null) exigirUuid(uso.pasoId, 'pasoId');
   const proveedor = exigirTexto(uso.proveedor, 'proveedor');
   const modelo = exigirTexto(uso.modelo, 'modelo');
+  const plataforma = exigirTexto(uso.plataforma ?? PLATAFORMA_POR_DEFECTO, 'plataforma');
   const clave = exigirTexto(uso.claveIdempotencia, 'claveIdempotencia');
   const llamadas = uso.llamadas ?? 1;
   if (!Number.isInteger(llamadas) || llamadas < 1) {
@@ -386,10 +405,10 @@ export async function registrarUsoDeModelo(
   if (!reloj) throw new Error('La base no devolvió la hora del uso.');
   const momento = uso.momento ?? new Date(reloj.ahora);
 
-  const tarifa = await tarifaVigente(tx, tenantId, proveedor, modelo, momento);
+  const tarifa = await tarifaVigente(tx, tenantId, proveedor, modelo, momento, plataforma);
   if (!tarifa) {
     throw new Error(
-      `Sin tarifa vigente para ${proveedor}/${modelo} en ${momento.toISOString()}: ` +
+      `Sin tarifa vigente para ${proveedor}/${modelo} en ${plataforma} en ${momento.toISOString()}: ` +
         'regístrala con registrarTarifa antes de cobrar el uso.',
     );
   }
@@ -399,11 +418,11 @@ export async function registrarUsoDeModelo(
   const [insertado] = await tx<{ id: string }[]>`
     insert into uso_modelo (
       tenant_id, tarea_id, tarea_raiz_id, paso_id, puesto_id, version_puesto_id,
-      proveedor, modelo, tokens_entrada, tokens_salida, tokens_entrada_cache,
+      proveedor, modelo, plataforma, tokens_entrada, tokens_salida, tokens_entrada_cache,
       llamadas, tarifa_modelo_id, coste_euros, clave_idempotencia, creado_en
     ) values (
       ${tenantId}, ${uso.tareaId}, ${tareaRaizId}, ${uso.pasoId ?? null},
-      ${uso.puestoId}, ${uso.versionPuestoId}, ${proveedor}, ${modelo},
+      ${uso.puestoId}, ${uso.versionPuestoId}, ${proveedor}, ${modelo}, ${plataforma},
       ${tokens.entrada}, ${tokens.salida}, ${tokens.entradaCache ?? 0},
       ${llamadas}, ${tarifa.id}, ${normalizarImporte(costeEuros)}, ${clave}, ${comoIso(momento, 'momento')}::timestamptz
     )
@@ -448,6 +467,10 @@ export async function registrarUsoDeModelo(
 /**
  * Tarifa que se aplica a un uso: la de mayor `vigente_desde` que no sea posterior
  * al momento del uso. Sin columna de cierre de vigencia, la última gana.
+ *
+ * `plataforma` es opcional: sin ella, se ignora en el filtro y gana la de mayor
+ * `vigente_desde` entre todas las plataformas de ese proveedor y modelo, que es el
+ * comportamiento de antes de esta rebanada, cuando no existía la columna.
  */
 export async function tarifaVigente(
   tx: postgres.TransactionSql | postgres.Sql,
@@ -455,15 +478,17 @@ export async function tarifaVigente(
   proveedor: string,
   modelo: string,
   momento: Date,
+  plataforma?: string,
 ): Promise<Tarifa | undefined> {
   const [fila] = await tx<FilaTarifa[]>`
     select id, proveedor, modelo, euros_por_millon_entrada, euros_por_millon_salida,
-           euros_por_millon_entrada_cache, vigente_desde
+           euros_por_millon_entrada_cache, plataforma, multiplicador_lista_oficial, vigente_desde
     from tarifa_modelo
     where tenant_id = ${tenantId}
       and proveedor = ${proveedor}
       and modelo = ${modelo}
       and vigente_desde <= ${comoIso(momento, 'momento')}::timestamptz
+      and (${plataforma ?? null}::text is null or plataforma = ${plataforma ?? null})
     order by vigente_desde desc
     limit 1
   `;
@@ -476,6 +501,10 @@ export interface TarifaNueva {
   eurosPorMillonEntrada: number;
   eurosPorMillonSalida: number;
   eurosPorMillonEntradaCache?: number | undefined;
+  /** Plataforma real que sirve el modelo (ADR-017). Por defecto, `primera-parte`. */
+  plataforma?: string | undefined;
+  /** Documental: multiplicador frente a la lista oficial de Anthropic. Por defecto, 1. */
+  multiplicadorListaOficial?: number | undefined;
   vigenteDesde: Date;
   /** De dónde sale el precio: lista pública, contrato o acuerdo con el partner. */
   fuente: string;
@@ -506,14 +535,21 @@ export async function registrarTarifa(
     tarifa.eurosPorMillonEntradaCache ?? 0,
     'eurosPorMillonEntradaCache',
   );
+  const plataforma = exigirTexto(tarifa.plataforma ?? PLATAFORMA_POR_DEFECTO, 'plataforma');
+  const multiplicador = exigirPrecio(
+    tarifa.multiplicadorListaOficial ?? 1,
+    'multiplicadorListaOficial',
+  );
 
   const [insertada] = await tx<{ id: string }[]>`
     insert into tarifa_modelo (
       tenant_id, proveedor, modelo, euros_por_millon_entrada, euros_por_millon_salida,
-      euros_por_millon_entrada_cache, vigente_desde, fuente
+      euros_por_millon_entrada_cache, plataforma, multiplicador_lista_oficial,
+      vigente_desde, fuente
     ) values (
       ${tenantId}, ${proveedor}, ${modelo}, ${entradaPrecio}, ${salidaPrecio},
-      ${cachePrecio}, ${comoIso(tarifa.vigenteDesde, 'vigenteDesde')}::timestamptz, ${fuente}
+      ${cachePrecio}, ${plataforma}, ${multiplicador},
+      ${comoIso(tarifa.vigenteDesde, 'vigenteDesde')}::timestamptz, ${fuente}
     )
     returning id
   `;
