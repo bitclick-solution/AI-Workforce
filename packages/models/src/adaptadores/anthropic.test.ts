@@ -173,4 +173,19 @@ describe('crearAdaptadorAnthropic', () => {
     const cuerpo = servidor.peticiones[0]?.cuerpo as { max_tokens: number };
     expect(cuerpo.max_tokens).toBe(MAX_TOKENS_POR_DEFECTO);
   });
+
+  it('anula el identificador calculado cuando Bedrock exige un perfil de inferencia', async () => {
+    servidor = await iniciarServidorSimulado(respuestaDeTexto('ok'));
+    const puerto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
+      papel: 'sonnet5',
+      plataforma: 'bedrock-eu',
+      configuracion: { esfuerzoPorClasePaso: {} },
+      identificadorModelo: 'eu.anthropic.claude-sonnet-5',
+    });
+
+    expect(puerto.modelo).toBe('eu.anthropic.claude-sonnet-5');
+    await puerto.completar({ clasePaso: 'negocio', mensajes: [{ rol: 'user', contenido: 'x' }] });
+    const cuerpo = servidor.peticiones[0]?.cuerpo as { model: string };
+    expect(cuerpo.model).toBe('eu.anthropic.claude-sonnet-5');
+  });
 });

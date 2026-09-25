@@ -34,6 +34,14 @@ export interface OpcionesAdaptadorAnthropic {
   plataforma: PlataformaModelo;
   configuracion: Pick<esquemas.ConfiguracionModeloPuesto, 'esfuerzoPorClasePaso'>;
   maxTokens?: number | undefined;
+  /**
+   * Anula el identificador de modelo que calcula `identificadorDeModelo`. Hace
+   * falta si Bedrock, en la región contratada, solo sirve el modelo por un perfil
+   * de inferencia entre regiones (por ejemplo `eu.anthropic.claude-sonnet-5`) en
+   * vez del identificador bajo demanda: se confirma en el catálogo de modelos de
+   * la consola de Bedrock una vez concedida la cuota, no se adivina aquí.
+   */
+  identificadorModelo?: string | undefined;
 }
 
 function aTokensDeUso(uso: Anthropic.Usage): TokensDeUso {
@@ -72,7 +80,8 @@ export function crearAdaptadorAnthropic(
   cliente: ClienteDeMensajes,
   opciones: OpcionesAdaptadorAnthropic,
 ): PuertoDeModelo {
-  const modelo = identificadorDeModelo(opciones.papel, opciones.plataforma);
+  const modelo =
+    opciones.identificadorModelo ?? identificadorDeModelo(opciones.papel, opciones.plataforma);
   const sinPensamientoAdaptativo = SIN_PENSAMIENTO_ADAPTATIVO.has(opciones.papel);
 
   return {

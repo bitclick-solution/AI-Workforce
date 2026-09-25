@@ -43,32 +43,57 @@ datos de Anthropic en cada retro de ciclo.
 
 ## Activar el proveedor real de Bedrock UE
 
-Nada de esto existe todavía en este repositorio: son los pasos para cuando haya
-cuenta y credenciales.
+Estado a 2026-09-25: Jesús tiene ya cuenta de AWS y ha pedido cuota de Sonnet 5 en
+Bedrock; a falta de que se conceda, esto es lo que fija `docs/specs/modelos-v1.md`
+para cuando llegue:
 
-1. Cuenta de AWS con Amazon Bedrock activado en una región de la UE (por ejemplo
-   `eu-central-1` o `eu-west-1`) y acceso concedido a los modelos Opus 5, Sonnet 5
-   y Haiku 4.5 en el catálogo de modelos de Bedrock de esa región.
-2. Credenciales de AWS con permiso para invocar Bedrock: o bien un rol/usuario IAM
-   con las claves de acceso, o bien un perfil con el proveedor de credenciales por
-   defecto de AWS (variables de entorno, IAM Role, SSO).
-3. Variables de entorno del worker: `AIW_BEDROCK_REGION_UE` con la región elegida.
-   Las credenciales de AWS en sí (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-   `AWS_SESSION_TOKEN` o el perfil por defecto) las resuelve el SDK oficial de
-   Anthropic, no este paquete: `AnthropicBedrockMantle` de `@anthropic-ai/bedrock-sdk`
-   sigue la cadena de credenciales estándar de AWS.
+1. Cuenta de AWS con Amazon Bedrock activado en **`eu-central-1`** (Frankfurt),
+   región primaria elegida; **`eu-west-1`** (Irlanda) si la cuota de Sonnet 5 no se
+   concede en Frankfurt. Acceso concedido a Sonnet 5 en el catálogo de modelos de
+   Bedrock de esa región (Opus 5 y Haiku 4.5 quedan para cuando el puesto que los
+   necesite los pida).
+2. Credenciales de AWS con permiso para invocar Bedrock, nada más: un usuario o rol
+   de IAM con las claves de acceso.
+3. Secretos y variables (ver la tabla exacta más abajo): `AIW_BEDROCK_REGION_UE`
+   como variable, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` como secretos. Ya
+   cableados como variables de entorno del job `Pruebas` en `.github/workflows/ci.yml`
+   (`${{ vars.* }}`/`${{ secrets.* }}`): en cuanto Jesús los cargue en GitHub, la
+   prueba de integración empieza a correr sin tocar el workflow otra vez.
 4. `clienteBedrockDesdeEntorno` (`packages/models/src/adaptadores/clientes.ts`)
    construye el cliente real en cuanto `AIW_BEDROCK_REGION_UE` existe; antes de
    eso, lanza con el nombre exacto de lo que falta.
-5. Da de alta las tarifas reales de Bedrock UE con `registrarTarifa` en la
+5. Comprueba en la consola de Bedrock si Sonnet 5, en `eu-central-1`, se sirve por
+   el identificador bajo demanda (`anthropic.claude-sonnet-5`, la hipótesis de
+   partida) o solo por un perfil de inferencia entre regiones (forma habitual:
+   `eu.anthropic.claude-sonnet-5`). Si hace falta el perfil, fíjalo en la variable
+   `AIW_BEDROCK_MODELO_SONNET5`: `anthropic.bedrock.integracion.test.ts` y
+   cualquier puesto que use `crearAdaptadorAnthropic` lo leen con
+   `identificadorModelo` sin tocar `identificadores.ts`.
+6. Da de alta las tarifas reales de Bedrock UE con `registrarTarifa` en la
    plataforma `bedrock-eu` (ver `packages/ledger/src/datos/tarifas-ejemplo.json`
    para el formato): el multiplicador frente a la lista oficial de Anthropic que
    trae ese fichero es una hipótesis de partida (1, la misma cifra que la lista) y
    hay que sustituirlo por el precio real de Bedrock en cuanto se conozca.
-6. Repite los casos dorados de Cobros y de Conciliación
+7. En cuanto la prueba de integración
+   (`packages/models/src/adaptadores/anthropic.bedrock.integracion.test.ts`) pase
+   en la CI, repite los casos dorados de Cobros y de Conciliación
    (`packages/evals/smoke/cobros.eval.ts`, `conciliacion.eval.ts`) apuntando al
    cliente real en vez del simulado, para cerrar el criterio de hecho pendiente de
    esta rebanada.
+
+### Secretos y variables exactos (GitHub Actions)
+
+En `Settings > Secrets and variables > Actions` del repositorio:
+
+| Nombre                       | Tipo               | Valor                                                                                                         |
+| ---------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `AWS_ACCESS_KEY_ID`          | Secreto            | Clave de acceso del usuario o rol de IAM con permiso de invocar Bedrock.                                      |
+| `AWS_SECRET_ACCESS_KEY`      | Secreto            | Clave secreta de esa misma credencial.                                                                        |
+| `AIW_BEDROCK_REGION_UE`      | Variable           | `eu-central-1` (o `eu-west-1` si aplica la alternativa). No es una credencial: no hace falta que sea secreta. |
+| `AIW_BEDROCK_MODELO_SONNET5` | Variable, opcional | El perfil de inferencia entre regiones, solo si la consola de Bedrock lo exige (paso 5).                      |
+
+Jesús carga estos valores; nadie se los pide por el chat ni los escribe en el
+repositorio, en un PR ni en ningún registro.
 
 ## Activar el proveedor real de Vertex UE
 

@@ -37,6 +37,42 @@ Sin endpoints nuevos. Migración `packages/db/drizzle/0002_modelos_v1.sql` (y su
 reverso): añade columnas con `default`, así que ninguna fila existente cambia de
 significado. Zona crítica por tocar la versión de puesto y el contador.
 
+## Región, perfil de inferencia y secretos de Bedrock UE (fijado 2026-09-25)
+
+Jesús tiene ya cuenta de AWS y ha pedido cuota de Sonnet 5 en Bedrock. Mientras se
+concede, esto es lo que fija esta rebanada para cuando llegue:
+
+- **Región primaria**: `eu-central-1` (Frankfurt). **Alternativa**: `eu-west-1`
+  (Irlanda), si la cuota de Sonnet 5 no se concede en Frankfurt. Va en la variable
+  `AIW_BEDROCK_REGION_UE`, nunca hardcodeada en el código.
+- **Identificador de modelo**: hipótesis de partida `anthropic.claude-sonnet-5`
+  (identificador bajo demanda, sin fecha, tal como fija `identificadores.ts` para
+  el ADR-018). Si el catálogo de modelos de Bedrock en la región contratada solo
+  sirve Sonnet 5 por un **perfil de inferencia entre regiones** (forma habitual en
+  Bedrock: `eu.anthropic.claude-sonnet-5`), se fija en la variable opcional
+  `AIW_BEDROCK_MODELO_SONNET5` sin tocar `identificadores.ts`:
+  `crearAdaptadorAnthropic` acepta `identificadorModelo` para anular el cálculo por
+  papel y plataforma. Cuál de las dos formas hace falta se confirma en la consola
+  de Bedrock una vez concedida la cuota, no se adivina en esta rebanada.
+- **Secretos de GitHub Actions** (`Settings > Secrets and variables > Actions`),
+  en el job `Pruebas` de `ci.yml`:
+  - Secreto `AWS_ACCESS_KEY_ID` y secreto `AWS_SECRET_ACCESS_KEY`: credenciales de
+    un usuario o rol de IAM con permiso de invocar Bedrock en la región elegida,
+    nada más. Ningún otro permiso de la cuenta de AWS.
+  - Variable de repositorio (no secreto: no es una credencial)
+    `AIW_BEDROCK_REGION_UE` con el valor `eu-central-1` (o `eu-west-1` si aplica la
+    alternativa).
+  - Variable de repositorio opcional `AIW_BEDROCK_MODELO_SONNET5`, solo si hace
+    falta el perfil de inferencia entre regiones.
+  - Sin estos tres/cuatro valores, la prueba de integración de
+    `packages/models/src/adaptadores/anthropic.bedrock.integracion.test.ts` se
+    salta sola (`describe.skipIf`) y el job sigue en verde; en cuanto existan, la
+    prueba corre contra el Bedrock real y cierra el criterio de hecho 6.
+  - `.env` local: mismas tres variables (`AIW_BEDROCK_REGION_UE`,
+    `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`), vacías en `.env.example`.
+  - Jesús carga los valores reales; el Constructor no los pide ni los escribe en
+    el repositorio, en el PR ni en ningún registro.
+
 ## Criterios de hecho
 
 1. `@aiw/models` implementa el puerto `PuertoDeModelo`; el adaptador de Anthropic
@@ -60,9 +96,13 @@ significado. Zona crítica por tocar la versión de puesto y el contador.
    — cumplido; activarlo con credenciales reales queda en el runbook.
 6. Los casos dorados de Cobros y de Conciliación pasan de punta a punta —adaptador,
    esquema estricto, evaluador— contra el servidor simulado en
-   `pnpm --filter @aiw/evals evals:smoke` — cumplido con el proveedor simulado;
-   **pendiente con el proveedor real** (sin credenciales de Bedrock ni de Vertex UE
-   todavía), con los pasos exactos en el runbook.
+   `pnpm --filter @aiw/evals evals:smoke` — cumplido con el proveedor simulado.
+   Hay además una prueba de integración contra el Bedrock real
+   (`anthropic.bedrock.integracion.test.ts`) que se salta sola sin credenciales, ya
+   cableada en `ci.yml`. **Pendiente con el proveedor real**: la cuota de Sonnet 5
+   en Bedrock está pedida pero no concedida a fecha de esta rebanada; en cuanto se
+   conceda y Jesús cargue los secretos de la sección anterior, la prueba corre sola
+   en la próxima CI sin más cambio de código.
 7. Runbook de funciones ausentes en Bedrock o en Vertex, con su sustituto y los
    pasos de activación — cumplido (`docs/runbooks/modelos-funciones-ausentes.md`).
 
@@ -91,6 +131,10 @@ significado. Zona crítica por tocar la versión de puesto y el contador.
   `observadorDesdeEntorno` fallan con el nombre exacto de la variable que falta en
   vez de construir un cliente con un valor inventado (prueba en
   `adaptadores/clientes.test.ts`).
+- Integración (se salta sin secretos): `anthropic.bedrock.integracion.test.ts`
+  completa una petición mínima con Sonnet 5 contra el Bedrock real de
+  `AIW_BEDROCK_REGION_UE`, siguiendo el mismo patrón `describe.skipIf` que las
+  pruebas de `@aiw/db` contra PostgreSQL sin `DATABASE_URL`.
 
 ## Fuera de alcance
 

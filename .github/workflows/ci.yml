@@ -39,6 +39,15 @@ jobs:
   test:
     name: Pruebas
     runs-on: ubuntu-24.04
+    env:
+      # Bedrock UE real (ADR-017, rebanada «Modelos v1»): sin estos tres, la prueba de
+      # integración de @aiw/models se salta sola y el job sigue en verde (ver
+      # docs/runbooks/modelos-funciones-ausentes.md). Región como variable del repositorio,
+      # no como secreto: no es una credencial.
+      AIW_BEDROCK_REGION_UE: ${{ vars.AIW_BEDROCK_REGION_UE }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AIW_BEDROCK_MODELO_SONNET5: ${{ vars.AIW_BEDROCK_MODELO_SONNET5 }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
