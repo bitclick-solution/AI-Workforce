@@ -25,16 +25,16 @@ describe('crearAdaptadorAnthropic', () => {
     servidor = undefined;
   });
 
-  it('resuelve el identificador de Bedrock y lee el texto y los tokens de la respuesta', async () => {
+  it('resuelve el identificador de Vertex y lee el texto y los tokens de la respuesta', async () => {
     servidor = await iniciarServidorSimulado(respuestaDeTexto('hola desde el simulado'));
     const puerto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
       papel: 'sonnet5',
-      plataforma: 'bedrock-eu',
+      plataforma: 'vertex-eu',
       configuracion: { esfuerzoPorClasePaso: {} },
     });
 
-    expect(puerto.modelo).toBe('anthropic.claude-sonnet-5');
-    expect(puerto.plataforma).toBe('bedrock-eu');
+    expect(puerto.modelo).toBe('claude-sonnet-5');
+    expect(puerto.plataforma).toBe('vertex-eu');
 
     const resultado = await puerto.completar({
       clasePaso: 'negocio',
@@ -45,12 +45,35 @@ describe('crearAdaptadorAnthropic', () => {
     if (resultado.tipo !== 'ok') throw new Error('se esperaba ok');
     expect(resultado.texto).toBe('hola desde el simulado');
     expect(resultado.tokens).toEqual({ entrada: 120, salida: 40, entradaCache: 0 });
-    expect(resultado.modelo).toBe('anthropic.claude-sonnet-5');
+    expect(resultado.modelo).toBe('claude-sonnet-5');
 
     const [peticion] = servidor.peticiones;
     const cuerpo = peticion?.cuerpo as { model: string; output_config: { effort: string } };
-    expect(cuerpo.model).toBe('anthropic.claude-sonnet-5');
+    expect(cuerpo.model).toBe('claude-sonnet-5');
     expect(cuerpo.output_config.effort).toBe('medium');
+  });
+
+  it('en Bedrock, sonnet5 y opus5 se sirven con la familia 4.6 y bajan xhigh a high (decisión de Jesús, 2026-09-25)', async () => {
+    servidor = await iniciarServidorSimulado(respuestaDeTexto('ok'));
+    const puerto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
+      papel: 'sonnet5',
+      plataforma: 'bedrock-eu',
+      configuracion: { esfuerzoPorClasePaso: { conciliacion: 'xhigh' } },
+    });
+
+    expect(puerto.modelo).toBe('anthropic.claude-sonnet-4-6');
+
+    await puerto.completar({
+      clasePaso: 'conciliacion',
+      mensajes: [{ rol: 'user', contenido: 'x' }],
+    });
+
+    const cuerpo = servidor.peticiones[0]?.cuerpo as {
+      model: string;
+      output_config: { effort: string };
+    };
+    expect(cuerpo.model).toBe('anthropic.claude-sonnet-4-6');
+    expect(cuerpo.output_config.effort).toBe('high');
   });
 
   it('pide pensamiento adaptativo y el esfuerzo de la clase de paso, salvo en Haiku 4.5', async () => {

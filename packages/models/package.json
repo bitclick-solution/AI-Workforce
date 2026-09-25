@@ -20,6 +20,7 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
+    "test:integracion:bedrock": "vitest run src/adaptadores/anthropic.bedrock.integracion.test.ts",
     "clean": "rm -rf dist coverage .turbo"
   },
   "devDependencies": {

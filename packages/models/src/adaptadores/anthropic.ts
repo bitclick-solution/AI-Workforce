@@ -8,13 +8,24 @@
  * pensamiento adaptativo ni `output_config.effort` — la API los rechaza en ese
  * modelo. Para el papel `haiku45` no se envía ninguno de los dos; el resto de
  * papeles sí lleva pensamiento adaptativo, como pide el ADR-018.
+ *
+ * Segunda excepción (decisión de Jesús, 2026-09-25): mientras Bedrock no tenga
+ * cuota para la familia 5, Opus 5 y Sonnet 5 se sirven ahí con Opus 4.6 y Sonnet
+ * 4.6 (`identificadores.ts`). Esos dos no admiten el esfuerzo `xhigh` —llegó con
+ * Opus 4.7—, así que una petición de esfuerzo `xhigh` contra un papel provisional
+ * baja a `high`, el nivel más alto que sí admiten.
  */
 import type Anthropic from '@anthropic-ai/sdk';
-import { type PapelModelo, type PlataformaModelo, type esquemas } from '@aiw/domain';
+import {
+  type NivelEsfuerzo,
+  type PapelModelo,
+  type PlataformaModelo,
+  type esquemas,
+} from '@aiw/domain';
 import { z } from 'zod';
 
 import { esfuerzoParaClase } from '../esfuerzo.js';
-import { identificadorDeModelo } from '../identificadores.js';
+import { esProvisional, identificadorDeModelo } from '../identificadores.js';
 import type {
   PeticionDeModelo,
   PuertoDeModelo,
@@ -28,6 +39,11 @@ export const MAX_TOKENS_POR_DEFECTO = 16_000;
 
 /** Papeles que no admiten pensamiento adaptativo ni `output_config.effort` (Haiku 4.5). */
 const SIN_PENSAMIENTO_ADAPTATIVO: ReadonlySet<PapelModelo> = new Set(['haiku45']);
+
+/** `xhigh` (Opus 4.7+) no lo admiten los sustitutos provisionales de la familia 4.6. */
+function esfuerzoSoportado(esfuerzo: NivelEsfuerzo, provisional: boolean): NivelEsfuerzo {
+  return provisional && esfuerzo === 'xhigh' ? 'high' : esfuerzo;
+}
 
 export interface OpcionesAdaptadorAnthropic {
   papel: PapelModelo;
@@ -83,12 +99,18 @@ export function crearAdaptadorAnthropic(
   const modelo =
     opciones.identificadorModelo ?? identificadorDeModelo(opciones.papel, opciones.plataforma);
   const sinPensamientoAdaptativo = SIN_PENSAMIENTO_ADAPTATIVO.has(opciones.papel);
+  const provisional =
+    opciones.identificadorModelo === undefined &&
+    esProvisional(opciones.papel, opciones.plataforma);
 
   return {
     modelo,
     plataforma: opciones.plataforma,
     async completar<T>(peticion: PeticionDeModelo<T>): Promise<RespuestaDeModelo<T>> {
-      const esfuerzo = esfuerzoParaClase(opciones.configuracion, peticion.clasePaso);
+      const esfuerzo = esfuerzoSoportado(
+        esfuerzoParaClase(opciones.configuracion, peticion.clasePaso),
+        provisional,
+      );
 
       const herramientas = herramientasDe(peticion);
       const params: Anthropic.MessageCreateParamsNonStreaming = {

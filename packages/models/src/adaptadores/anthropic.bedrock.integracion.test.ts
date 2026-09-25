@@ -10,10 +10,13 @@
  * el proveedor real»). Pasos exactos para cargarlas:
  * `docs/runbooks/modelos-funciones-ausentes.md`.
  *
- * `AIW_BEDROCK_MODELO_SONNET5` es opcional: si el catálogo de modelos de Bedrock en
- * la región contratada solo sirve Sonnet 5 por un perfil de inferencia entre
- * regiones (por ejemplo `eu.anthropic.claude-sonnet-5`) en vez del identificador
- * bajo demanda, se fija aquí sin tocar `identificadores.ts`.
+ * Sin anular nada, el papel `sonnet5` en Bedrock resuelve hoy a Sonnet 4.6
+ * (`identificadores.ts`, decisión de Jesús 2026-09-25: Bedrock en Frankfurt no
+ * tiene cuota para la familia 5 todavía), así que esta prueba ya ejercita lo que
+ * de verdad hay disponible. `AIW_BEDROCK_MODELO_SONNET5` es opcional y solo hace
+ * falta si el catálogo de modelos de Bedrock exige un perfil de inferencia entre
+ * regiones (por ejemplo `eu.anthropic.claude-sonnet-4-6`) en vez del identificador
+ * bajo demanda.
  */
 import { describe, expect, it } from 'vitest';
 
