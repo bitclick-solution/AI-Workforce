@@ -99,6 +99,13 @@ export const versionPuesto = pgTable(
     /** Lecciones que originan la versión y sus resultados de eval. */
     leccionesOrigen: jsonb('lecciones_origen').notNull().default([]),
     resultadosEval: jsonb('resultados_eval').notNull().default({}),
+    /**
+     * Modelo, esfuerzo por clase de paso y modelo de respaldo (ADR-018). Validada
+     * con `configuracionModeloPuesto` de `@aiw/domain`. Igual que `politica`,
+     * inmutable como el resto de la fila: bajar de modelo o de esfuerzo es una
+     * promoción y crea una versión nueva.
+     */
+    configuracionModelo: jsonb('configuracion_modelo').notNull().default({}),
     ...columnasInmutables(),
   },
   (t) => [

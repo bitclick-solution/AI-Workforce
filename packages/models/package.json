@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./pruebas": {
+      "types": "./src/pruebas/index.ts",
+      "default": "./src/pruebas/index.ts"
     }
   },
   "files": [
@@ -16,10 +20,15 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
+    "test:integracion:bedrock": "vitest run src/adaptadores/anthropic.bedrock.integracion.test.ts",
     "clean": "rm -rf dist coverage .turbo"
   },
   "dependencies": {
+    "@ai-sdk/mistral": "catalog:",
     "@ai-sdk/provider": "catalog:",
+    "@anthropic-ai/bedrock-sdk": "catalog:",
+    "@anthropic-ai/sdk": "catalog:",
+    "@anthropic-ai/vertex-sdk": "catalog:",
     "@aiw/domain": "workspace:*",
     "ai": "catalog:",
     "zod": "catalog:"
