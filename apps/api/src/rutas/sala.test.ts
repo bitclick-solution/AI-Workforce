@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
+import type { ResolutorDeSesion } from '../identidad/acceso';
 import {
   atenderSala,
   configuracionSalaDesdeEntorno,
@@ -17,6 +18,37 @@ const SALA = '01a0d39e-98c3-7970-814a-0a98ad132313';
 const PROPUESTA = '01a0d39e-98c3-7970-814a-0a98ad132314';
 // Nace con la prueba: ni de juguete se escribe una credencial en el código.
 const TOKEN = randomUUID();
+
+/** La cookie dice qué sesión es; la sesión, qué persona. Nunca las cabeceras. */
+const SESIONES: Record<string, string> = {
+  'aiw.session_token=valida': PERSONA,
+  'aiw.session_token=de-otra-persona': PROPUESTA,
+};
+
+const sesiones: ResolutorDeSesion = (cabeceras) => {
+  const personaId = SESIONES[String(cabeceras['cookie'])];
+  return Promise.resolve(
+    personaId
+      ? {
+          sesionId: '01a0d39e-98c3-7970-814a-0a98ad132399',
+          usuarioId: '01a0d39e-98c3-7970-814a-0a98ad132398',
+          tenantId: TENANT,
+          personaId,
+          nombre: 'Propietaria',
+          correo: 'propietaria@ejemplo.local',
+          caducaEn: new Date(Date.now() + 3_600_000),
+        }
+      : null,
+  );
+};
+
+function atender(
+  peticionSala: PeticionSala,
+  configuracion: ConfiguracionSala | undefined,
+  puerto: PuertoSala,
+) {
+  return atenderSala(peticionSala, configuracion, puerto, sesiones);
+}
 
 const CONFIGURACION: ConfiguracionSala = {
   token: TOKEN,
@@ -66,8 +98,7 @@ function peticion(parcial: Partial<PeticionSala> = {}): PeticionSala {
     url: '/sala',
     cabeceras: {
       authorization: `Bearer ${TOKEN}`,
-      'x-aiw-tenant': TENANT,
-      'x-aiw-persona': PERSONA,
+      cookie: 'aiw.session_token=valida',
     },
     ...parcial,
   };
@@ -86,26 +117,34 @@ describe('rutas de la sala v0', () => {
     ).toBeUndefined();
   });
 
-  it('pide el token, las cabeceras y una persona activa', async () => {
+  it('pide el token, una sesión y una persona activa', async () => {
     const { puerto } = puertoFalso();
-    const sinToken = await atenderSala(
-      peticion({ cabeceras: { 'x-aiw-tenant': TENANT } }),
+    const sinToken = await atender(
+      peticion({ cabeceras: { cookie: 'aiw.session_token=valida' } }),
       CONFIGURACION,
       puerto,
     );
     expect(sinToken?.estado).toBe(401);
-    const sinPersona = await atenderSala(
-      peticion({ cabeceras: { authorization: `Bearer ${TOKEN}`, 'x-aiw-tenant': TENANT } }),
-      CONFIGURACION,
-      puerto,
-    );
-    expect(sinPersona?.estado).toBe(400);
-    const otra = await atenderSala(
+    // Las cabeceras de tenant y persona de antes ya no abren nada.
+    const sinSesion = await atender(
       peticion({
         cabeceras: {
           authorization: `Bearer ${TOKEN}`,
           'x-aiw-tenant': TENANT,
-          'x-aiw-persona': PROPUESTA,
+          'x-aiw-persona': PERSONA,
+        },
+      }),
+      CONFIGURACION,
+      puerto,
+    );
+    expect(sinSesion?.estado).toBe(401);
+    // Sin acceso configurado, nadie tiene sesión.
+    expect((await atenderSala(peticion(), CONFIGURACION, puerto))?.estado).toBe(401);
+    const otra = await atender(
+      peticion({
+        cabeceras: {
+          authorization: `Bearer ${TOKEN}`,
+          cookie: 'aiw.session_token=de-otra-persona',
         },
       }),
       CONFIGURACION,
@@ -114,8 +153,28 @@ describe('rutas de la sala v0', () => {
     expect(otra?.estado).toBe(403);
   });
 
+  it('la persona es la de la sesión aunque la cabecera diga otra', async () => {
+    const { puerto, arrancados } = puertoFalso();
+    const escrita = await atender(
+      peticion({
+        metodo: 'POST',
+        url: '/sala/mensajes',
+        cuerpo: { texto: 'hola' },
+        cabeceras: {
+          authorization: `Bearer ${TOKEN}`,
+          cookie: 'aiw.session_token=valida',
+          'x-aiw-persona': PROPUESTA,
+        },
+      }),
+      CONFIGURACION,
+      puerto,
+    );
+    expect(escrita?.estado).toBe(202);
+    expect(arrancados).toMatchObject([{ personaId: PERSONA, tenantId: TENANT }]);
+  });
+
   it('lee la sala con sus propuestas', async () => {
-    const leida = await atenderSala(peticion(), CONFIGURACION, puertoFalso().puerto);
+    const leida = await atender(peticion(), CONFIGURACION, puertoFalso().puerto);
     expect(leida?.estado).toBe(200);
     expect(leida?.cuerpo['salaId']).toBe(SALA);
     expect((leida?.cuerpo['propuestas'] as { id: string }[]).map((p) => p.id)).toEqual([PROPUESTA]);
@@ -123,7 +182,7 @@ describe('rutas de la sala v0', () => {
 
   it('escribir arranca el flujo y no escribe nada por su cuenta', async () => {
     const { puerto, arrancados } = puertoFalso();
-    const escrita = await atenderSala(
+    const escrita = await atender(
       peticion({ metodo: 'POST', url: '/sala/mensajes', cuerpo: { texto: '  ¿cómo vamos?  ' } }),
       CONFIGURACION,
       puerto,
@@ -138,13 +197,13 @@ describe('rutas de la sala v0', () => {
         texto: '¿cómo vamos?',
       },
     ]);
-    const vacia = await atenderSala(
+    const vacia = await atender(
       peticion({ metodo: 'POST', url: '/sala/mensajes', cuerpo: { texto: ' ' } }),
       CONFIGURACION,
       puerto,
     );
     expect(vacia?.estado).toBe(400);
-    const larga = await atenderSala(
+    const larga = await atender(
       peticion({ metodo: 'POST', url: '/sala/mensajes', cuerpo: { texto: 'a'.repeat(2001) } }),
       CONFIGURACION,
       puerto,
@@ -153,10 +212,10 @@ describe('rutas de la sala v0', () => {
     expect(arrancados).toHaveLength(1);
   });
 
-  it('el clic señala la propuesta pendiente con la persona de la cabecera', async () => {
+  it('el clic señala la propuesta pendiente con la persona de la sesión', async () => {
     const { puerto, senales } = puertoFalso();
     const url = `/sala/propuestas/${PROPUESTA}/decision`;
-    const decidida = await atenderSala(
+    const decidida = await atender(
       peticion({ metodo: 'POST', url, cuerpo: { sentido: 'aprobada', personaId: 'otra' } }),
       CONFIGURACION,
       puerto,
@@ -165,7 +224,7 @@ describe('rutas de la sala v0', () => {
     expect(senales).toEqual([
       { id: PROPUESTA, carga: { personaId: PERSONA, sentido: 'aprobada' } },
     ]);
-    const mal = await atenderSala(
+    const mal = await atender(
       peticion({ metodo: 'POST', url, cuerpo: { sentido: 'quizá' } }),
       CONFIGURACION,
       puerto,
@@ -175,7 +234,7 @@ describe('rutas de la sala v0', () => {
 
   it('una propuesta ya decidida no se vuelve a decidir', async () => {
     const { puerto, senales } = puertoFalso('ejecutada');
-    const tarde = await atenderSala(
+    const tarde = await atender(
       peticion({
         metodo: 'POST',
         url: `/sala/propuestas/${PROPUESTA}/decision`,

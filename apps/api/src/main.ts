@@ -1,3 +1,4 @@
+import { accesoActivo } from './identidad/configuracion';
 import { APLICACION } from './index';
 import { configuracionDesdeEntorno } from './rutas/contador';
 import { configuracionSalaDesdeEntorno } from './rutas/sala';
@@ -12,11 +13,16 @@ console.log(`[${APLICACION.nombre}] depende de: ${APLICACION.dependeDe.join(', '
 // es y termina, que es lo que comprueba la CI cuando arranca la imagen.
 const hayContador = configuracionDesdeEntorno(process.env) !== undefined;
 const haySala = configuracionSalaDesdeEntorno(process.env) !== undefined;
+const hayAcceso = accesoActivo(process.env);
 const hayBase = Boolean(process.env['DATABASE_URL']);
 
-if ((hayContador || haySala) && hayBase) {
+if ((hayContador || haySala || hayAcceso) && hayBase) {
   const api = await arrancarApi();
-  const rutas = [hayContador ? 'contador de tareas v0' : '', haySala ? 'sala v0' : '']
+  const rutas = [
+    hayContador ? 'contador de tareas v0' : '',
+    haySala ? 'sala v0' : '',
+    hayAcceso ? 'acceso al panel' : '',
+  ]
     .filter(Boolean)
     .join(' y ');
   console.log(`[${APLICACION.nombre}] ${rutas} escuchando en el puerto ${api.puerto}`);
@@ -27,8 +33,8 @@ if ((hayContador || haySala) && hayBase) {
   }
 } else {
   const motivo =
-    hayContador || haySala
+    hayContador || haySala || hayAcceso
       ? 'falta DATABASE_URL'
-      : 'las banderas del contador y de la sala están apagadas';
+      : 'las banderas del contador, de la sala y del acceso están apagadas';
   console.log(`[${APLICACION.nombre}] sin servidor HTTP: ${motivo}.`);
 }

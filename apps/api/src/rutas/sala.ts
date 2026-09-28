@@ -3,9 +3,9 @@
  * propuesta de operación con un clic.
  *
  * Detrás de bandera y token, igual que el contador: sin `AIW_SALA_V0=1` y sin
- * `AIW_SALA_TOKEN`, las rutas no existen. La identidad todavía no existe, así que el
- * tenant y la persona llegan en cabeceras que pone el servidor de la web, nunca el
- * navegador.
+ * `AIW_SALA_TOKEN`, las rutas no existen. El tenant y la persona salen de la sesión
+ * del panel que la API valida en el servidor («Acceso al panel»); una cabecera que
+ * diga otra cosa se ignora.
  *
  * Escribir no escribe: arranca el flujo `mensajeDeSala` o señala el de la
  * propuesta. Toda escritura la hace el trabajador dentro de una actividad, con su
@@ -29,12 +29,11 @@ import {
 } from '@aiw/rooms';
 import type postgres from 'postgres';
 
+import { SIN_SESION, type ResolutorDeSesion } from '../identidad/acceso.js';
 import type { RespuestaContador } from './contador.js';
 
 export const BANDERA_SALA = 'AIW_SALA_V0';
 export const VARIABLE_TOKEN_SALA = 'AIW_SALA_TOKEN';
-export const CABECERA_TENANT_SALA = 'x-aiw-tenant';
-export const CABECERA_PERSONA = 'x-aiw-persona';
 export const PREFIJO_SALA = '/sala';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -128,6 +127,7 @@ export async function atenderSala(
   peticion: PeticionSala,
   configuracion: ConfiguracionSala | undefined,
   puerto: PuertoSala,
+  resolverSesion: ResolutorDeSesion = SIN_SESION,
 ): Promise<RespuestaContador | undefined> {
   const camino = (peticion.url ?? '/').split('?')[0] ?? '/';
   if (camino !== PREFIJO_SALA && !camino.startsWith(`${PREFIJO_SALA}/`)) return undefined;
@@ -140,13 +140,9 @@ export async function atenderSala(
       cabeceras: { ...SIN_CACHE, 'www-authenticate': 'Bearer' },
     };
   }
-  const tenantId = cabecera(peticion, CABECERA_TENANT_SALA);
-  const personaId = cabecera(peticion, CABECERA_PERSONA);
-  if (!tenantId || !UUID.test(tenantId) || !personaId || !UUID.test(personaId)) {
-    return respuesta(400, {
-      error: `Las cabeceras ${CABECERA_TENANT_SALA} y ${CABECERA_PERSONA} tienen que traer UUID.`,
-    });
-  }
+  const sesion = await resolverSesion(peticion.cabeceras);
+  if (!sesion) return respuesta(401, { error: 'Hace falta una sesión del panel.' });
+  const { tenantId, personaId } = sesion;
   if (!(await puerto.personaActiva(tenantId, personaId))) {
     return respuesta(403, { error: 'La persona no está activa en esta organización.' });
   }

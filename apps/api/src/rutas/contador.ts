@@ -13,9 +13,10 @@
  *     fijado, así que el aislamiento lo impone la política de RLS y no un `where`
  *     que alguien pueda olvidar.
  *
- * Identidad: todavía no existe («Identidad y organizaciones»). Hasta entonces, la
- * bandera exige además un token en el entorno: sin token, la ruta no existe. Así no
- * se puede desplegar por descuido una API que solo pida una cabecera de tenant.
+ * Identidad: el tenant sale de la sesión del panel que la API valida en el servidor
+ * («Acceso al panel»), nunca de una cabecera ni de un parámetro. Sin sesión, 401 y
+ * ninguna lectura. La bandera sigue exigiendo además el token en el entorno, que es
+ * lo que prueba que quien llama es el servidor del panel.
  */
 import { createHash, timingSafeEqual } from 'node:crypto';
 
@@ -30,18 +31,15 @@ import {
 } from '@aiw/ledger';
 import type postgres from 'postgres';
 
+import { SIN_SESION, type ResolutorDeSesion } from '../identidad/acceso.js';
+
 /** Bandera de funcionalidad de la rebanada. Apagada, la API no expone el contador. */
 export const BANDERA = 'AIW_CONTADOR_V0';
 
 /** Token de lectura. Sin él en el entorno, la ruta no se activa ni con la bandera. */
 export const VARIABLE_AUTORIZACION = 'AIW_CONTADOR_TOKEN';
 
-/** Cabecera con el tenant. Desaparece cuando la sesión lo decida. */
-export const CABECERA_TENANT = 'x-aiw-tenant';
-
 export const PREFIJO = '/contador';
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const LIMITE_TAREAS_POR_DEFECTO = 20;
 
@@ -140,6 +138,7 @@ export async function atenderContador(
   peticion: PeticionContador,
   configuracion: ConfiguracionContador | undefined,
   lector: LectorDelContador,
+  resolverSesion: ResolutorDeSesion = SIN_SESION,
 ): Promise<RespuestaContador | undefined> {
   const url = peticion.url ?? '/';
   const [camino = '/', consulta = ''] = url.split('?');
@@ -158,12 +157,13 @@ export async function atenderContador(
     };
   }
 
-  const tenantId = cabecera(peticion, CABECERA_TENANT)?.trim();
-  if (!tenantId || !UUID.test(tenantId)) {
-    return respuesta(400, {
-      error: `La cabecera ${CABECERA_TENANT} tiene que traer el UUID de la organización.`,
-    });
+  // El tenant es el de la sesión validada en el servidor. Una cabecera
+  // `x-aiw-tenant` que llegue se ignora: el cliente no decide qué organización ve.
+  const sesion = await resolverSesion(peticion.cabeceras);
+  if (!sesion) {
+    return respuesta(401, { error: 'Hace falta una sesión del panel.' });
   }
+  const { tenantId } = sesion;
 
   const parametros = new URLSearchParams(consulta);
   const limitePedido = Number(parametros.get('limite') ?? configuracion.limiteTareas);
