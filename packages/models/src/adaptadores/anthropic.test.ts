@@ -240,4 +240,28 @@ describe('crearAdaptadorAnthropic', () => {
     const cuerpo = servidor.peticiones[0]?.cuerpo as { model: string };
     expect(cuerpo.model).toBe('eu.anthropic.claude-sonnet-5');
   });
+
+  it('un identificador vacío no anula nada: la variable de la CI sin definir llega como cadena vacía', async () => {
+    servidor = await iniciarServidorSimulado(respuestaDeTexto('ok'));
+    const puerto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
+      papel: 'sonnet5',
+      plataforma: 'bedrock-eu',
+      configuracion: { esfuerzoPorClasePaso: { conciliacion: 'xhigh' } },
+      identificadorModelo: '',
+    });
+
+    expect(puerto.modelo).toBe('anthropic.claude-sonnet-4-6');
+    await puerto.completar({
+      clasePaso: 'conciliacion',
+      mensajes: [{ rol: 'user', contenido: 'x' }],
+    });
+
+    const cuerpo = servidor.peticiones[0]?.cuerpo as {
+      model: string;
+      output_config: { effort: string };
+    };
+    expect(cuerpo.model).toBe('anthropic.claude-sonnet-4-6');
+    // Sigue siendo el sustituto provisional: xhigh baja a high como sin anulación.
+    expect(cuerpo.output_config.effort).toBe('high');
+  });
 });

@@ -117,12 +117,12 @@ export function crearAdaptadorAnthropic(
   cliente: ClienteDeMensajes,
   opciones: OpcionesAdaptadorAnthropic,
 ): PuertoDeModelo {
-  const modelo =
-    opciones.identificadorModelo ?? identificadorDeModelo(opciones.papel, opciones.plataforma);
+  // Una variable de la CI sin definir llega como cadena vacía (`${{ vars.X }}`),
+  // no como `undefined`: vacía cuenta como no anular.
+  const anulacion = opciones.identificadorModelo?.trim() || undefined;
+  const modelo = anulacion ?? identificadorDeModelo(opciones.papel, opciones.plataforma);
   const sinPensamientoAdaptativo = SIN_PENSAMIENTO_ADAPTATIVO.has(opciones.papel);
-  const provisional =
-    opciones.identificadorModelo === undefined &&
-    esProvisional(opciones.papel, opciones.plataforma);
+  const provisional = anulacion === undefined && esProvisional(opciones.papel, opciones.plataforma);
 
   return {
     modelo,
