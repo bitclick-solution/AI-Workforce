@@ -35,7 +35,13 @@ El ejecutor es de repositorio (`bitclick-solution/AI-Workforce`), no de organiza
   - En los dos: `MemorySwapMax=0`, `CPUWeight=20` e `IOWeight=20`. Con carga, producción tiene prioridad, y la CI nunca pasa de 10 GiB entre las dos partes.
 - **Un solo ejecutor en el VPS**: los jobs corren de uno en uno. La CI completa tarda más, pero nunca compite consigo misma.
 - **Puertos que usa la CI en el host**: 5432 (PostgreSQL de servicio y del Compose), 7233, 8080, 8000, 9000, 9001, 1025, 8025 y 13001 (Compose de desarrollo, en `127.0.0.1`) y 3100 (Playwright). Ningún servicio de producción debe usar esos puertos: si alguno se reiniciara mientras la CI ocupa su puerto, no podría arrancar. Langfuse va en 13001 y no en su 3001 por defecto porque en el VPS el 3001 lo ocupa un `next-server` del host (`LANGFUSE_PORT` en el job `compose` de `ci.yml`).
-- **Limpieza**: `actions/checkout` limpia el repositorio en cada job, y una tarea `cron` de `aiw-runner` purga cada noche las imágenes, contenedores y volúmenes del Docker rootless (nunca del de producción: regla 4).
+- **Limpieza**: `actions/checkout` limpia el repositorio en cada job, y una tarea `cron` de `aiw-runner` purga cada noche las imágenes, contenedores y volúmenes del Docker rootless (nunca del de producción: regla 4). No hacen falta `ActionsRunnerHooks` por tres motivos:
+  - El ejecutor termina los procesos que un job deja vivos al acabar ese job.
+  - Los contenedores de servicio se borran con sus volúmenes al final de cada job.
+  - Cada job escribe en `_work/_temp`, que el ejecutor vacía entre jobs, y no en el `/tmp` del host.
+
+  Si un día aparecen restos entre jobs, el siguiente paso es un gancho `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` en el `.env` del ejecutor.
+
 - **Riesgo aceptado**: el ejecutor corre código de las ramas del propio equipo (agentes y Jesús) en un repositorio privado sin PR externos. El riesgo real es una dependencia de npm o una acción de terceros comprometida. Contra eso protegen el usuario sin privilegios, el Docker rootless y los límites. No hace falta una máquina virtual aparte.
 
 ## VPS · instalación
@@ -240,7 +246,7 @@ No lo montes hasta que `vps-aiw` haya pasado la CI completa en verde. Tampoco ha
 - Usa una distro de WSL2 aparte solo para la CI (Ubuntu 24.04) y **desactiva para ella la integración WSL de Docker Desktop** (Docker Desktop → Settings → Resources → WSL integration). Si no, Docker Desktop mete su propio `docker` en la distro y se repite el conflicto de la regla 1.
 - Dentro de la distro, sigue los pasos 1 a 3 del VPS con tu usuario de la distro en lugar de `aiw-runner`, cambiando las rutas `/home/aiw-runner` por tu `$HOME`. El nombre del ejecutor es `wsl-aiw`. No hace falta `svc.sh`.
 - Arráncalo solo cuando quieras prestar el portátil: `cd ~/actions-runner && ./run.sh`. Con `Ctrl+C` se para, y GitHub deja de mandarle jobs.
-- Antes de arrancarlo, mira la memoria libre. Si un job se queda sin memoria, GitHub lo repite en `vps-aiw`.
+- Antes de arrancarlo, mira la memoria libre. Si un job se queda sin memoria, falla. GitHub no lo reintenta solo en otro ejecutor: relánzalo a mano. Si antes paras `wsl-aiw`, irá a `vps-aiw`.
 
 ## Vuelta a los ejecutores de GitHub
 
