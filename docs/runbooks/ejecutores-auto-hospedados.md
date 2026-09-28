@@ -31,18 +31,33 @@ Ejecutor a nivel de **repositorio** (`bitclick-solution/AI-Workforce`), no de or
 
 Todo esto lo ejecuta Jesús por SSH en el VPS.
 
-### 1. Paquetes y usuario dedicado
+### 1. Repositorio de Docker, paquetes y usuario dedicado
+
+Ubuntu no trae `docker-ce-cli` en sus repositorios propios: hace falta añadir el repositorio oficial de Docker primero ([guía oficial](https://docs.docker.com/engine/install/ubuntu/)).
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y uidmap dbus-user-session docker-ce-cli docker-ce-rootless-extras curl
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+```
+
+No instales `docker-ce` (el demonio del sistema): con rootless no hace falta y así el `docker` del host sigue siendo solo el de los contenedores de producción existentes, sin tocar.
+
+```bash
+sudo apt-get install -y uidmap dbus-user-session docker-ce-cli docker-ce-rootless-extras
 
 sudo useradd --create-home --shell /usr/sbin/nologin aiw-runner
 sudo loginctl enable-linger aiw-runner   # deja correr sus servicios de usuario sin sesión abierta, tras reinicio incluido
 id -u aiw-runner                         # anota este número (UID): hace falta en el paso 3
 ```
-
-Si `docker-ce-cli` no está disponible (el repositorio de Docker no está añadido todavía), sigue primero la [guía oficial de instalación en Ubuntu](https://docs.docker.com/engine/install/ubuntu/) hasta el paso de añadir el repositorio APT, sin instalar `docker-ce` (el demonio del sistema) si no lo quieres para nada más.
 
 ### 2. Docker rootless para `aiw-runner`
 
