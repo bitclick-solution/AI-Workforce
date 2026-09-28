@@ -1,5 +1,10 @@
 name: CI
 
+# runs-on de cada job sale de la variable de repositorio AIW_RUNS_ON (JSON de
+# etiquetas, p. ej. '["self-hosted","linux","x64","aiw"]'); sin la variable,
+# sigue siendo ubuntu-24.04. Volver a los ejecutores de GitHub es borrar o
+# vaciar esa variable, sin tocar ningún job. Ver docs/runbooks/ejecutores-auto-hospedados.md.
+
 on:
   push:
     branches: [main]
@@ -26,7 +31,7 @@ env:
 jobs:
   lint:
     name: Lint y formato
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
@@ -35,7 +40,7 @@ jobs:
 
   typecheck:
     name: Tipos
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
@@ -43,7 +48,7 @@ jobs:
 
   test:
     name: Pruebas
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
@@ -62,7 +67,7 @@ jobs:
     if: |
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     permissions:
       id-token: write
       contents: read
@@ -89,7 +94,7 @@ jobs:
 
   base-de-datos:
     name: Base de datos
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     timeout-minutes: 20
     services:
       postgres:
@@ -119,7 +124,7 @@ jobs:
 
   flujos-durables:
     name: Flujos durables
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     timeout-minutes: 30
     services:
       postgres:
@@ -158,7 +163,7 @@ jobs:
   # desde la pestaña de acciones cuando alguien quiera volver a medir.
   base-de-datos-carga-decidir:
     name: Base de datos · carga · decidir
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     outputs:
       medir: ${{ steps.cambios.outputs.medir }}
     steps:
@@ -183,7 +188,7 @@ jobs:
 
   base-de-datos-carga:
     name: Base de datos · carga
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     needs: [base-de-datos-carga-decidir]
     if: needs.base-de-datos-carga-decidir.outputs.medir == 'true'
     timeout-minutes: 45
@@ -220,7 +225,7 @@ jobs:
 
   evals-smoke:
     name: Evals de humo
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
@@ -234,16 +239,45 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
       - run: pnpm build
 
+  # El e2e arranca @aiw/web con la fuente simulada (playwright.config.ts): solo
+  # corre de verdad si el PR toca lo que puede afectarle. Si se salta, GitHub
+  # cuenta el check "Playwright" como superado.
+  e2e-decidir:
+    name: Playwright · decidir
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
+    outputs:
+      correr: ${{ steps.cambios.outputs.correr }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: cambios
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] || [ -z "$BASE" ]; then
+            echo "correr=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$BASE" "$HEAD" | grep -qE '^(apps/web/|packages/|e2e/|playwright\.config\.ts$|pnpm-lock\.yaml$|\.github/workflows/ci\.yml$)'; then
+            echo "correr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "correr=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::El PR no toca apps/web/, packages/, e2e/ ni playwright.config.ts: se salta el e2e."
+          fi
+
   e2e:
     name: Playwright
-    runs-on: ubuntu-24.04
-    needs: [build]
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
+    needs: [build, e2e-decidir]
+    if: needs.e2e-decidir.outputs.correr == 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
@@ -259,7 +293,7 @@ jobs:
 
   secretos:
     name: Sin secretos en el repositorio
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -276,7 +310,7 @@ jobs:
 
   compose:
     name: Compose de desarrollo arranca
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
@@ -321,10 +355,39 @@ jobs:
         if: always() && steps.cambios.outputs.arrancar == 'true'
         run: node scripts/dev-down.mjs --volumes
 
+  # Construir cinco imágenes tarda lo suyo: solo si el PR toca lo que las afecta.
+  # Si se salta, GitHub cuenta el check como superado (comprobado en la protección
+  # de main), así que las cinco "Imagen <app>" siguen siendo requeribles.
+  imagenes-decidir:
+    name: Imágenes · decidir
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
+    outputs:
+      construir: ${{ steps.cambios.outputs.construir }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: cambios
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] || [ -z "$BASE" ]; then
+            echo "construir=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$BASE" "$HEAD" | grep -qE '^(apps/|packages/|deploy/docker/|pnpm-lock\.yaml$|\.github/workflows/ci\.yml$)'; then
+            echo "construir=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "construir=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::El PR no toca apps/, packages/, deploy/docker/ ni el lockfile: no se reconstruyen las imágenes."
+          fi
+
   imagenes:
     name: Imagen ${{ matrix.app }}
-    runs-on: ubuntu-24.04
-    needs: [lint, typecheck, test]
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
+    needs: [lint, typecheck, test, imagenes-decidir]
+    if: needs.imagenes-decidir.outputs.construir == 'true'
     strategy:
       fail-fast: false
       matrix:
