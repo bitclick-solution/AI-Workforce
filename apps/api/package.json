@@ -8,6 +8,7 @@
     "build": "tsup",
     "dev": "tsx watch src/main.ts",
     "demo:contador": "tsx src/demo-contador.ts",
+    "invitar-propietario": "tsx src/invitar-propietario.ts",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
@@ -19,8 +20,11 @@
     "@aiw/ledger": "workspace:*",
     "@aiw/mcp-gateway": "workspace:*",
     "@aiw/rooms": "workspace:*",
+    "@better-auth/passkey": "catalog:",
     "@modelcontextprotocol/sdk": "catalog:",
     "@temporalio/client": "catalog:",
+    "better-auth": "catalog:",
+    "nodemailer": "catalog:",
     "postgres": "catalog:"
   },
   "devDependencies": {
