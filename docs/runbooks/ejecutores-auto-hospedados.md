@@ -34,7 +34,7 @@ El ejecutor es de repositorio (`bitclick-solution/AI-Workforce`), no de organiza
   - `user-<UID>.slice` (Docker rootless y sus contenedores): `MemoryMax=6G`, `CPUQuota=400%`.
   - En los dos: `MemorySwapMax=0`, `CPUWeight=20` e `IOWeight=20`. Con carga, producción tiene prioridad, y la CI nunca pasa de 10 GiB entre las dos partes.
 - **Un solo ejecutor en el VPS**: los jobs corren de uno en uno. La CI completa tarda más, pero nunca compite consigo misma.
-- **Puertos que usa la CI en el host**: 5432 (PostgreSQL de servicio y del Compose), 7233, 8080, 8000, 9000, 9001, 1025, 8025 y 3001 (Compose de desarrollo, en `127.0.0.1`) y 3100 (Playwright). Ningún contenedor de producción debe publicar esos puertos. Si alguno lo hiciera y se reiniciara mientras la CI ocupa el puerto, no podría arrancar.
+- **Puertos que usa la CI en el host**: 5432 (PostgreSQL de servicio y del Compose), 7233, 8080, 8000, 9000, 9001, 1025, 8025 y 13001 (Compose de desarrollo, en `127.0.0.1`) y 3100 (Playwright). Ningún servicio de producción debe usar esos puertos: si alguno se reiniciara mientras la CI ocupa su puerto, no podría arrancar. Langfuse va en 13001 y no en su 3001 por defecto porque en el VPS el 3001 lo ocupa un `next-server` del host (`LANGFUSE_PORT` en el job `compose` de `ci.yml`).
 - **Limpieza**: `actions/checkout` limpia el repositorio en cada job, y una tarea `cron` de `aiw-runner` purga cada noche las imágenes, contenedores y volúmenes del Docker rootless (nunca del de producción: regla 4).
 - **Riesgo aceptado**: el ejecutor corre código de las ramas del propio equipo (agentes y Jesús) en un repositorio privado sin PR externos. El riesgo real es una dependencia de npm o una acción de terceros comprometida. Contra eso protegen el usuario sin privilegios, el Docker rootless y los límites. No hace falta una máquina virtual aparte.
 
@@ -48,7 +48,7 @@ grep aiw-runner /etc/subuid /etc/subgid
 loginctl show-user aiw-runner -p Linger
 sysctl kernel.apparmor_restrict_unprivileged_userns
 sudo ufw status verbose | head -4
-sudo ss -tlnp | grep -E ':(5432|7233|8080|8000|9000|9001|1025|8025|3001|3100)\b' || echo "puertos de la CI libres"
+sudo ss -tlnp | grep -E ':(5432|7233|8080|8000|9000|9001|1025|8025|13001|3100)\b' || echo "puertos de la CI libres"
 command -v jq gh git curl tar || true
 dpkg -l | grep -E '^ii\s+(uidmap|dbus-user-session|slirp4netns|libicu[0-9]+)\s' | awk '{print $2, $3}'
 docker --version; systemctl is-enabled docker containerd apache2
@@ -73,10 +73,10 @@ Anota `id -u aiw-runner`: es el `<UID>` de todo lo que sigue.
 
 ### Paso 1 · Paquetes del sistema, simulados primero
 
-Un solo lote: `jq` y `gh` (los usa el Revisor), `slirp4netns` (la red del Docker rootless) y las librerías y fuentes de Chromium para Playwright 1.63 en Ubuntu 24.04. Todos salen de los repositorios de Ubuntu; ninguno es de Docker.
+Un solo lote: `jq` y `gh` (los usa el Revisor), `slirp4netns` (la red del Docker rootless), `libicu74` (la necesita el propio ejecutor, que está hecho en .NET) y las librerías y fuentes de Chromium para Playwright 1.63 en Ubuntu 24.04. Todos salen de los repositorios de Ubuntu; ninguno es de Docker.
 
 ```bash
-PAQUETES="jq gh slirp4netns \
+PAQUETES="jq gh slirp4netns libicu74 \
   libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 \
   xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf"
 

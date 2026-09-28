@@ -314,6 +314,9 @@ jobs:
     name: Compose de desarrollo arranca
     runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     timeout-minutes: 20
+    env:
+      # En el VPS del ejecutor propio el 3001 lo ocupa un servicio del host.
+      LANGFUSE_PORT: '13001'
     steps:
       - uses: actions/checkout@v5
         with:
