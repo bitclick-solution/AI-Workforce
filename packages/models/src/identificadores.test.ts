@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { esProvisional, identificadorDeModelo, nombreCanonico } from './identificadores.js';
 
 describe('identificadorDeModelo', () => {
-  it('lleva el prefijo anthropic. en Bedrock, y Haiku 4.5 no tiene sustituto provisional', () => {
-    expect(identificadorDeModelo('haiku45', 'bedrock-eu')).toBe('anthropic.claude-haiku-4-5');
+  it('en Bedrock usa el perfil de inferencia UE de la integración clásica, con fecha en Haiku 4.5 (excepción del ADR-018)', () => {
+    expect(identificadorDeModelo('haiku45', 'bedrock-eu')).toBe(
+      'eu.anthropic.claude-haiku-4-5-20251001-v1:0',
+    );
   });
 
   it('va desnudo, sin fecha, en Vertex y en primera parte (ADR-018)', () => {
@@ -23,10 +25,10 @@ describe('identificadorDeModelo', () => {
     expect(nombreCanonico('opus5')).toBe('claude-opus-5');
   });
 
-  describe('sustitución provisional en Bedrock (decisión de Jesús, 2026-09-25, revisada el mismo día)', () => {
-    it('opus5 y sonnet5 se sirven los dos con Sonnet 4.6 en Bedrock: sin cuota de ningún Opus', () => {
-      expect(identificadorDeModelo('opus5', 'bedrock-eu')).toBe('anthropic.claude-sonnet-4-6');
-      expect(identificadorDeModelo('sonnet5', 'bedrock-eu')).toBe('anthropic.claude-sonnet-4-6');
+  describe('sustitución provisional en Bedrock (decisión de Jesús, 2026-09-25; camino clásico confirmado el 2026-09-28)', () => {
+    it('opus5 y sonnet5 se sirven los dos con el perfil de inferencia UE de Sonnet 4.6: sin acceso a ningún Opus ni a Sonnet 5', () => {
+      expect(identificadorDeModelo('opus5', 'bedrock-eu')).toBe('eu.anthropic.claude-sonnet-4-6');
+      expect(identificadorDeModelo('sonnet5', 'bedrock-eu')).toBe('eu.anthropic.claude-sonnet-4-6');
     });
 
     it('marca opus5 y sonnet5 como provisionales solo en Bedrock', () => {

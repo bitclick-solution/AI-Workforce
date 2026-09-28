@@ -3,12 +3,21 @@
  *
  * Las credenciales nunca se leen aquí como literales: llegan por variables de
  * entorno, y si faltan, la función falla con el nombre exacto de lo que falta en
- * vez de construir un cliente que fallaría más tarde con un error de red. Ahora
- * mismo no hay credenciales de Bedrock ni de Vertex en la UE (ver el runbook de
- * `docs/runbooks/modelos-funciones-ausentes.md`): estas funciones están listas para
- * cuando lleguen, y hasta entonces el adaptador se prueba con `clienteSimulado`.
+ * vez de construir un cliente que fallaría más tarde con un error de red.
+ *
+ * Bedrock tiene dos caminos posibles, los dos en el mismo `@anthropic-ai/bedrock-sdk`
+ * (comprobado el 2026-09-28, ver `docs/runbooks/modelos-funciones-ausentes.md`):
+ * el endpoint de Mensajes (`AnthropicBedrockMantle`, `bedrock-mantle`) y la
+ * integración clásica (`AnthropicBedrock`, `bedrock-runtime`, `InvokeModel`). Hoy la
+ * cuenta de AWS no tiene acceso a ningún modelo de Anthropic por el endpoint de
+ * Mensajes en las regiones de la UE (403 «not available for this account» en
+ * `eu-north-1`/`eu-west-1`, sin ningún modelo de Anthropic en `eu-central-1`), así
+ * que `clienteBedrockDesdeEntorno` construye el cliente clásico como vía
+ * provisional. `clienteBedrockMantleDesdeEntorno` se queda lista para cuando AWS
+ * conceda acceso: volver es cambiar qué función usa el adaptador y la tabla de
+ * `identificadores.ts`, sin promoción de versión de puesto.
  */
-import { AnthropicBedrockMantle } from '@anthropic-ai/bedrock-sdk';
+import { AnthropicBedrock, AnthropicBedrockMantle } from '@anthropic-ai/bedrock-sdk';
 import Anthropic from '@anthropic-ai/sdk';
 import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
 
@@ -24,8 +33,32 @@ function exigirVariable(entorno: Entorno, clave: string, porQue: string): string
   return valor;
 }
 
-/** Cliente real de Bedrock UE (ADR-017). Necesita `AIW_BEDROCK_REGION_UE`. */
+/**
+ * Cliente real de Bedrock UE (ADR-017), vía la integración clásica (`bedrock-runtime`,
+ * `InvokeModel`) con perfiles de inferencia UE — vía provisional mientras la cuenta
+ * no tenga acceso al endpoint de Mensajes (ver el comentario de arriba). Necesita
+ * `AIW_BEDROCK_REGION_UE`.
+ */
 export function clienteBedrockDesdeEntorno(entorno: Entorno = process.env): ClienteDeMensajes {
+  const region = exigirVariable(
+    entorno,
+    'AIW_BEDROCK_REGION_UE',
+    'la ruta de Bedrock necesita una región de la UE (ADR-017); no se infiere ninguna por defecto.',
+  );
+  return new AnthropicBedrock({ awsRegion: region });
+}
+
+/**
+ * Cliente real de Bedrock UE por el endpoint de Mensajes (`bedrock-mantle`,
+ * `CreateInference`). No lo usa hoy ningún adaptador: la cuenta no tiene acceso a
+ * ningún modelo de Anthropic por este camino en las regiones de la UE contratadas
+ * (comprobado el 2026-09-28). Se deja lista para cuando AWS conceda acceso a Sonnet 5
+ * y Opus 5 — ver «Cómo volver al endpoint de Mensajes» en
+ * `docs/runbooks/modelos-funciones-ausentes.md`. Necesita `AIW_BEDROCK_REGION_UE`.
+ */
+export function clienteBedrockMantleDesdeEntorno(
+  entorno: Entorno = process.env,
+): ClienteDeMensajes {
   const region = exigirVariable(
     entorno,
     'AIW_BEDROCK_REGION_UE',

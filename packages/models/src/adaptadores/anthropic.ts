@@ -72,11 +72,12 @@ export interface OpcionesAdaptadorAnthropic {
   configuracion: Pick<esquemas.ConfiguracionModeloPuesto, 'esfuerzoPorClasePaso'>;
   maxTokens?: number | undefined;
   /**
-   * Anula el identificador de modelo que calcula `identificadorDeModelo`. Hace
-   * falta si Bedrock, en la región contratada, solo sirve el modelo por un perfil
-   * de inferencia entre regiones (por ejemplo `eu.anthropic.claude-sonnet-4-6`)
-   * en vez del identificador bajo demanda: se confirma en el catálogo de modelos
-   * de la consola de Bedrock, no se adivina aquí.
+   * Anula el identificador de modelo que calcula `identificadorDeModelo`. Sirve
+   * para fijar, sin tocar `identificadores.ts`, un identificador distinto del de
+   * la tabla —por ejemplo, otro perfil de inferencia que confirme el catálogo de
+   * modelos de la consola de Bedrock, o el identificador del endpoint de Mensajes
+   * cuando AWS conceda acceso, antes de mover la tabla en código—: no se adivina
+   * aquí.
    */
   identificadorModelo?: string | undefined;
 }

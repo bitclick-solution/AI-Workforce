@@ -49,6 +49,7 @@ export {
 export type { ClienteDeMensajes } from './adaptadores/cliente-mensajes.js';
 export {
   clienteBedrockDesdeEntorno,
+  clienteBedrockMantleDesdeEntorno,
   clientePrimeraParteDesdeEntorno,
   clienteSimulado,
   clienteVertexDesdeEntorno,
