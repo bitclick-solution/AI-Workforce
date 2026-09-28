@@ -361,8 +361,9 @@ jobs:
         run: node scripts/dev-down.mjs --volumes
 
   # Construir cinco imágenes tarda lo suyo: solo si el PR toca lo que las afecta.
-  # Si se salta, GitHub cuenta el check como superado (comprobado en la protección
-  # de main), así que las cinco "Imagen <app>" siguen siendo requeribles.
+  # La condición va en los pasos y no en el job: un job con matriz saltado entero
+  # publica un solo check sin expandir ("Imagen ${{ matrix.app }}") y las cinco
+  # "Imagen <app>" requeridas en main no aparecerían nunca.
   imagenes-decidir:
     name: Imágenes · decidir
     runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
@@ -392,18 +393,25 @@ jobs:
     name: Imagen ${{ matrix.app }}
     runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     needs: [lint, typecheck, test, imagenes-decidir]
-    if: needs.imagenes-decidir.outputs.construir == 'true'
     strategy:
       fail-fast: false
       matrix:
         app: [api, worker, platform-agents, channels, web]
+    env:
+      CONSTRUIR: ${{ needs.imagenes-decidir.outputs.construir }}
     steps:
+      - name: Sin cambios que afecten a las imágenes
+        if: env.CONSTRUIR != 'true'
+        run: echo "::notice::El PR no toca apps/, packages/, deploy/docker/ ni el lockfile. No se construye la imagen ${{ matrix.app }}."
       - uses: actions/checkout@v5
+        if: env.CONSTRUIR == 'true'
       - uses: docker/setup-buildx-action@v3
+        if: env.CONSTRUIR == 'true'
         with:
           # Los auto-hospedados no traen buildx: se descarga en la caché de herramientas del job.
           version: ${{ runner.environment == 'self-hosted' && 'latest' || '' }}
       - name: Construir sin publicar
+        if: env.CONSTRUIR == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -415,5 +423,5 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,scope=${{ matrix.app }},mode=max
       - name: La imagen arranca
-        if: matrix.app != 'web'
+        if: env.CONSTRUIR == 'true' && matrix.app != 'web'
         run: docker run --rm aiw/${{ matrix.app }}:ci
