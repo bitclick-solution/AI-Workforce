@@ -30,5 +30,7 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: !process.env['CI'],
     timeout: 120_000,
+    // Sala v1 con la fuente simulada: sin API ni datos reales (e2e/sala-v1.spec.ts).
+    env: { AIW_SALA_V1: '1' },
   },
 });
