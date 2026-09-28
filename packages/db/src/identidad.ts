@@ -115,11 +115,18 @@ export const cuenta = pgTable(
   (t) => [index('cuenta_usuario_idx').on(t.usuarioId)],
 );
 
-/** Enlaces por correo y retos de WebAuthn. Identificador en hash y caducidad corta. */
+/**
+ * Enlaces por correo y retos de WebAuthn. Identificador en hash y caducidad corta.
+ *
+ * El `id` es texto: Better Auth reserva el un solo uso insertando una fila con un
+ * `id` derivado del token, y es la clave primaria la que hace chocar al segundo.
+ */
 export const verificacion = pgTable(
   'verificacion',
   {
-    id: idPrimario(),
+    id: text('id')
+      .primaryKey()
+      .default(sql`uuid_generar_v7()::text`),
     identificador: text('identificador').notNull(),
     valor: text('valor').notNull(),
     caducaEn: momento('caduca_en').notNull(),

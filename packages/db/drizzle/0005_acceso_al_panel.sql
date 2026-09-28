@@ -109,8 +109,11 @@ create table cuenta (
 create index cuenta_usuario_idx on cuenta (usuario_id);
 --> statement-breakpoint
 
+-- El `id` es texto y no UUID: Better Auth reserva el un solo uso de un enlace
+-- insertando una fila con un `id` derivado del token (un hash en base64url), y es
+-- la clave primaria la que hace que el segundo intento choque.
 create table verificacion (
-  id uuid primary key default uuid_generar_v7(),
+  id text primary key default uuid_generar_v7()::text,
   identificador text not null,
   valor text not null,
   caduca_en timestamptz not null,
