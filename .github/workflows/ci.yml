@@ -282,7 +282,9 @@ jobs:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
       - run: pnpm --filter @aiw/web build
-      - run: pnpm exec playwright install --with-deps chromium
+      # --with-deps llama a sudo apt-get: solo en los ejecutores de GitHub. En los
+      # auto-hospedados las librerías se instalan una vez a mano (runbook de ejecutores).
+      - run: pnpm exec playwright install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
       - run: pnpm e2e
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -395,6 +397,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
+        with:
+          # Los auto-hospedados no traen buildx: se descarga en la caché de herramientas del job.
+          version: ${{ runner.environment == 'self-hosted' && 'latest' || '' }}
       - name: Construir sin publicar
         uses: docker/build-push-action@v6
         with:
