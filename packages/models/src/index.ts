@@ -30,6 +30,7 @@ export { esfuerzoParaClase } from './esfuerzo.js';
 export type {
   CategoriaRechazo,
   HerramientaDeModelo,
+  LlamadaHerramienta,
   MensajeDeModelo,
   MensajeRol,
   PeticionDeModelo,

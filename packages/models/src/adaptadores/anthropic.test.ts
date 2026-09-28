@@ -5,10 +5,24 @@ import {
   iniciarServidorSimulado,
   respuestaDeRechazo,
   respuestaDeTexto,
+  respuestaDeUsoDeHerramienta,
   type ServidorSimulado,
 } from '../pruebas/servidor-simulado.js';
 import { crearAdaptadorAnthropic, MAX_TOKENS_POR_DEFECTO } from './anthropic.js';
 import { clienteSimulado } from './clientes.js';
+
+/** Palabras clave de JSON Schema que la API rechaza en `strict`/`output_config.format` (ver anthropic.ts). */
+const PALABRAS_CLAVE_NO_ADMITIDAS = ['minimum', 'maximum', 'multipleOf', 'minLength', 'maxLength'];
+
+/** Recorre un JSON Schema entero —incluidos `anyOf`, `items` y `$defs`— y devuelve las claves prohibidas que encuentre. */
+function palabrasClaveProhibidasEn(valor: unknown): string[] {
+  if (Array.isArray(valor)) return valor.flatMap(palabrasClaveProhibidasEn);
+  if (valor === null || typeof valor !== 'object') return [];
+  const encontradas = Object.keys(valor).filter((clave) =>
+    PALABRAS_CLAVE_NO_ADMITIDAS.includes(clave),
+  );
+  return [...encontradas, ...Object.values(valor).flatMap(palabrasClaveProhibidasEn)];
+}
 
 /**
  * El adaptador se prueba contra un servidor que reproduce la forma de la API de
@@ -263,5 +277,153 @@ describe('crearAdaptadorAnthropic', () => {
     expect(cuerpo.model).toBe('eu.anthropic.claude-sonnet-4-6');
     // Sigue siendo el sustituto provisional: xhigh baja a high como sin anulación.
     expect(cuerpo.output_config.effort).toBe('high');
+  });
+});
+
+/**
+ * Palabras clave que la API rechaza con 400 en `strict`/`output_config.format`
+ * (encontrado el 28-9 al ejecutar la prueba de integración de Bedrock UE en `main`,
+ * PR #32): `z.number().int()` las añade aunque el esquema Zod no las pida
+ * explícitamente (los límites del entero seguro de JavaScript), así que hace falta
+ * un esquema con restricciones reales — no una tubería vacía — para reproducir el
+ * fallo. Ver el comentario de cabecera de `anthropic.ts`.
+ */
+describe('esquemas estrictos: quita las palabras clave no admitidas y valida al recibir', () => {
+  let servidor: ServidorSimulado | undefined;
+
+  afterEach(async () => {
+    await servidor?.cerrar();
+    servidor = undefined;
+  });
+
+  const ESQUEMA_ANIDADO = z.object({
+    importeCentimos: z.number().int().min(1).max(1_000_00),
+    etiquetas: z.array(z.string().min(1).max(20)).min(1).max(5),
+    detalle: z.union([
+      z.object({ tipo: z.literal('exacto'), diferenciaCentimos: z.literal(0) }),
+      z.object({
+        tipo: z.literal('aproximado'),
+        diferenciaCentimos: z.number().min(-100).max(100),
+      }),
+    ]),
+  });
+
+  it('quita minimum/maximum/minLength/maxLength de la herramienta y de la salida estructurada, en todos los niveles', async () => {
+    servidor = await iniciarServidorSimulado(
+      respuestaDeTexto(JSON.stringify({ decision: 'aprobar' })),
+    );
+    const puerto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
+      papel: 'sonnet5',
+      plataforma: 'bedrock-eu',
+      configuracion: { esfuerzoPorClasePaso: {} },
+    });
+
+    await puerto.completar({
+      clasePaso: 'conciliacion',
+      mensajes: [{ rol: 'user', contenido: 'concilia' }],
+      esquemaSalida: z.object({ decision: z.enum(['aprobar', 'rechazar']) }),
+      herramientas: [
+        {
+          nombre: 'buscar_movimiento',
+          descripcion: 'Busca un movimiento bancario acotado',
+          esquemaEntrada: ESQUEMA_ANIDADO,
+        },
+      ],
+    });
+
+    const cuerpo = servidor.peticiones[0]?.cuerpo as {
+      tools: { input_schema: unknown }[];
+      output_config: { format?: { schema: unknown } };
+    };
+    expect(palabrasClaveProhibidasEn(cuerpo.tools[0]?.input_schema)).toEqual([]);
+    expect(palabrasClaveProhibidasEn(cuerpo.output_config.format?.schema)).toEqual([]);
+  });
+
+  it('valida la entrada de una llamada a herramienta contra el esquema Zod original y la expone en llamadasHerramientas', async () => {
+    const entrada = {
+      importeCentimos: 500,
+      etiquetas: ['factura'],
+      detalle: { tipo: 'exacto', diferenciaCentimos: 0 },
+    };
+    servidor = await iniciarServidorSimulado(
+      respuestaDeUsoDeHerramienta('buscar_movimiento', entrada),
+    );
+    const puerto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
+      papel: 'sonnet5',
+      plataforma: 'bedrock-eu',
+      configuracion: { esfuerzoPorClasePaso: {} },
+    });
+
+    const resultado = await puerto.completar({
+      clasePaso: 'conciliacion',
+      mensajes: [{ rol: 'user', contenido: 'busca el movimiento' }],
+      herramientas: [
+        {
+          nombre: 'buscar_movimiento',
+          descripcion: 'Busca un movimiento bancario acotado',
+          esquemaEntrada: ESQUEMA_ANIDADO,
+        },
+      ],
+    });
+
+    expect(resultado.tipo).toBe('ok');
+    if (resultado.tipo !== 'ok') return;
+    expect(resultado.llamadasHerramientas).toEqual([{ nombre: 'buscar_movimiento', entrada }]);
+  });
+
+  it('rechaza una entrada de herramienta que no cumple su esquema, aunque la API ya no lo comprueba', async () => {
+    servidor = await iniciarServidorSimulado(
+      respuestaDeUsoDeHerramienta('buscar_movimiento', {
+        // La API, sin minimum/maximum en el esquema que viajó, ya no rechaza esto: lo
+        // vuelve a comprobar el adaptador contra el esquema Zod original.
+        importeCentimos: -5,
+        etiquetas: ['factura'],
+        detalle: { tipo: 'exacto', diferenciaCentimos: 0 },
+      }),
+    );
+    const puerto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
+      papel: 'sonnet5',
+      plataforma: 'bedrock-eu',
+      configuracion: { esfuerzoPorClasePaso: {} },
+    });
+
+    await expect(
+      puerto.completar({
+        clasePaso: 'conciliacion',
+        mensajes: [{ rol: 'user', contenido: 'busca el movimiento' }],
+        herramientas: [
+          {
+            nombre: 'buscar_movimiento',
+            descripcion: 'Busca un movimiento bancario acotado',
+            esquemaEntrada: ESQUEMA_ANIDADO,
+          },
+        ],
+      }),
+    ).rejects.toThrow(/no cumple su esquema/);
+  });
+
+  it('lanza si el modelo pide una herramienta que no estaba declarada en la petición', async () => {
+    servidor = await iniciarServidorSimulado(
+      respuestaDeUsoDeHerramienta('herramienta_fantasma', { x: 1 }),
+    );
+    const puerto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
+      papel: 'sonnet5',
+      plataforma: 'bedrock-eu',
+      configuracion: { esfuerzoPorClasePaso: {} },
+    });
+
+    await expect(
+      puerto.completar({
+        clasePaso: 'conciliacion',
+        mensajes: [{ rol: 'user', contenido: 'x' }],
+        herramientas: [
+          {
+            nombre: 'buscar_movimiento',
+            descripcion: 'Busca un movimiento bancario acotado',
+            esquemaEntrada: ESQUEMA_ANIDADO,
+          },
+        ],
+      }),
+    ).rejects.toThrow(/no estaba entre las declaradas/);
   });
 });
