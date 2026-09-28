@@ -274,10 +274,14 @@ jobs:
           docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
             git /repo --log-opts="$RANGO" --redact --verbose --exit-code 1
 
-  compose:
-    name: Compose de desarrollo arranca
+  entorno-local:
+    name: Entorno local arranca desde cero
+    # Antes «Compose de desarrollo arranca» (`node scripts/dev-up.mjs`): la rebanada
+    # «Entorno local» lo sustituye por `pnpm local:arrancar`, que además migra,
+    # siembra la demo y arranca api y web. Mismo criterio de cuándo arrancar de
+    # verdad, ampliado a lo que toca ese comando.
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
         with:
@@ -293,33 +297,47 @@ jobs:
             echo "arrancar=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if git diff --name-only "$BASE" "$HEAD" | grep -qE '^(deploy/|scripts/|\.env\.example$|\.github/workflows/ci\.yml$)'; then
+          if git diff --name-only "$BASE" "$HEAD" | grep -qE '^(deploy/|scripts/|\.env\.example$|apps/(api|web|worker)/|packages/(db|rooms)/|\.github/workflows/ci\.yml$)'; then
             echo "arrancar=true" >> "$GITHUB_OUTPUT"
           else
             echo "arrancar=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::El PR no toca deploy/, scripts/, .env.example ni ci.yml: se valida el fichero pero no se arranca el Compose."
+            echo "::notice::El PR no toca lo que afecta al arranque local: se valida el fichero del Compose pero no se ejecuta pnpm local:arrancar."
           fi
       - uses: actions/setup-node@v5
+        if: steps.cambios.outputs.arrancar != 'true'
         with:
           node-version-file: .node-version
-          # Este job no instala pnpm; setup-node v5 intentaría usarlo para la caché.
+          # Solo el camino ligero: sin pnpm install, setup-node v5 no necesita cache.
           package-manager-cache: false
-      - name: Validar el fichero
+      - name: Validar el fichero del Compose (camino ligero)
+        if: steps.cambios.outputs.arrancar != 'true'
         run: |
           node scripts/dev-up.mjs --solo-env
           docker compose --env-file .env -f deploy/compose/docker-compose.dev.yml config --quiet
-      - name: Arrancar con un solo comando
+      - uses: ./.github/actions/setup
         if: steps.cambios.outputs.arrancar == 'true'
-        run: node scripts/dev-up.mjs
+      - name: Arrancar desde cero con un solo comando, en modo no interactivo
+        if: steps.cambios.outputs.arrancar == 'true'
+        run: pnpm local:arrancar -- --no-interactivo
+      - name: Las páginas de demostración responden
+        if: steps.cambios.outputs.arrancar == 'true'
+        run: |
+          set -e
+          for ruta in panel/muestras panel/sala panel/contador prototipo; do
+            curl -fsS "http://127.0.0.1:3000/$ruta" > /dev/null
+            echo "OK /$ruta"
+          done
       - name: Estado de los servicios
         if: always() && steps.cambios.outputs.arrancar == 'true'
         run: docker compose --env-file .env -f deploy/compose/docker-compose.dev.yml ps
       - name: Registros si algo falló
         if: failure() && steps.cambios.outputs.arrancar == 'true'
-        run: docker compose --env-file .env -f deploy/compose/docker-compose.dev.yml logs --tail=100
-      - name: Parar
+        run: |
+          docker compose --env-file .env -f deploy/compose/docker-compose.dev.yml logs --tail=100
+          tail -n 200 .aiw-local/registros/*.log 2>/dev/null || true
+      - name: Parar y borrar volúmenes
         if: always() && steps.cambios.outputs.arrancar == 'true'
-        run: node scripts/dev-down.mjs --volumes
+        run: pnpm local:parar -- --volumenes
 
   imagenes:
     name: Imagen ${{ matrix.app }}
