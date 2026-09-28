@@ -284,7 +284,7 @@ jobs:
       - run: pnpm --filter @aiw/web build
       # --with-deps llama a sudo apt-get: solo en los ejecutores de GitHub. En los
       # auto-hospedados las librerías se instalan una vez a mano (runbook de ejecutores).
-      - run: pnpm exec playwright install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
+      - run: pnpm exec playwright install${{ runner.environment == 'github-hosted' && ' --with-deps' || '' }} chromium
       - run: pnpm e2e
       - uses: actions/upload-artifact@v4
         if: failure()
