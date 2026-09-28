@@ -171,6 +171,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       v1: { centrifugo },
     } satisfies ConfiguracionSala;
     let puestoCobrosId = '';
+    let salaEquipoId = '';
 
     beforeAll(async () => {
       const sembrado = await sembrarFinanzas(cliente, {
@@ -183,6 +184,11 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       puestoCobrosId = sembrado.cobros.puestoId;
       // Reutiliza el tenant y la sala general de fuera: es más sencillo probar los
       // participantes sobre datos ya sembrados que montar otra organización entera.
+      // Los mensajes de sinLeer/menciones van en una sala propia, no en la general:
+      // la general de fuera los lleva con `creado_en` adelantado a propósito (para
+      // que el orden entre mensajes de la misma transacción no dependa del reloj), y
+      // esa fecha futura seguiría por delante de `marcarLeido` mucho después de que
+      // esta prueba termine.
       await conTenant(cliente, tenantId, async (tx) => {
         await tx`
           insert into sala_participante (tenant_id, sala_id, persona_id, rol)
@@ -196,6 +202,20 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
           insert into tarea (tenant_id, puesto_id, version_puesto_id, origen, estado)
           values (${tenantId}, ${sembrado.cobros.puestoId}, ${sembrado.cobros.versionPuestoId}, 'sala', 'en_curso')
         `;
+        const [equipo] = await tx<{ id: string }[]>`
+          insert into sala (tenant_id, departamento_id, ambito, nombre)
+          values (${tenantId}, ${sembrado.departamentoId}, 'departamento', 'Sala de Finanzas')
+          returning id
+        `;
+        salaEquipoId = equipo?.id ?? '';
+        await tx`
+          insert into sala_participante (tenant_id, sala_id, persona_id, rol)
+          values (${tenantId}, ${salaEquipoId}, ${personaId}, 'humano')
+        `;
+        await tx`
+          insert into mensaje (tenant_id, sala_id, autor_puesto_id, cuerpo)
+          values (${tenantId}, ${salaEquipoId}, ${sembrado.cobros.puestoId}, 'Hola @Jesús, ¿cómo va la conciliación?')
+        `;
       });
     });
 
@@ -205,14 +225,18 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       expect(await puerto.esMiembro(tenantId, salaId, uuidV7())).toBe(false);
     });
 
-    it('da la sala general con sus mensajes sin leer, y ninguno tras marcarla leída', async () => {
+    it('da la sala de equipo con sus mensajes sin leer y menciones, y ninguno tras marcarla leída', async () => {
       const puerto = puertoSala(conexion.cliente, flujos, configuracion);
-      const [general] = await puerto.salasDeLaPersona(tenantId, personaId);
-      expect(general?.ambito).toBe('general');
-      expect(general?.sinLeer).toBeGreaterThan(0);
+      const salas = await puerto.salasDeLaPersona(tenantId, personaId);
+      const equipo = salas.find((s) => s.id === salaEquipoId);
+      expect(equipo?.ambito).toBe('equipo');
+      expect(equipo?.sinLeer).toBe(1);
+      expect(equipo?.menciones).toBe(1);
 
-      await puerto.marcarLeido(tenantId, salaId, personaId);
-      const [trasLeer] = await puerto.salasDeLaPersona(tenantId, personaId);
+      await puerto.marcarLeido(tenantId, salaEquipoId, personaId);
+      const trasLeer = (await puerto.salasDeLaPersona(tenantId, personaId)).find(
+        (s) => s.id === salaEquipoId,
+      );
       expect(trasLeer?.sinLeer).toBe(0);
       expect(trasLeer?.menciones).toBe(0);
     });

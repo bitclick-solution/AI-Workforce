@@ -16,7 +16,8 @@ const ESTADOS = [
 ];
 
 async function abrirSala(page: Page, sala = 'finanzas') {
-  await page.goto(`/panel/sala?sala=${sala}`);
+  // `fuenteSimulada=1`: la interfaz sola, sin la API real conectada (lib/sala-fuente.ts).
+  await page.goto(`/panel/sala?sala=${sala}&fuenteSimulada=1`);
   await expect(page.getByTestId('sala-v1')).toBeVisible();
 }
 

@@ -106,7 +106,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       tenantId: montaje.semilla.tenantId,
       departamentoId: montaje.semilla.departamentoId,
     });
-    expect(otraVez).toEqual({ ...resultado, creada: false });
+    expect(otraVez).toEqual({ ...resultado, creada: false, anadidos: 0 });
     expect(await contar('sala.miembro_anadido')).toBe(2);
   });
 
