@@ -8,7 +8,6 @@ import {
   llamarSala,
   propuestaDelMensaje,
   salaActiva,
-  salaV1Activa,
   urlWebSocketCentrifugo,
   type MensajeDeLaSala,
 } from './sala';
@@ -130,10 +129,8 @@ describe('detalles de chat', () => {
   });
 });
 
-describe('sala v1: banderas y URL pública de Centrifugo', () => {
-  it('salaV1Activa y urlWebSocketCentrifugo leen del entorno', () => {
-    expect(salaV1Activa({})).toBe(false);
-    expect(salaV1Activa({ AIW_SALA_V1: '1' })).toBe(true);
+describe('sala v1: URL pública de Centrifugo', () => {
+  it('urlWebSocketCentrifugo lee del entorno', () => {
     expect(urlWebSocketCentrifugo({})).toBeUndefined();
     expect(urlWebSocketCentrifugo({ AIW_CENTRIFUGO_WS_URL: 'ws://x/y' })).toBe('ws://x/y');
   });

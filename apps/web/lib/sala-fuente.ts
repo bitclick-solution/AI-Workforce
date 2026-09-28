@@ -1,15 +1,18 @@
 /**
- * La fuente de datos que usa la vista de Sala v1. Hoy es la simulada.
+ * La fuente de datos que usa la vista de Sala v1.
  *
- * El segundo PR en fusionarse (el del Diseñador o el del Constructor) la conecta
- * a `crearFuenteDeSala()` de `./sala` cambiando solo `crearFuente`. La
- * conversación y quién mira siguen simulados hasta que el contrato los cubra.
+ * Segundo PR en fusionarse (el del Constructor, tras el del Diseñador): conecta
+ * `crearFuente` a `crearFuenteDeSala()` de `./sala` —la API por HTTP y
+ * Centrifugo por WebSocket, con caída a consulta periódica—, tal como decía este
+ * comentario antes de conectarla. La conversación y quién mira siguen simulados
+ * en `./sala-simulada` mientras el contrato no cubra la conversación y algo más
+ * que salas, miembros y presencia.
  */
 import type { FuenteDeSala } from './sala-contrato';
-import { crearFuenteSimulada } from './sala-simulada';
+import { crearFuenteDeSala } from './sala';
 
 export function crearFuente(): FuenteDeSala {
-  return crearFuenteSimulada();
+  return crearFuenteDeSala();
 }
 
 export {

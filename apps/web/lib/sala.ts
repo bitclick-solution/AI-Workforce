@@ -13,19 +13,15 @@ import type { CambioDeSala, FuenteDeSala, MiembroDeSala, ResumenDeSala } from '.
 
 export const BANDERA_SALA = 'AIW_SALA_V0';
 
-/** Sala v1: salas por equipo y presencia en vivo por Centrifugo (ADR-022). */
-export const BANDERA_SALA_V1 = 'AIW_SALA_V1';
-
 /**
  * Cada cuánto pregunta la vista mientras Centrifugo no haga el fan-out, y el
  * respaldo de `crearFuenteDeSala` si Centrifugo no responde o cae (criterio de
  * hecho: la sala sigue funcionando con consulta periódica).
+ *
+ * La bandera `AIW_SALA_V1` que decide si `/panel/sala` sirve esta fuente vive en
+ * `./sala-bandera` (la puso el Diseñador): un solo sitio para no repetirla.
  */
 export const SONDEO_SALA_MS = 2_000;
-
-export function salaV1Activa(entorno: Record<string, string | undefined>): boolean {
-  return entorno[BANDERA_SALA_V1] === '1' || entorno[BANDERA_SALA_V1] === 'true';
-}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
