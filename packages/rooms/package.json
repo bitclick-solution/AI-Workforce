@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./centrifugo": {
+      "types": "./src/centrifugo.ts",
+      "default": "./src/centrifugo.ts"
     }
   },
   "files": [
@@ -19,6 +23,7 @@
     "clean": "rm -rf dist coverage .turbo"
   },
   "devDependencies": {
+    "@aiw/db": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

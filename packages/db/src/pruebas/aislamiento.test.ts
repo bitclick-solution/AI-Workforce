@@ -35,6 +35,7 @@ const TABLAS_VIGILADAS = [
   'senal',
   'leccion',
   'sala',
+  'sala_participante',
   'mensaje',
   'conector',
   'autorizacion_herramientas',

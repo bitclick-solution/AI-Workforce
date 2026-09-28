@@ -18,20 +18,38 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 
 import { conTenant, uuidV7 } from '@aiw/db';
 import {
+  DURACION_ESCRIBIENDO_MS,
   FLUJO_MENSAJE_DE_SALA,
   LONGITUD_MAXIMA_MENSAJE,
   NOMBRE_SALA_GENERAL,
+  SEGUNDOS_TOKEN_CENTRIFUGO,
   SENAL_DECISION_PROPUESTA,
+  calcularEstadoDePresencia,
+  canalDeSala,
   idFlujoMensaje,
   idFlujoPropuesta,
+  mencionaAPersona,
   type CargaDecisionPropuesta,
   type EntradaMensajeDeSala,
+  type EstadoDePresencia,
 } from '@aiw/rooms';
+// Aparte del índice del paquete: usa `node:crypto` y el índice lo importa el
+// paquete de flujos de Temporal, que se empaqueta para un entorno sin él.
+import {
+  presenciaDeSala,
+  publicarEnSala,
+  tokenDeCanal,
+  tokenDeConexion,
+  type BuscadorCentrifugo,
+  type ConfiguracionCentrifugo,
+} from '@aiw/rooms/centrifugo';
 import type postgres from 'postgres';
 
 import type { RespuestaContador } from './contador.js';
 
 export const BANDERA_SALA = 'AIW_SALA_V0';
+/** Sala v1: salas por equipo y presencia en vivo por Centrifugo (ADR-022). */
+export const BANDERA_SALA_V1 = 'AIW_SALA_V1';
 export const VARIABLE_TOKEN_SALA = 'AIW_SALA_TOKEN';
 export const CABECERA_TENANT_SALA = 'x-aiw-tenant';
 export const CABECERA_PERSONA = 'x-aiw-persona';
@@ -40,9 +58,15 @@ export const PREFIJO_SALA = '/sala';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LIMITE_MENSAJES = 100;
 
+export interface ConfiguracionSalaV1 {
+  centrifugo: ConfiguracionCentrifugo;
+}
+
 export interface ConfiguracionSala {
   token: string;
   temporal: { direccion: string; espacio: string; cola: string };
+  /** Ausente sin `AIW_SALA_V1` o sin la configuración de Centrifugo: las rutas de la v1 no existen. */
+  v1?: ConfiguracionSalaV1 | undefined;
 }
 
 export function configuracionSalaDesdeEntorno(
@@ -51,6 +75,16 @@ export function configuracionSalaDesdeEntorno(
   if (entorno[BANDERA_SALA] !== '1' && entorno[BANDERA_SALA] !== 'true') return undefined;
   const token = entorno[VARIABLE_TOKEN_SALA]?.trim();
   if (!token) return undefined;
+
+  const v1Activa = entorno[BANDERA_SALA_V1] === '1' || entorno[BANDERA_SALA_V1] === 'true';
+  const urlApi = entorno['AIW_CENTRIFUGO_URL']?.trim();
+  const claveApi = entorno['CENTRIFUGO_API_KEY']?.trim();
+  const secretoHmac = entorno['CENTRIFUGO_TOKEN_HMAC_SECRET_KEY']?.trim();
+  const v1 =
+    v1Activa && urlApi && claveApi && secretoHmac
+      ? { centrifugo: { urlApi, claveApi, secretoHmac } }
+      : undefined;
+
   return {
     token,
     temporal: {
@@ -58,6 +92,7 @@ export function configuracionSalaDesdeEntorno(
       espacio: entorno['AIW_TEMPORAL_ESPACIO']?.trim() || 'default',
       cola: entorno['AIW_TEMPORAL_COLA']?.trim() || 'aiw-prueba-stack',
     },
+    ...(v1 ? { v1 } : {}),
   };
 }
 
@@ -78,6 +113,32 @@ export interface PropuestaDeLaVista {
   efectos: unknown;
 }
 
+export interface ResumenSalaDeLaVista {
+  id: string;
+  nombre: string;
+  ambito: 'general' | 'equipo';
+  sinLeer: number;
+  menciones: number;
+}
+
+export interface MiembroDeLaVista {
+  id: string;
+  tipo: 'persona' | 'agente';
+  nombre: string;
+  puesto?: string;
+  estado: EstadoDePresencia;
+  /** ISO 8601: desde cuándo está en ese estado, cuando se conoce. */
+  desde?: string;
+}
+
+export interface TokenDeSalaDeLaVista {
+  /** Token de conexión de Centrifugo. */
+  token: string;
+  /** Token de suscripción, solo para el canal de esta sala. */
+  canalToken: string;
+  canal: string;
+}
+
 /** Lo que la ruta necesita de fuera. Se inyecta para probarla sin base ni Temporal. */
 export interface PuertoSala {
   salaGeneral(tenantId: string): Promise<string | null>;
@@ -86,6 +147,23 @@ export interface PuertoSala {
   propuestas(tenantId: string, ids: string[]): Promise<PropuestaDeLaVista[]>;
   arrancarMensaje(entrada: EntradaMensajeDeSala): Promise<void>;
   decidirPropuesta(propuestaId: string, carga: CargaDecisionPropuesta): Promise<void>;
+  // Sala v1: salas por equipo y presencia en vivo (ADR-022).
+  /** Si la persona es participante de la sala. Base de la privacidad de la presencia. */
+  esMiembro(tenantId: string, salaId: string, personaId: string): Promise<boolean>;
+  /** Las salas de las que la persona es participante, con sin leer y menciones. */
+  salasDeLaPersona(tenantId: string, personaId: string): Promise<ResumenSalaDeLaVista[]>;
+  /** Los miembros de una sala, con el estado ya calculado (`@aiw/rooms`). */
+  miembrosDeSala(tenantId: string, salaId: string): Promise<MiembroDeLaVista[]>;
+  /** Marca que la persona ha leído la sala hasta ahora. */
+  marcarLeido(tenantId: string, salaId: string, personaId: string): Promise<void>;
+  /** Token de conexión y de canal, o nulo si la persona no es miembro de la sala. */
+  tokenDeSala(
+    tenantId: string,
+    salaId: string,
+    personaId: string,
+  ): Promise<TokenDeSalaDeLaVista | null>;
+  /** Publicación efímera de «escribiendo»: no se guarda ni entra en el libro. */
+  avisarEscribiendo(tenantId: string, salaId: string, personaId: string): Promise<void>;
 }
 
 export interface PeticionSala {
@@ -124,12 +202,32 @@ function campo(cuerpo: unknown, nombre: string): unknown {
     : undefined;
 }
 
+/** Sala pedida por consulta o por cuerpo; sin ella, la sala general (v0 y v1). */
+async function resolverSalaPorDefecto(
+  puerto: PuertoSala,
+  tenantId: string,
+  pedida: string | undefined,
+): Promise<string | { error: RespuestaContador }> {
+  if (pedida !== undefined) {
+    if (!UUID.test(pedida)) {
+      return { error: respuesta(400, { error: 'salaId tiene que ser un UUID.' }) };
+    }
+    return pedida;
+  }
+  const general = await puerto.salaGeneral(tenantId);
+  if (!general) {
+    return { error: respuesta(404, { error: 'La organización no tiene sala general.' }) };
+  }
+  return general;
+}
+
 export async function atenderSala(
   peticion: PeticionSala,
   configuracion: ConfiguracionSala | undefined,
   puerto: PuertoSala,
 ): Promise<RespuestaContador | undefined> {
-  const camino = (peticion.url ?? '/').split('?')[0] ?? '/';
+  const [caminoSinConsulta = '/', consulta = ''] = (peticion.url ?? '/').split('?');
+  const camino = caminoSinConsulta;
   if (camino !== PREFIJO_SALA && !camino.startsWith(`${PREFIJO_SALA}/`)) return undefined;
   if (!configuracion) return undefined;
 
@@ -150,11 +248,13 @@ export async function atenderSala(
   if (!(await puerto.personaActiva(tenantId, personaId))) {
     return respuesta(403, { error: 'La persona no está activa en esta organización.' });
   }
-  const salaId = await puerto.salaGeneral(tenantId);
-  if (!salaId) return respuesta(404, { error: 'La organización no tiene sala general.' });
 
   if (camino === PREFIJO_SALA) {
     if (peticion.metodo !== 'GET') return respuesta(405, { error: 'La sala se lee con GET.' });
+    const pedida = new URLSearchParams(consulta).get('salaId') ?? undefined;
+    const resuelta = await resolverSalaPorDefecto(puerto, tenantId, pedida);
+    if (typeof resuelta !== 'string') return resuelta.error;
+    const salaId = resuelta;
     const mensajes = await puerto.mensajes(tenantId, salaId, LIMITE_MENSAJES);
     const ids = [
       ...new Set(
@@ -179,6 +279,14 @@ export async function atenderSala(
         error: `El mensaje pasa de ${LONGITUD_MAXIMA_MENSAJE} caracteres.`,
       });
     }
+    const salaIdPedida = campo(peticion.cuerpo, 'salaId');
+    const resuelta = await resolverSalaPorDefecto(
+      puerto,
+      tenantId,
+      typeof salaIdPedida === 'string' ? salaIdPedida : undefined,
+    );
+    if (typeof resuelta !== 'string') return resuelta.error;
+    const salaId = resuelta;
     const mensajeId = uuidV7();
     await puerto.arrancarMensaje({ tenantId, salaId, mensajeId, personaId, texto: texto.trim() });
     return respuesta(202, { mensajeId });
@@ -203,6 +311,70 @@ export async function atenderSala(
     return respuesta(202, { propuestaId, sentido });
   }
 
+  // Sala v1: sin AIW_SALA_V1 o sin la configuración de Centrifugo, ninguna de
+  // estas rutas existe (mismo criterio que el resto de la sala sin bandera).
+  if (configuracion.v1) {
+    if (camino === `${PREFIJO_SALA}/salas`) {
+      if (peticion.metodo !== 'GET') return respuesta(405, { error: 'Las salas se leen con GET.' });
+      const salas = await puerto.salasDeLaPersona(tenantId, personaId);
+      return respuesta(200, { salas });
+    }
+
+    const miembros = /^\/sala\/([^/]+)\/miembros$/.exec(camino);
+    if (miembros) {
+      const salaId = miembros[1] ?? '';
+      if (!UUID.test(salaId)) return respuesta(400, { error: 'salaId tiene que ser un UUID.' });
+      if (peticion.metodo !== 'GET') {
+        return respuesta(405, { error: 'Los miembros se leen con GET.' });
+      }
+      if (!(await puerto.esMiembro(tenantId, salaId, personaId))) {
+        return respuesta(403, {
+          error: 'Solo los miembros de la sala ven su presencia.',
+        });
+      }
+      return respuesta(200, { miembros: await puerto.miembrosDeSala(tenantId, salaId) });
+    }
+
+    const token = /^\/sala\/([^/]+)\/token$/.exec(camino);
+    if (token) {
+      const salaId = token[1] ?? '';
+      if (!UUID.test(salaId)) return respuesta(400, { error: 'salaId tiene que ser un UUID.' });
+      if (peticion.metodo !== 'POST')
+        return respuesta(405, { error: 'El token se pide con POST.' });
+      const emitido = await puerto.tokenDeSala(tenantId, salaId, personaId);
+      if (!emitido) {
+        return respuesta(403, { error: 'Solo los miembros de la sala reciben su token.' });
+      }
+      return respuesta(200, { ...emitido });
+    }
+
+    const leido = /^\/sala\/([^/]+)\/leido$/.exec(camino);
+    if (leido) {
+      const salaId = leido[1] ?? '';
+      if (!UUID.test(salaId)) return respuesta(400, { error: 'salaId tiene que ser un UUID.' });
+      if (peticion.metodo !== 'POST') return respuesta(405, { error: 'Se marca leído con POST.' });
+      if (!(await puerto.esMiembro(tenantId, salaId, personaId))) {
+        return respuesta(403, { error: 'Solo un miembro marca la sala como leída.' });
+      }
+      await puerto.marcarLeido(tenantId, salaId, personaId);
+      return respuesta(200, { ok: true });
+    }
+
+    const escribiendo = /^\/sala\/([^/]+)\/escribiendo$/.exec(camino);
+    if (escribiendo) {
+      const salaId = escribiendo[1] ?? '';
+      if (!UUID.test(salaId)) return respuesta(400, { error: 'salaId tiene que ser un UUID.' });
+      if (peticion.metodo !== 'POST') {
+        return respuesta(405, { error: 'Se avisa de que se escribe con POST.' });
+      }
+      if (!(await puerto.esMiembro(tenantId, salaId, personaId))) {
+        return respuesta(403, { error: 'Solo un miembro avisa de que está escribiendo.' });
+      }
+      await puerto.avisarEscribiendo(tenantId, salaId, personaId);
+      return respuesta(200, { ok: true });
+    }
+  }
+
   return respuesta(404, { error: 'Esa ruta de la sala no existe.' });
 }
 
@@ -217,7 +389,21 @@ export function puertoSala(
   cliente: postgres.Sql,
   flujos: ClienteDeFlujos,
   configuracion: ConfiguracionSala,
+  /** Cliente HTTP de Centrifugo. Por defecto, `fetch`; las pruebas inyectan el suyo. */
+  buscarCentrifugo: BuscadorCentrifugo = fetch as unknown as BuscadorCentrifugo,
 ): PuertoSala {
+  // Última actividad conocida de cada persona, solo en memoria de este proceso: la
+  // presencia de las personas no se guarda, ni en PostgreSQL ni en el libro (ADR-022,
+  // «fuera de alcance»). Se pierde al reiniciar la API, que es justo lo que toca:
+  // nadie queda «en la sala» para siempre por culpa de una fila que sobrevivió.
+  const ultimaActividadPorPersona = new Map<string, number>();
+  const claveActividad = (tenantId: string, personaId: string) => `${tenantId}:${personaId}`;
+  const registrarActividad = (tenantId: string, personaId: string): void => {
+    ultimaActividadPorPersona.set(claveActividad(tenantId, personaId), Date.now());
+  };
+  const ultimaActividad = (tenantId: string, personaId: string): number | null =>
+    ultimaActividadPorPersona.get(claveActividad(tenantId, personaId)) ?? null;
+
   return {
     async salaGeneral(tenantId) {
       const [fila] = await conTenant(
@@ -328,6 +514,233 @@ export function puertoSala(
     },
     async decidirPropuesta(propuestaId, carga) {
       await flujos.senalar(idFlujoPropuesta(propuestaId), SENAL_DECISION_PROPUESTA, carga);
+    },
+
+    // Sala v1: salas por equipo y presencia en vivo (ADR-022).
+
+    async esMiembro(tenantId, salaId, personaId) {
+      const [fila] = await conTenant(
+        cliente,
+        tenantId,
+        (tx) => tx<{ existe: boolean }[]>`
+        select exists(
+          select 1 from sala_participante
+          where tenant_id = ${tenantId} and sala_id = ${salaId} and persona_id = ${personaId}
+        ) as existe
+      `,
+      );
+      return fila?.existe === true;
+    },
+
+    async salasDeLaPersona(tenantId, personaId) {
+      registrarActividad(tenantId, personaId);
+      const [persona] = await conTenant(
+        cliente,
+        tenantId,
+        (tx) => tx<{ nombre: string }[]>`
+        select nombre from persona where tenant_id = ${tenantId} and id = ${personaId}
+      `,
+      );
+      const nombrePersona = persona?.nombre ?? '';
+
+      const salas = await conTenant(
+        cliente,
+        tenantId,
+        (tx) => tx<
+          {
+            id: string;
+            nombre: string;
+            departamento_id: string | null;
+            ultima_lectura_en: Date | null;
+          }[]
+        >`
+        select s.id, s.nombre, s.departamento_id, sp.ultima_lectura_en
+        from sala_participante sp
+        join sala s on s.tenant_id = sp.tenant_id and s.id = sp.sala_id
+        where sp.tenant_id = ${tenantId} and sp.persona_id = ${personaId}
+        order by s.nombre
+      `,
+      );
+
+      const resumenes: ResumenSalaDeLaVista[] = [];
+      for (const sala of salas) {
+        const sinLeer = await conTenant(
+          cliente,
+          tenantId,
+          (tx) => tx<{ cuerpo: string }[]>`
+          select cuerpo from mensaje
+          where tenant_id = ${tenantId} and sala_id = ${sala.id}
+            and autor_persona_id is distinct from ${personaId}
+            and (${sala.ultima_lectura_en}::timestamptz is null or creado_en > ${sala.ultima_lectura_en})
+        `,
+        );
+        resumenes.push({
+          id: sala.id,
+          nombre: sala.nombre,
+          ambito: sala.departamento_id ? 'equipo' : 'general',
+          sinLeer: sinLeer.length,
+          menciones: sinLeer.filter((m) => mencionaAPersona(nombrePersona, m.cuerpo)).length,
+        });
+      }
+      return resumenes;
+    },
+
+    async miembrosDeSala(tenantId, salaId) {
+      const filas = await conTenant(
+        cliente,
+        tenantId,
+        (tx) => tx<
+          {
+            persona_id: string | null;
+            puesto_id: string | null;
+            persona_nombre: string | null;
+            puesto_nombre: string | null;
+            puesto_estado: string | null;
+          }[]
+        >`
+        select sp.persona_id, sp.puesto_id, pe.nombre as persona_nombre,
+          pu.nombre as puesto_nombre, pu.estado as puesto_estado
+        from sala_participante sp
+        left join persona pe on pe.tenant_id = sp.tenant_id and pe.id = sp.persona_id
+        left join puesto pu on pu.tenant_id = sp.tenant_id and pu.id = sp.puesto_id
+        where sp.tenant_id = ${tenantId} and sp.sala_id = ${salaId}
+        order by coalesce(pe.nombre, pu.nombre)
+      `,
+      );
+
+      const puestoIds = filas.map((f) => f.puesto_id).filter((id): id is string => id !== null);
+
+      const trabajando = new Set<string>(
+        puestoIds.length === 0
+          ? []
+          : (
+              await conTenant(
+                cliente,
+                tenantId,
+                (tx) => tx<{ puesto_id: string }[]>`
+              select distinct puesto_id from tarea
+              where tenant_id = ${tenantId} and puesto_id in ${tx(puestoIds)} and estado = 'en_curso'
+            `,
+              )
+            ).map((f) => f.puesto_id),
+      );
+      // Pendiente: la aprobación no tiene fila en decision_aprobacion todavía (ADR-005).
+      const necesitan = new Set<string>(
+        puestoIds.length === 0
+          ? []
+          : (
+              await conTenant(
+                cliente,
+                tenantId,
+                (tx) => tx<{ puesto_id: string }[]>`
+              select distinct t.puesto_id
+              from aprobacion a
+              join tarea t on t.tenant_id = a.tenant_id and t.id = a.tarea_id
+              left join decision_aprobacion d on d.tenant_id = a.tenant_id and d.aprobacion_id = a.id
+              where a.tenant_id = ${tenantId} and t.puesto_id in ${tx(puestoIds)} and d.id is null
+            `,
+              )
+            ).map((f) => f.puesto_id),
+      );
+
+      // Sin Centrifugo o con Centrifugo caído, ninguna persona se ve conectada: se
+      // pintan como «añadidas» en vez de romper la sala (criterio de hecho: la sala
+      // sigue funcionando con consulta periódica).
+      let conectadas = new Set<string>();
+      if (configuracion.v1) {
+        try {
+          const presencia = await presenciaDeSala(
+            configuracion.v1.centrifugo,
+            tenantId,
+            salaId,
+            buscarCentrifugo,
+          );
+          conectadas = new Set(presencia.map((p) => p.personaId));
+        } catch {
+          conectadas = new Set();
+        }
+      }
+
+      const ahoraMs = Date.now();
+      return filas.map((fila): MiembroDeLaVista => {
+        if (fila.puesto_id) {
+          const estado = calcularEstadoDePresencia({
+            tipo: 'agente',
+            estadoPuesto: fila.puesto_estado ?? 'activo',
+            tareaEnCurso: trabajando.has(fila.puesto_id),
+            aprobacionPendiente: necesitan.has(fila.puesto_id),
+            ahoraMs,
+          });
+          return { id: fila.puesto_id, tipo: 'agente', nombre: fila.puesto_nombre ?? '', estado };
+        }
+        const personaId = fila.persona_id ?? '';
+        const estado = calcularEstadoDePresencia({
+          tipo: 'persona',
+          conectada: conectadas.has(personaId),
+          ultimaActividadMs: ultimaActividad(tenantId, personaId),
+          ahoraMs,
+        });
+        return { id: personaId, tipo: 'persona', nombre: fila.persona_nombre ?? '', estado };
+      });
+    },
+
+    async marcarLeido(tenantId, salaId, personaId) {
+      registrarActividad(tenantId, personaId);
+      await conTenant(
+        cliente,
+        tenantId,
+        (tx) => tx`
+        update sala_participante set ultima_lectura_en = clock_timestamp(), actualizado_en = clock_timestamp()
+        where tenant_id = ${tenantId} and sala_id = ${salaId} and persona_id = ${personaId}
+      `,
+      );
+    },
+
+    async tokenDeSala(tenantId, salaId, personaId) {
+      const [fila] = await conTenant(
+        cliente,
+        tenantId,
+        (tx) => tx<{ existe: boolean }[]>`
+        select exists(
+          select 1 from sala_participante
+          where tenant_id = ${tenantId} and sala_id = ${salaId} and persona_id = ${personaId}
+        ) as existe
+      `,
+      );
+      if (fila?.existe !== true) return null;
+      registrarActividad(tenantId, personaId);
+      if (!configuracion.v1) throw new Error('Sala v1 no está configurada.');
+      const { secretoHmac } = configuracion.v1.centrifugo;
+      return {
+        token: tokenDeConexion(secretoHmac, {
+          personaId,
+          tenantId,
+          ttlSegundos: SEGUNDOS_TOKEN_CENTRIFUGO,
+        }),
+        canalToken: tokenDeCanal(secretoHmac, {
+          personaId,
+          tenantId,
+          salaId,
+          ttlSegundos: SEGUNDOS_TOKEN_CENTRIFUGO,
+        }),
+        canal: canalDeSala(tenantId, salaId),
+      };
+    },
+
+    async avisarEscribiendo(tenantId, salaId, personaId) {
+      registrarActividad(tenantId, personaId);
+      if (!configuracion.v1) return;
+      await publicarEnSala(
+        configuracion.v1.centrifugo,
+        tenantId,
+        salaId,
+        {
+          tipo: 'escribiendo',
+          personaId,
+          hasta: new Date(Date.now() + DURACION_ESCRIBIENDO_MS).toISOString(),
+        },
+        buscarCentrifugo,
+      );
     },
   };
 }

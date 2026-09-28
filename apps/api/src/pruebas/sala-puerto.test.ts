@@ -18,6 +18,7 @@ import { NOMBRE_SALA_GENERAL } from '@aiw/rooms';
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import type { BuscadorCentrifugo } from '@aiw/rooms/centrifugo';
 import { puertoSala, type ClienteDeFlujos, type ConfiguracionSala } from '../rutas/sala';
 
 const TITULO = HAY_BASE_DE_DATOS
@@ -157,5 +158,112 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       { nombre: 'mensajeDeSala', id: `sala-mensaje-${mensajeId}`, cola: 'cola-de-la-sala' },
     ]);
     expect(senales).toEqual([{ id: `propuesta-${propuestaId}`, senal: 'decisionDePropuesta' }]);
+  });
+
+  describe('sala v1: salas por equipo y presencia en vivo', () => {
+    const centrifugo = {
+      urlApi: 'http://centrifugo.local:8000',
+      claveApi: 'clave-de-prueba',
+      secretoHmac: uuidV7(),
+    };
+    const configuracionV1 = {
+      ...configuracion,
+      v1: { centrifugo },
+    } satisfies ConfiguracionSala;
+    let puestoCobrosId = '';
+
+    beforeAll(async () => {
+      const sembrado = await sembrarFinanzas(cliente, {
+        nombre: `Sala puerto v1 ${uuidV7()}`,
+        conector: 'demo-cobros',
+        referenciaSecreto: 'env:DEMO_CONECTOR_SECRETO',
+        listaBlanca: ['listar_facturas_vencidas'],
+        soloCobros: true,
+      });
+      puestoCobrosId = sembrado.cobros.puestoId;
+      // Reutiliza el tenant y la sala general de fuera: es más sencillo probar los
+      // participantes sobre datos ya sembrados que montar otra organización entera.
+      await conTenant(cliente, tenantId, async (tx) => {
+        await tx`
+          insert into sala_participante (tenant_id, sala_id, persona_id, rol)
+          values (${tenantId}, ${salaId}, ${personaId}, 'humano')
+        `;
+        await tx`
+          insert into sala_participante (tenant_id, sala_id, puesto_id, rol)
+          values (${tenantId}, ${salaId}, ${sembrado.cobros.puestoId}, 'agente')
+        `;
+        await tx`
+          insert into tarea (tenant_id, puesto_id, version_puesto_id, origen, estado)
+          values (${tenantId}, ${sembrado.cobros.puestoId}, ${sembrado.cobros.versionPuestoId}, 'sala', 'en_curso')
+        `;
+      });
+    });
+
+    it('esMiembro distingue a un participante de quien no lo es', async () => {
+      const puerto = puertoSala(conexion.cliente, flujos, configuracion);
+      expect(await puerto.esMiembro(tenantId, salaId, personaId)).toBe(true);
+      expect(await puerto.esMiembro(tenantId, salaId, uuidV7())).toBe(false);
+    });
+
+    it('da la sala general con sus mensajes sin leer, y ninguno tras marcarla leída', async () => {
+      const puerto = puertoSala(conexion.cliente, flujos, configuracion);
+      const [general] = await puerto.salasDeLaPersona(tenantId, personaId);
+      expect(general?.ambito).toBe('general');
+      expect(general?.sinLeer).toBeGreaterThan(0);
+
+      await puerto.marcarLeido(tenantId, salaId, personaId);
+      const [trasLeer] = await puerto.salasDeLaPersona(tenantId, personaId);
+      expect(trasLeer?.sinLeer).toBe(0);
+      expect(trasLeer?.menciones).toBe(0);
+    });
+
+    it('sin Centrifugo, un agente con tarea en curso está trabajando y la persona sale añadida', async () => {
+      const puerto = puertoSala(conexion.cliente, flujos, configuracion);
+      const miembros = await puerto.miembrosDeSala(tenantId, salaId);
+      const cobros = miembros.find((m) => m.id === puestoCobrosId);
+      expect(cobros?.estado).toBe('trabajando');
+      const humana = miembros.find((m) => m.id === personaId);
+      // Sin `v1` no hay presencia de Centrifugo que consultar: nadie se ve conectado.
+      expect(humana?.estado).toBe('anadido');
+    });
+
+    it('con Centrifugo, la persona conectada se ve en la sala', async () => {
+      const buscar: BuscadorCentrifugo = async () =>
+        new Response(JSON.stringify({ result: { presence: { c1: { user: personaId } } } }), {
+          status: 200,
+        });
+      const puerto = puertoSala(conexion.cliente, flujos, configuracionV1, buscar);
+      const miembros = await puerto.miembrosDeSala(tenantId, salaId);
+      expect(miembros.find((m) => m.id === personaId)?.estado).toBe('en-la-sala');
+    });
+
+    it('si Centrifugo cae, la sala sigue funcionando sin presencia en vivo', async () => {
+      const buscar: BuscadorCentrifugo = async () => {
+        throw new Error('Centrifugo no responde');
+      };
+      const puerto = puertoSala(conexion.cliente, flujos, configuracionV1, buscar);
+      const miembros = await puerto.miembrosDeSala(tenantId, salaId);
+      expect(miembros.find((m) => m.id === personaId)?.estado).toBe('anadido');
+    });
+
+    it('emite el token de conexión y de canal solo a un miembro de la sala', async () => {
+      const buscar: BuscadorCentrifugo = async () => new Response('{}', { status: 200 });
+      const puerto = puertoSala(conexion.cliente, flujos, configuracionV1, buscar);
+      const emitido = await puerto.tokenDeSala(tenantId, salaId, personaId);
+      expect(emitido?.canal).toBe(`sala:${tenantId}:${salaId}`);
+      expect(await puerto.tokenDeSala(tenantId, salaId, uuidV7())).toBeNull();
+    });
+
+    it('avisa de que se escribe con una llamada al API de Centrifugo, sin guardar nada', async () => {
+      const llamadas: unknown[] = [];
+      const buscar: BuscadorCentrifugo = async (url, opciones) => {
+        llamadas.push({ url, cuerpo: JSON.parse(opciones.body) });
+        return new Response('{}', { status: 200 });
+      };
+      const puerto = puertoSala(conexion.cliente, flujos, configuracionV1, buscar);
+      await puerto.avisarEscribiendo(tenantId, salaId, personaId);
+      expect(llamadas).toHaveLength(1);
+      expect((llamadas[0] as { cuerpo: { method: string } }).cuerpo.method).toBe('publish');
+    });
   });
 });

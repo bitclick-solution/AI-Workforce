@@ -248,3 +248,42 @@ export async function propuestaDeOperacion(
     return { estado: 'rechazada', puestoId: null };
   }
 }
+
+// Sala v1: salas por equipo y presencia en vivo (ADR-022).
+
+const equipo = proxyActivities<Pick<Actividades, 'asegurarSalaDeEquipo'>>({
+  startToCloseTimeout: '1 minute',
+  retry: {
+    initialInterval: '500 milliseconds',
+    backoffCoefficient: 2,
+    maximumInterval: '10 seconds',
+    maximumAttempts: 120,
+  },
+});
+
+export interface EntradaSincronizarSalaDeEquipo {
+  tenantId: string;
+  departamentoId: string;
+}
+
+export interface ResultadoSincronizarSalaDeEquipo {
+  salaId: string;
+  creada: boolean;
+  anadidos: number;
+  quitados: number;
+}
+
+/**
+ * Crea la sala del departamento si falta y sincroniza sus participantes con el
+ * equipo (criterio «la sala se crea con el equipo»). Un flujo por departamento
+ * (`idFlujoSincronizarEquipo`): repetirlo con el mismo departamento no duplica
+ * miembros ni entradas de auditoría. Es el enganche a partir del cual la futura
+ * operación «crear departamento» (todavía sin actividad propia en esta base de
+ * código) mantendrá su sala al día; hasta que exista, esta rebanada la arranca
+ * explícitamente desde `apps/api` y desde la demostración.
+ */
+export async function sincronizarSalaDeEquipo(
+  entrada: EntradaSincronizarSalaDeEquipo,
+): Promise<ResultadoSincronizarSalaDeEquipo> {
+  return equipo.asegurarSalaDeEquipo(entrada);
+}

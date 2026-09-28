@@ -14,12 +14,24 @@
 /** Bandera de funcionalidad de esta rebanada. `1` la enciende. */
 export const BANDERA = 'AIW_PRUEBA_STACK';
 
+export interface ConfiguracionCentrifugoDelTrabajador {
+  urlApi: string;
+  claveApi: string;
+  secretoHmac: string;
+}
+
 export interface Configuracion {
   encendida: boolean;
   urlBaseDeDatos: string | undefined;
   temporal: { direccion: string; espacio: string; cola: string };
   /** Referencia del secreto del conector de demostración, solo informativa. */
   conectorDemoConfigurado: boolean;
+  /**
+   * Sala v1: reparto de mensajes por Centrifugo (ADR-022). Ausente sin las tres
+   * variables completas: sin ella, el trabajador escribe igual en PostgreSQL y
+   * solo se queda sin avisar en vivo, así que no es un requisito de arranque.
+   */
+  centrifugo: ConfiguracionCentrifugoDelTrabajador | undefined;
 }
 
 /**
@@ -47,6 +59,9 @@ export function leerConfiguracion(
   entorno: Record<string, string | undefined> = process.env,
 ): Configuracion {
   const url = entorno['DATABASE_URL'];
+  const urlApiCentrifugo = entorno['AIW_CENTRIFUGO_URL']?.trim();
+  const claveApiCentrifugo = entorno['CENTRIFUGO_API_KEY']?.trim();
+  const secretoHmacCentrifugo = entorno['CENTRIFUGO_TOKEN_HMAC_SECRET_KEY']?.trim();
   return {
     encendida: entorno[BANDERA] === '1',
     urlBaseDeDatos: url === undefined || url === '' ? undefined : url,
@@ -57,6 +72,14 @@ export function leerConfiguracion(
     },
     conectorDemoConfigurado:
       entorno['DEMO_CONECTOR_SECRETO'] !== undefined && entorno['DEMO_CONECTOR_SECRETO'] !== '',
+    centrifugo:
+      urlApiCentrifugo && claveApiCentrifugo && secretoHmacCentrifugo
+        ? {
+            urlApi: urlApiCentrifugo,
+            claveApi: claveApiCentrifugo,
+            secretoHmac: secretoHmacCentrifugo,
+          }
+        : undefined,
   };
 }
 
