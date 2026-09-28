@@ -1,4 +1,8 @@
-/** Proxy de escritura en la sala: solo pasa el texto; la persona la pone el servidor. */
+/**
+ * Proxy de escritura en la sala: solo pasa el texto y la cookie de sesión; la
+ * persona la decide la API a partir de la sesión.
+ */
+import { cookiesDelAcceso } from '../../../../lib/acceso';
 import { configuracionSala, llamarSala } from '../../../../lib/sala';
 
 export const dynamic = 'force-dynamic';
@@ -17,8 +21,13 @@ export async function POST(peticion: Request): Promise<Response> {
     });
   }
   const leido = (await peticion.json().catch(() => ({}))) as { texto?: unknown };
-  const { estado, cuerpo } = await llamarSala(configuracion, 'POST', '/sala/mensajes', fetch, {
-    texto: typeof leido.texto === 'string' ? leido.texto : '',
-  });
+  const { estado, cuerpo } = await llamarSala(
+    configuracion,
+    'POST',
+    '/sala/mensajes',
+    fetch,
+    cookiesDelAcceso(peticion.headers.get('cookie')),
+    { texto: typeof leido.texto === 'string' ? leido.texto : '' },
+  );
   return new Response(JSON.stringify(cuerpo), { status: estado, headers: SIN_CACHE });
 }

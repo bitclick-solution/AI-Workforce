@@ -19,14 +19,13 @@ import {
   type ConfiguracionPanel,
 } from './contador';
 
-const TENANT = '01929f00-0000-7000-8000-0000000000d1';
 const CLAVE = 'valor-de-prueba-del-panel';
+const COOKIE = 'aiw.session_token=de-la-prueba';
 
 const ENTORNO = {
   [BANDERA_PANEL]: '1',
   AIW_API_URL: 'http://127.0.0.1:3002',
   AIW_CONTADOR_TOKEN: CLAVE,
-  AIW_PANEL_TENANT: TENANT,
 };
 
 const CONSUMO = {
@@ -79,20 +78,18 @@ describe('bandera del panel', () => {
     expect(configuracionPanel({ ...ENTORNO, [BANDERA_PANEL]: '0' })).toBeUndefined();
   });
 
-  it('encendida pero sin token, sin API o sin tenant, tampoco', () => {
+  it('encendida pero sin token o sin API, tampoco', () => {
     expect(configuracionPanel({ ...ENTORNO, AIW_CONTADOR_TOKEN: '' })).toBeUndefined();
     expect(configuracionPanel({ ...ENTORNO, AIW_API_URL: '  ' })).toBeUndefined();
-    expect(configuracionPanel({ ...ENTORNO, AIW_PANEL_TENANT: undefined })).toBeUndefined();
   });
 
-  it('un tenant que no es UUID no se manda a la API', () => {
-    expect(configuracionPanel({ ...ENTORNO, AIW_PANEL_TENANT: 'alfa' })).toBeUndefined();
-  });
-
-  it('con todo en su sitio, la dirección de la API pierde la barra final', () => {
-    const configuracion = configuracionPanel({ ...ENTORNO, AIW_API_URL: 'http://api:3002/' });
-    expect(configuracion?.apiUrl).toBe('http://api:3002');
-    expect(configuracion?.tenantId).toBe(TENANT);
+  it('con todo en su sitio, la dirección de la API pierde la barra final y no hay tenant', () => {
+    const configuracion = configuracionPanel({
+      ...ENTORNO,
+      AIW_API_URL: 'http://api:3002/',
+      AIW_PANEL_TENANT: '01929f00-0000-7000-8000-0000000000d1',
+    });
+    expect(configuracion).toEqual({ apiUrl: 'http://api:3002', token: CLAVE });
   });
 });
 
@@ -100,12 +97,11 @@ describe('leerContador', () => {
   const configuracion: ConfiguracionPanel = {
     apiUrl: 'http://127.0.0.1:3002',
     token: CLAVE,
-    tenantId: TENANT,
   };
 
-  it('lee las tres rutas con el token y el tenant en las cabeceras', async () => {
+  it('lee las tres rutas con el token y la cookie de sesión, sin tenant', async () => {
     const buscar = buscadorFeliz();
-    const datos = await leerContador(configuracion, buscar);
+    const datos = await leerContador(configuracion, buscar, COOKIE);
     expect(datos.consumo.tareas).toBe(4);
     expect(datos.tareas[0]?.delegaciones).toBe(1);
     expect(datos.porEstado['en_curso']).toBe(4);
@@ -113,28 +109,29 @@ describe('leerContador', () => {
     expect(buscar).toHaveBeenCalledTimes(3);
     for (const [, opciones] of buscar.mock.calls) {
       expect(opciones.headers['authorization']).toBe(`Bearer ${CLAVE}`);
-      expect(opciones.headers['x-aiw-tenant']).toBe(TENANT);
+      expect(opciones.headers['cookie']).toBe(COOKIE);
+      expect(opciones.headers['x-aiw-tenant']).toBeUndefined();
     }
   });
 
   it('un 401 se cuenta como error, no como panel a cero', async () => {
     const buscar = vi.fn(async () => respuesta({ error: 'no' }, 401));
-    await expect(leerContador(configuracion, buscar)).rejects.toThrow(/respondió 401/);
+    await expect(leerContador(configuracion, buscar, COOKIE)).rejects.toThrow(/respondió 401/);
   });
 
   it('un 500 también', async () => {
     const buscar = vi.fn(async () => respuesta({ error: 'no' }, 500));
-    await expect(leerContador(configuracion, buscar)).rejects.toThrow(/respondió 500/);
+    await expect(leerContador(configuracion, buscar, COOKIE)).rejects.toThrow(/respondió 500/);
   });
 
   it('si la API no responde, el mensaje no lleva su dirección interna', async () => {
     const buscar = vi.fn(async () => {
       throw new Error('ECONNREFUSED http://api-interna:3002');
     });
-    await expect(leerContador(configuracion, buscar)).rejects.toThrow(
+    await expect(leerContador(configuracion, buscar, COOKIE)).rejects.toThrow(
       'La API del contador no responde.',
     );
-    await expect(leerContador(configuracion, buscar)).rejects.not.toThrow(/api-interna/);
+    await expect(leerContador(configuracion, buscar, COOKIE)).rejects.not.toThrow(/api-interna/);
   });
 });
 

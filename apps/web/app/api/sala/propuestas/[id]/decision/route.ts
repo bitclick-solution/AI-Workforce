@@ -1,4 +1,5 @@
 /** Proxy del clic sobre una propuesta de operación: aprobada o rechazada. */
+import { cookiesDelAcceso } from '../../../../../../lib/acceso';
 import { configuracionSala, llamarSala } from '../../../../../../lib/sala';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,7 @@ export async function POST(
     'POST',
     `/sala/propuestas/${encodeURIComponent(id)}/decision`,
     fetch,
+    cookiesDelAcceso(peticion.headers.get('cookie')),
     { sentido: leido.sentido },
   );
   return new Response(JSON.stringify(cuerpo), { status: estado, headers: SIN_CACHE });

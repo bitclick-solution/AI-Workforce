@@ -2,17 +2,16 @@
  * Sala v0 en el panel: bandera, configuración y llamadas a la API.
  *
  * Igual que el contador: el navegador habla con los manejadores de ruta de Next y
- * son ellos los que ponen el token, el tenant y la persona. Hasta que exista
- * identidad, la persona es la de `AIW_SALA_PERSONA`; nunca llega del navegador.
- * Los tipos son una copia declarada del contrato JSON de la API, no un `import`.
+ * son ellos los que ponen el token del panel y reenvían la cookie de sesión. El
+ * tenant y la persona los decide la API al validar esa sesión («Acceso al panel»);
+ * Next no manda ninguno. Los tipos son una copia declarada del contrato JSON de la
+ * API, no un `import`.
  */
 
 export const BANDERA_SALA = 'AIW_SALA_V0';
 
 /** Cada cuánto pregunta la vista mientras Centrifugo no haga el fan-out. */
 export const SONDEO_SALA_MS = 2_000;
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface AdjuntoDeLaVista {
   tipo: string;
@@ -60,8 +59,6 @@ export interface DatosDeLaSala {
 export interface ConfiguracionSala {
   apiUrl: string;
   token: string;
-  tenantId: string;
-  personaId: string;
 }
 
 export function salaActiva(entorno: Record<string, string | undefined>): boolean {
@@ -74,11 +71,8 @@ export function configuracionSala(
   if (!salaActiva(entorno)) return undefined;
   const apiUrl = entorno['AIW_API_URL']?.trim();
   const token = entorno['AIW_SALA_TOKEN']?.trim();
-  const tenantId = entorno['AIW_SALA_TENANT']?.trim();
-  const personaId = entorno['AIW_SALA_PERSONA']?.trim();
-  if (!apiUrl || !token || !tenantId || !personaId) return undefined;
-  if (!UUID.test(tenantId) || !UUID.test(personaId)) return undefined;
-  return { apiUrl: apiUrl.replace(/\/+$/, ''), token, tenantId, personaId };
+  if (!apiUrl || !token) return undefined;
+  return { apiUrl: apiUrl.replace(/\/+$/, ''), token };
 }
 
 export type BuscadorSala = (
@@ -86,12 +80,17 @@ export type BuscadorSala = (
   opciones: { method: string; headers: Record<string, string>; body?: string },
 ) => Promise<Response>;
 
-/** Llama a la API y devuelve estado y cuerpo; los errores salen saneados. */
+/**
+ * Llama a la API con el token del panel y la cookie de sesión del navegador, y
+ * devuelve estado y cuerpo; los errores salen saneados. `cookie` es la cabecera ya
+ * filtrada a las cookies del acceso (`cookiesDelAcceso`).
+ */
 export async function llamarSala(
   configuracion: ConfiguracionSala,
   metodo: 'GET' | 'POST',
   ruta: string,
   buscar: BuscadorSala,
+  cookie: string,
   cuerpo?: unknown,
 ): Promise<{ estado: number; cuerpo: unknown }> {
   let respuesta: Response;
@@ -100,8 +99,7 @@ export async function llamarSala(
       method: metodo,
       headers: {
         authorization: `Bearer ${configuracion.token}`,
-        'x-aiw-tenant': configuracion.tenantId,
-        'x-aiw-persona': configuracion.personaId,
+        ...(cookie ? { cookie } : {}),
         ...(cuerpo === undefined ? {} : { 'content-type': 'application/json' }),
       },
       ...(cuerpo === undefined ? {} : { body: JSON.stringify(cuerpo) }),
