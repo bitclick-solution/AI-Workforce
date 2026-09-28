@@ -35,6 +35,8 @@
   --color-azul: #2f62d1;
   --color-azul-suave: #e3ecfb;
   --color-sobre-azul: #ffffff;
+  --color-presencia-activa: #1f9d55;
+  --color-presencia-inactiva: #5b7db8;
 
   /* Fondos pastel y tinta del avatar de agente. Fijos: no cambian con el modo. */
   --color-avatar-melocoton: #fbd3bc;
@@ -55,6 +57,19 @@
   --radius-avatar: 29.1667%;
 
   --animate-girar: girar 2.4s linear infinite;
+  --animate-teclear: teclear 1.2s ease-in-out infinite;
+}
+
+/* Puntos del indicador «escribiendo» (S0 del lienzo). */
+@keyframes teclear {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+  }
+  40% {
+    opacity: 1;
+  }
 }
 
 @keyframes girar {
@@ -93,6 +108,8 @@
     --color-azul: #9db8ff;
     --color-azul-suave: #1f2b4d;
     --color-sobre-azul: #0e1733;
+    --color-presencia-activa: #4acb84;
+    --color-presencia-inactiva: #8fb0f0;
   }
 }
 
@@ -130,4 +147,6 @@
   --color-azul: #9db8ff;
   --color-azul-suave: #1f2b4d;
   --color-sobre-azul: #0e1733;
+  --color-presencia-activa: #4acb84;
+  --color-presencia-inactiva: #8fb0f0;
 }
