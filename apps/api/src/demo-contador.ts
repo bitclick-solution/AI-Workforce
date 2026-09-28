@@ -108,13 +108,14 @@ await conTenant(cliente, tenantId, async (tx) => {
     `Uso de la delegación:          ${usoDelegado.costeEuros} €, sumado a la raíz ${usoDelegado.tareaRaizId}`,
   );
   console.log('');
-  console.log('Levanta la API y pregúntale:');
+  console.log('Invita a una persona a esta organización, levanta la API y el panel y entra:');
   console.log(
-    `  AIW_CONTADOR_V0=1 AIW_CONTADOR_TOKEN=<token> DATABASE_URL=$DATABASE_URL pnpm --filter @aiw/api dev`,
+    `  pnpm --filter @aiw/api invitar-propietario --tenant ${tenantId} --nombre <nombre> --correo <correo>`,
   );
   console.log(
-    `  curl -s -H "authorization: Bearer <token>" -H "x-aiw-tenant: ${tenantId}" http://127.0.0.1:3002/contador/periodo`,
+    `  AIW_CONTADOR_V0=1 AIW_ACCESO_PANEL=1 AIW_ACCESO_SECRETO=<secreto> AIW_CONTADOR_TOKEN=<token> DATABASE_URL=$DATABASE_URL pnpm --filter @aiw/api dev`,
   );
+  console.log('  El tenant sale de la sesión: abre /acceso en el panel y después /panel/contador.');
 });
 
 await cerrar();
