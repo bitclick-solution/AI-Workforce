@@ -4,7 +4,7 @@
 // carpeta nunca se versiona (ver .gitignore) y `local:a-cero` la borra entera.
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -104,59 +104,55 @@ export function estadoServicios() {
     .filter((s) => s !== undefined);
 }
 
-/** Lanza un proceso en su propio grupo, con la salida en un fichero de registro. */
+/**
+ * Lanza un proceso en su propio grupo, con la salida escrita directamente al
+ * fichero de registro por un descriptor, nunca por una tubería que pase por este
+ * proceso: con `detached` y `unref()`, este proceso puede terminar en cuanto quiera
+ * sin arrastrarse el hijo detrás, pero si su salida fuera una tubería ('pipe') leída
+ * aquí, el hijo se quedaría escribiendo a un lector que ya no existe (EPIPE) en
+ * cuanto este proceso terminara — es justo lo que hacía que `local:arrancar` no
+ * terminara nunca en la CI: la tubería mantenía vivo el bucle de eventos hasta que
+ * el job la cortaba por el plazo máximo.
+ */
 export function lanzarProceso(nombre, mandato, argumentos, { env, cwd = raiz } = {}) {
   asegurarCarpetaLocal();
   const rutaRegistro = join(rutaRegistros, `${nombre}.log`);
-  writeFileSync(rutaRegistro, '', { flag: 'w' });
+  const descriptor = openSync(rutaRegistro, 'w');
   const flujo = spawn(mandato, argumentos, {
     cwd,
     env: { ...process.env, ...env },
     detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', descriptor, descriptor],
   });
-  const escribirRegistro = (trozo) => {
-    writeFileSync(rutaRegistro, trozo, { flag: 'a' });
-  };
-  flujo.stdout.on('data', escribirRegistro);
-  flujo.stderr.on('data', escribirRegistro);
   flujo.unref();
   return { nombre, proceso: flujo, rutaRegistro };
 }
 
-/** Lee líneas de un flujo hasta que `comprobar` devuelva algo o se agote el plazo. */
-export function esperarEnFlujo(flujo, comprobar, { timeoutMs = 90_000 } = {}) {
-  return new Promise((resuelve, rechaza) => {
-    let restante = '';
-    let terminado = false;
-    const limite = setTimeout(() => {
-      terminar(() => rechaza(new Error('Se agotó el plazo esperando la salida del proceso.')));
-    }, timeoutMs);
-    function terminar(accion) {
-      if (terminado) return;
-      terminado = true;
-      clearTimeout(limite);
-      flujo.stdout.off('data', alEscuchar);
-      flujo.off('exit', alSalir);
-      accion();
-    }
-    function alEscuchar(trozo) {
-      restante += trozo.toString('utf8');
-      const encontrado = comprobar(restante);
-      if (encontrado !== undefined) terminar(() => resuelve(encontrado));
-    }
-    function alSalir(codigo) {
-      terminar(() =>
-        rechaza(
-          new Error(
-            `El proceso terminó (código ${codigo}) antes de estar listo. Mira el registro.`,
-          ),
-        ),
+/**
+ * Espera a que el fichero de registro de un proceso lanzado con `lanzarProceso`
+ * contenga lo que `comprobar` busca, leyéndolo por sondeo en vez de por tubería
+ * (ver la nota de `lanzarProceso`: aquí no hay tubería que leer).
+ */
+export async function esperarEnFichero(
+  rutaRegistro,
+  proceso,
+  comprobar,
+  { timeoutMs = 90_000, intervaloMs = 500 } = {},
+) {
+  const limite = Date.now() + timeoutMs;
+  while (Date.now() < limite) {
+    if (proceso.exitCode !== null && proceso.exitCode !== undefined) {
+      throw new Error(
+        `El proceso terminó (código ${proceso.exitCode}) antes de estar listo. Mira el registro.`,
       );
     }
-    flujo.stdout.on('data', alEscuchar);
-    flujo.on('exit', alSalir);
-  });
+    if (existsSync(rutaRegistro)) {
+      const encontrado = comprobar(readFileSync(rutaRegistro, 'utf8'));
+      if (encontrado !== undefined) return encontrado;
+    }
+    await new Promise((r) => setTimeout(r, intervaloMs));
+  }
+  throw new Error('Se agotó el plazo esperando la salida del proceso. Mira el registro.');
 }
 
 export function leerProcesos() {

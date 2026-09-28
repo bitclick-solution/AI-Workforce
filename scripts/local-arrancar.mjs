@@ -19,7 +19,7 @@ import {
   asegurarEnv,
   completarEnv,
   composeArgs,
-  esperarEnFlujo,
+  esperarEnFichero,
   esperarPuerto,
   estadoServicios,
   lanzarProceso,
@@ -100,7 +100,8 @@ const { proceso: procesoSala, rutaRegistro: registroSala } = lanzarProceso(
 );
 let semilla;
 try {
-  semilla = await esperarEnFlujo(
+  semilla = await esperarEnFichero(
+    registroSala,
     procesoSala,
     (texto) => {
       const cola = texto.match(/AIW_TEMPORAL_COLA=(\S+)/)?.[1];
