@@ -278,8 +278,12 @@ jobs:
     name: Entorno local arranca desde cero
     # Antes «Compose de desarrollo arranca» (`node scripts/dev-up.mjs`): la rebanada
     # «Entorno local» lo sustituye por `pnpm local:arrancar`, que además migra,
-    # siembra la demo y arranca api y web. Mismo criterio de cuándo arrancar de
-    # verdad, ampliado a lo que toca ese comando.
+    # siembra la demo y arranca api y web. Mismo criterio que el job anterior para
+    # cuándo arrancar de verdad —deploy/, scripts/, .env.example o este fichero—:
+    # un cambio en apps/ o packages/ ya lo cubren sus propios jobs (Tipos, Pruebas,
+    # Flujos durables...), y este es el job caro (Compose completo + api + web), así
+    # que no se amplía el disparador para no sumar coste de Actions sin necesidad
+    # (aviso de coste del 28-9-2026, con la cuenta ya en 36 €).
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -297,7 +301,7 @@ jobs:
             echo "arrancar=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if git diff --name-only "$BASE" "$HEAD" | grep -qE '^(deploy/|scripts/|\.env\.example$|apps/(api|web|worker)/|packages/(db|rooms)/|\.github/workflows/ci\.yml$)'; then
+          if git diff --name-only "$BASE" "$HEAD" | grep -qE '^(deploy/|scripts/|\.env\.example$|\.github/workflows/ci\.yml$)'; then
             echo "arrancar=true" >> "$GITHUB_OUTPUT"
           else
             echo "arrancar=false" >> "$GITHUB_OUTPUT"
