@@ -8,20 +8,35 @@
 import { useState } from 'react';
 
 import {
+  AvatarConPresencia,
   AvatarDeAgente,
   AvatarDePersona,
   Aviso,
   AvisoDeAprobacion,
   Boton,
   Campo,
+  ESTADOS_DE_PRESENCIA,
+  ESTADOS_SOLO_DE_AGENTE,
   Estado,
+  EtiquetaIA,
+  FilaDeMiembro,
+  FilaDePresencia,
+  HojaMovil,
   Indicador,
+  IndicadorDeEscritura,
+  MarcaDePresencia,
+  NavegacionDeSalas,
+  PanelDeMiembros,
+  TarjetaDePropuesta,
+  textoDePresencia,
+  useTraduccion,
   Insignia,
   ListaDeAvisos,
   Porque,
   Tarjeta,
   TarjetaDeWidget,
   type ColorDeAvatar,
+  type MiembroVisible,
   type PuestoConEmblema,
 } from '@aiw/ui';
 
@@ -33,6 +48,64 @@ const PUESTOS: { puesto: PuestoConEmblema; nombre: string; color: ColorDeAvatar 
   { puesto: 'prevision', nombre: 'Previsión', color: 'cielo' },
   { puesto: 'moderador', nombre: 'Moderador', color: 'limon' },
   { puesto: 'director-ia', nombre: 'Director de IA', color: 'lila' },
+];
+
+/** Un miembro sintético por estado: los siete del ADR-022 en una sola muestra. */
+const MIEMBROS_DE_MUESTRA: MiembroVisible[] = [
+  {
+    id: 'm1',
+    tipo: 'persona',
+    nombre: 'Lucía Ferrán',
+    estado: 'en-la-sala',
+    contexto: 'Gerencia · eres tú',
+  },
+  {
+    id: 'm2',
+    tipo: 'persona',
+    nombre: 'Tomás Rivel',
+    estado: 'inactivo',
+    contexto: 'Administración',
+    detalle: 'hace 15 min',
+  },
+  {
+    id: 'm3',
+    tipo: 'persona',
+    nombre: 'Asesoría Olmo',
+    estado: 'anadido',
+    detalle: 'sin conectar desde ayer',
+  },
+  {
+    id: 'm4',
+    tipo: 'agente',
+    nombre: 'Cobros',
+    estado: 'te-necesita',
+    color: 'melocoton',
+    detalle: 'hace 6 min',
+  },
+  {
+    id: 'm5',
+    tipo: 'agente',
+    nombre: 'Conciliación',
+    estado: 'trabajando',
+    color: 'menta',
+    detalle: 'hace 12 min',
+  },
+  { id: 'm6', tipo: 'agente', nombre: 'Director de IA', estado: 'escribiendo', color: 'lila' },
+  {
+    id: 'm7',
+    tipo: 'agente',
+    nombre: 'Previsión',
+    estado: 'en-pausa',
+    color: 'cielo',
+    detalle: 'hace 3 h',
+  },
+];
+
+const SALAS_DE_MUESTRA = [
+  { id: 'general', nombre: 'general', sinLeer: 0, menciones: 0 },
+  { id: 'finanzas', nombre: 'finanzas', sinLeer: 0, menciones: 0 },
+  { id: 'ventas', nombre: 'ventas-y-atención', sinLeer: 4, menciones: 2 },
+  { id: 'marketing', nombre: 'marketing', sinLeer: 1, menciones: 0 },
 ];
 
 function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
@@ -47,6 +120,8 @@ function Seccion({ titulo, children }: { titulo: string; children: React.ReactNo
 export function VistaDeMuestras() {
   const [modo, establecerModo] = useState<Modo>('sistema');
   const [texto, establecerTexto] = useState('');
+  const [hojaAbierta, establecerHojaAbierta] = useState(false);
+  const t = useTraduccion();
 
   const elegirModo = (siguiente: Modo) => {
     establecerModo(siguiente);
@@ -263,6 +338,113 @@ export function VistaDeMuestras() {
           Doce facturas vencidas de menos de 30 días: la política N1 permite la nota de seguimiento
           sin aprobación.
         </Porque>
+      </Seccion>
+
+      <Seccion titulo="Presencia · marcas">
+        <p className="text-sm text-texto-2">
+          Cada estado cambia la forma de la marca y siempre lleva texto (ADR-022). Trabajando, te
+          necesita y en pausa solo aplican a agentes.
+        </p>
+        <ul className="grid grid-cols-2 gap-4 sm:grid-cols-4" data-testid="muestra-presencia">
+          {ESTADOS_DE_PRESENCIA.map((estado) => {
+            const tipo = ESTADOS_SOLO_DE_AGENTE.includes(estado) ? 'agente' : 'persona';
+            return (
+              <li key={estado} className="flex items-center gap-3">
+                <AvatarConPresencia
+                  tipo={tipo}
+                  nombre={tipo === 'agente' ? 'Cobros' : 'Lucía Ferrán'}
+                  estado={estado}
+                  color="melocoton"
+                />
+                <span className="flex items-center gap-2 text-sm text-texto">
+                  <MarcaDePresencia estado={estado} />
+                  {textoDePresencia(t, estado)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </Seccion>
+
+      <Seccion titulo="Fila de miembro y etiqueta IA">
+        <div className="flex max-w-sm flex-col rounded-xl border border-linea bg-superficie p-2">
+          {MIEMBROS_DE_MUESTRA.slice(0, 4).map((miembro) => (
+            <FilaDeMiembro key={miembro.id} miembro={miembro} />
+          ))}
+        </div>
+        <p className="flex items-center gap-2 text-sm text-texto">
+          Cobros <EtiquetaIA />
+        </p>
+      </Seccion>
+
+      <Seccion titulo="Panel de miembros">
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="rounded-xl border border-linea bg-superficie p-4">
+            <PanelDeMiembros miembros={MIEMBROS_DE_MUESTRA} />
+          </div>
+          <div className="rounded-xl border border-linea bg-superficie p-4">
+            <PanelDeMiembros miembros={MIEMBROS_DE_MUESTRA} agrupar="estado" conFiltros={false} />
+          </div>
+        </div>
+      </Seccion>
+
+      <Seccion titulo="Navegación de salas">
+        <div className="max-w-60 rounded-xl border border-linea bg-superficie p-3">
+          <NavegacionDeSalas
+            salas={SALAS_DE_MUESTRA}
+            actual="finanzas"
+            hrefDe={(id) => `#sala-${id}`}
+            alElegir={() => undefined}
+          />
+        </div>
+      </Seccion>
+
+      <Seccion titulo="Indicador de escritura">
+        <div className="flex flex-col gap-2 rounded-xl border border-linea bg-superficie p-4">
+          <IndicadorDeEscritura nombres={['Cobros']} />
+          <IndicadorDeEscritura nombres={['Cobros', 'Conciliación']} />
+          <IndicadorDeEscritura nombres={['Cobros', 'Conciliación', 'Previsión']} />
+        </div>
+      </Seccion>
+
+      <Seccion titulo="Móvil · fila de presencia y hoja">
+        <div className="max-w-sm overflow-hidden rounded-xl border border-linea">
+          <FilaDePresencia
+            miembros={MIEMBROS_DE_MUESTRA}
+            resumen="5 en la sala · 2 inactivos · 1 añadido"
+            etiqueta="Ver miembros: 5 en la sala · 2 inactivos · 1 añadido"
+            alAbrir={() => {
+              establecerHojaAbierta(true);
+            }}
+          />
+        </div>
+        <HojaMovil
+          abierta={hojaAbierta}
+          titulo={`Miembros · ${MIEMBROS_DE_MUESTRA.length}`}
+          alCerrar={() => {
+            establecerHojaAbierta(false);
+          }}
+        >
+          <PanelDeMiembros
+            miembros={MIEMBROS_DE_MUESTRA}
+            agrupar="estado"
+            conFiltros={false}
+            sinTitulo
+          />
+        </HojaMovil>
+      </Seccion>
+
+      <Seccion titulo="Tarjeta de propuesta">
+        <TarjetaDePropuesta
+          titulo="Contratar Previsión de tesorería"
+          datos={[
+            { etiqueta: 'Equipo y nivel', valor: 'Finanzas · N1, te pide permiso' },
+            { etiqueta: 'Coste', valor: 'Unos 50 € al mes, dentro del plan' },
+            { etiqueta: 'Herramientas', valor: 'ERP y banco, solo lectura' },
+            { etiqueta: 'Se deshace', valor: 'Despidiéndolo desde Equipo' },
+          ]}
+          acciones={<Boton>Contratar</Boton>}
+        />
       </Seccion>
 
       <Seccion titulo="Estado">
