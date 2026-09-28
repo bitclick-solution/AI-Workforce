@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import type postgres from 'postgres';
 
 import { conTenant, identificadorSeguro } from './cliente.js';
-import { ORDEN_PURGA } from './tablas.js';
+import { ORDEN_PURGA, ORDEN_PURGA_IDENTIDAD } from './tablas.js';
 
 /** Tablas que se exportan pero nunca se purgan con la organización. */
 export const TABLAS_QUE_SOBREVIVEN = ['entrada_auditoria'] as const;
@@ -71,6 +71,17 @@ export async function purgarOrganizacion(
   const borradas: Record<string, number> = {};
 
   await conTenant(cliente, tenantId, async (tx) => {
+    // La identidad primero: `usuario` y `sesion` referencian persona y organización.
+    for (const { tabla, porUsuario } of ORDEN_PURGA_IDENTIDAD) {
+      const nombre = identificadorSeguro(tabla);
+      const resultado = porUsuario
+        ? await tx.unsafe(
+            `delete from ${nombre} where usuario_id in (select id from usuario where tenant_id = $1)`,
+            [tenantId],
+          )
+        : await tx.unsafe(`delete from ${nombre} where tenant_id = $1`, [tenantId]);
+      borradas[nombre] = resultado.count;
+    }
     await soltarPunteros(tx, tenantId);
     for (const tabla of ORDEN_PURGA) {
       const nombre = identificadorSeguro(tabla);
