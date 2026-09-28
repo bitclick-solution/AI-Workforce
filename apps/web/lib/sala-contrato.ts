@@ -5,7 +5,13 @@
 
 /** Estados del ADR-022. Los tres últimos solo aplican a agentes. */
 export type EstadoDePresencia =
-  'en-la-sala' | 'escribiendo' | 'inactivo' | 'anadido' | 'trabajando' | 'te-necesita' | 'en-pausa';
+  | 'en-la-sala'
+  | 'escribiendo'
+  | 'inactivo'
+  | 'anadido'
+  | 'trabajando'
+  | 'te-necesita'
+  | 'en-pausa';
 
 export interface MiembroDeSala {
   id: string;

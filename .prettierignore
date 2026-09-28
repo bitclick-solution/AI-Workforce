@@ -12,3 +12,7 @@ next-env.d.ts
 
 # Informe de carga generado por la prueba de carga: no se formatea a mano.
 packages/db/bench
+
+# Contrato de Sala v1: copia literal acordada entre el Diseñador y el Constructor.
+# Prettier compactaría la unión de estados y rompería la copia literal.
+apps/web/lib/sala-contrato.ts

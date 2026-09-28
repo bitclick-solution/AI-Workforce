@@ -36,6 +36,8 @@ const CLAVE_A_CAMPO: Record<string, keyof PaletaDeModo> = {
   azul: 'azul',
   'azul-suave': 'azulSuave',
   'sobre-azul': 'sobreAzul',
+  'presencia-activa': 'presenciaActiva',
+  'presencia-inactiva': 'presenciaInactiva',
 };
 
 function cadenasDeClase(valor: unknown): string[] {
@@ -100,6 +102,14 @@ const PARES_COMPUESTOS: [keyof PaletaDeModo, keyof PaletaDeModo][] = [
   ['peligro', 'fondo'],
   ['textoCorrecto', 'superficie'],
   ['textoAlerta', 'superficie'],
+  // Sala v1: la línea de estado de `FilaDeMiembro` (texto-3, acento en
+  // «escribiendo» y texto-alerta en «te necesita») y el resumen de la
+  // `FilaDePresencia` van sobre la superficie del panel o de la hoja.
+  ['texto3', 'superficie'],
+  ['acento', 'superficie'],
+  ['texto2', 'superficie'],
+  // La etiqueta de la `TarjetaDePropuesta` y su título sobre la superficie.
+  ['texto', 'superficie'],
 ];
 
 function paresDeTextoYFondo(p: PaletaDeModo): [string, string, string][] {
@@ -127,6 +137,46 @@ describe.each([
 
   it.each(pares)('%s cumple el mínimo de la AA', (_etiqueta, texto, fondo) => {
     expect(ratioDeContraste(texto, fondo)).toBeGreaterThanOrEqual(MINIMO_AA);
+  });
+});
+
+/**
+ * Las marcas de presencia son gráficos, no texto: la WCAG 1.4.11 les pide 3:1
+ * contra lo que tienen al lado. Se comprueban sobre la superficie (panel de
+ * miembros, hoja móvil) y sobre el fondo (conversación). Cada marca con su
+ * relleno de `TEMA.presencia.forma`; «inactivo» es la luna y «añadido» el aro.
+ */
+const MINIMO_GRAFICO = 3;
+
+const MARCAS_DE_PRESENCIA: [string, keyof PaletaDeModo][] = [
+  ['en la sala y trabajando', 'presenciaActiva'],
+  ['escribiendo', 'acento'],
+  ['inactivo (luna)', 'presenciaInactiva'],
+  ['añadido (aro)', 'texto3'],
+  ['te necesita', 'textoAlerta'],
+  ['en pausa', 'texto2'],
+];
+
+describe.each([
+  ['claro', PALETA_CLARA],
+  ['oscuro', PALETA_OSCURA],
+] as const)('contraste de las marcas de presencia (3:1) · modo %s', (_modo, paleta) => {
+  it.each(
+    MARCAS_DE_PRESENCIA.flatMap(([estado, campo]) =>
+      (['superficie', 'fondo'] as const).map(
+        (fondo) => [`${estado} sobre ${fondo}`, paleta[campo], paleta[fondo]] as const,
+      ),
+    ),
+  )('%s cumple el mínimo para gráficos', (_etiqueta, marca, fondo) => {
+    expect(ratioDeContraste(marca, fondo)).toBeGreaterThanOrEqual(MINIMO_GRAFICO);
+  });
+
+  it('el símbolo dentro de «te necesita», «trabajando» y «en pausa» se distingue de su relleno', () => {
+    for (const relleno of ['textoAlerta', 'presenciaActiva', 'texto2'] as const) {
+      expect(ratioDeContraste(paleta.superficie, paleta[relleno])).toBeGreaterThanOrEqual(
+        MINIMO_GRAFICO,
+      );
+    }
   });
 });
 

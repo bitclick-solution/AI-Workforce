@@ -29,7 +29,36 @@ export type ClaveDeTexto =
   | 'ui.avatar.teNecesita'
   | 'ui.avatar.trabajando'
   | 'ui.avatar.enEspera'
-  | 'ui.avatar.personaSinNombre';
+  | 'ui.avatar.personaSinNombre'
+  | 'ui.presencia.en-la-sala'
+  | 'ui.presencia.escribiendo'
+  | 'ui.presencia.inactivo'
+  | 'ui.presencia.anadido'
+  | 'ui.presencia.trabajando'
+  | 'ui.presencia.te-necesita'
+  | 'ui.presencia.en-pausa'
+  | 'ui.ia.etiqueta'
+  | 'ui.ia.descripcion'
+  | 'ui.miembros.titulo'
+  | 'ui.miembros.filtros'
+  | 'ui.miembros.filtro.todos'
+  | 'ui.miembros.filtro.sala'
+  | 'ui.miembros.filtro.inactivos'
+  | 'ui.miembros.filtro.anadidos'
+  | 'ui.miembros.personas'
+  | 'ui.miembros.agentes'
+  | 'ui.miembros.vacio'
+  | 'ui.salas.titulo'
+  | 'ui.salas.sinLeer.uno'
+  | 'ui.salas.sinLeer.varios'
+  | 'ui.salas.menciones.una'
+  | 'ui.salas.menciones.varias'
+  | 'ui.salas.vacio'
+  | 'ui.escritura.uno'
+  | 'ui.escritura.dos'
+  | 'ui.escritura.varios'
+  | 'ui.hoja.cerrar'
+  | 'ui.propuesta.etiqueta';
 
 export type Diccionario = Partial<Record<ClaveDeTexto, string>>;
 
@@ -55,6 +84,35 @@ const CASTELLANO: Record<ClaveDeTexto, string> = {
   'ui.avatar.trabajando': 'Trabajando',
   'ui.avatar.enEspera': 'En espera',
   'ui.avatar.personaSinNombre': 'Persona sin nombre',
+  'ui.presencia.en-la-sala': 'En la sala',
+  'ui.presencia.escribiendo': 'Escribiendo…',
+  'ui.presencia.inactivo': 'Inactivo',
+  'ui.presencia.anadido': 'Añadido',
+  'ui.presencia.trabajando': 'Trabajando',
+  'ui.presencia.te-necesita': 'Te necesita',
+  'ui.presencia.en-pausa': 'En pausa',
+  'ui.ia.etiqueta': 'IA',
+  'ui.ia.descripcion': 'Agente de IA',
+  'ui.miembros.titulo': 'Miembros · {total}',
+  'ui.miembros.filtros': 'Filtrar miembros',
+  'ui.miembros.filtro.todos': 'Todos',
+  'ui.miembros.filtro.sala': 'En la sala',
+  'ui.miembros.filtro.inactivos': 'Inactivos',
+  'ui.miembros.filtro.anadidos': 'Añadidos',
+  'ui.miembros.personas': 'Personas · {n}',
+  'ui.miembros.agentes': 'Agentes · {n}',
+  'ui.miembros.vacio': 'Nadie en este filtro. Prueba con «Todos».',
+  'ui.salas.titulo': 'Salas',
+  'ui.salas.sinLeer.uno': '1 mensaje sin leer',
+  'ui.salas.sinLeer.varios': '{n} mensajes sin leer',
+  'ui.salas.menciones.una': '1 mención',
+  'ui.salas.menciones.varias': '{n} menciones',
+  'ui.salas.vacio': 'Todavía no hay salas.',
+  'ui.escritura.uno': '{a} está escribiendo…',
+  'ui.escritura.dos': '{a} y {b} están escribiendo…',
+  'ui.escritura.varios': 'Varios miembros están escribiendo…',
+  'ui.hoja.cerrar': 'Cerrar',
+  'ui.propuesta.etiqueta': 'Propuesta',
 };
 
 const INGLES: Diccionario = {
@@ -76,6 +134,35 @@ const INGLES: Diccionario = {
   'ui.avatar.trabajando': 'Working',
   'ui.avatar.enEspera': 'On hold',
   'ui.avatar.personaSinNombre': 'Unnamed person',
+  'ui.presencia.en-la-sala': 'In the room',
+  'ui.presencia.escribiendo': 'Typing…',
+  'ui.presencia.inactivo': 'Idle',
+  'ui.presencia.anadido': 'Added',
+  'ui.presencia.trabajando': 'Working',
+  'ui.presencia.te-necesita': 'Needs you',
+  'ui.presencia.en-pausa': 'Paused',
+  'ui.ia.etiqueta': 'AI',
+  'ui.ia.descripcion': 'AI agent',
+  'ui.miembros.titulo': 'Members · {total}',
+  'ui.miembros.filtros': 'Filter members',
+  'ui.miembros.filtro.todos': 'All',
+  'ui.miembros.filtro.sala': 'In the room',
+  'ui.miembros.filtro.inactivos': 'Idle',
+  'ui.miembros.filtro.anadidos': 'Added',
+  'ui.miembros.personas': 'People · {n}',
+  'ui.miembros.agentes': 'Agents · {n}',
+  'ui.miembros.vacio': 'Nobody here. Try "All".',
+  'ui.salas.titulo': 'Rooms',
+  'ui.salas.sinLeer.uno': '1 unread message',
+  'ui.salas.sinLeer.varios': '{n} unread messages',
+  'ui.salas.menciones.una': '1 mention',
+  'ui.salas.menciones.varias': '{n} mentions',
+  'ui.salas.vacio': 'No rooms yet.',
+  'ui.escritura.uno': '{a} is typing…',
+  'ui.escritura.dos': '{a} and {b} are typing…',
+  'ui.escritura.varios': 'Several members are typing…',
+  'ui.hoja.cerrar': 'Close',
+  'ui.propuesta.etiqueta': 'Proposal',
 };
 
 const DICCIONARIOS: Record<Idioma, Diccionario> = { es: CASTELLANO, en: INGLES };

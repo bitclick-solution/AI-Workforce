@@ -91,4 +91,88 @@ export const TEMA = {
     emblema:
       'absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-avatar-emblema shadow-sm',
   },
+  /**
+   * Marcas de presencia del ADR-022 (hoja S0 del lienzo). Cada estado tiene una
+   * forma propia; el color es un refuerzo y el texto va siempre al lado.
+   * Son gráficos: la prueba de contraste les exige 3:1 sobre la superficie.
+   */
+  presencia: {
+    marca: 'inline-flex shrink-0 items-center justify-center rounded-full',
+    enAvatar: 'absolute -bottom-1 -right-1 ring-[3px] ring-superficie',
+    tamano: {
+      pequeno: 'h-3 w-3',
+      base: 'h-3.5 w-3.5',
+    },
+    forma: {
+      'en-la-sala': 'bg-presencia-activa',
+      escribiendo: '!w-7 gap-0.5 bg-acento',
+      inactivo: 'bg-superficie',
+      anadido: 'border-[3px] border-texto-3 bg-superficie',
+      trabajando: 'bg-presencia-activa',
+      'te-necesita': 'bg-texto-alerta',
+      'en-pausa': 'gap-0.5 bg-texto-2',
+    },
+    punto: 'block h-[3px] w-[3px] rounded-full bg-sobre-acento motion-safe:animate-teclear',
+    barra: 'block h-[7px] w-[2px] rounded-[1px] bg-superficie',
+    /** Añadido: el avatar se atenúa porque aún no está conectado. */
+    avatarAnadido: 'opacity-50',
+  },
+  miembro: {
+    fila: 'flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left',
+    nombre: 'font-texto truncate text-sm font-semibold text-texto',
+    detalle: 'font-texto truncate text-xs text-texto-3',
+    detalleEstado: {
+      neutro: 'text-texto-3',
+      escribiendo: 'text-acento',
+      'te-necesita': 'text-texto-alerta font-medium',
+    },
+    etiquetaIA:
+      'font-texto inline-flex items-center rounded bg-acento-suave px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-acento',
+  },
+  panelDeMiembros: {
+    contenedor: 'flex h-full flex-col gap-3 bg-superficie text-texto',
+    titulo: 'font-titulos text-base font-semibold text-texto',
+    grupo: 'font-texto text-xs font-medium uppercase tracking-widest text-texto-3',
+    filtro:
+      'font-texto inline-flex min-h-11 items-center rounded-full border px-3 text-xs font-medium sm:min-h-8',
+    filtroActivo: 'border-texto bg-texto text-fondo',
+    filtroInactivo: 'border-linea bg-superficie text-texto hover:bg-superficie-2',
+  },
+  navegacionDeSalas: {
+    titulo: 'font-texto px-3 text-xs font-medium uppercase tracking-widest text-texto-3',
+    enlace: 'font-texto flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm lg:min-h-9',
+    enlaceActual: 'bg-acento-suave text-acento font-semibold',
+    enlaceNormal: 'text-texto-2 hover:bg-superficie-2 hover:text-texto',
+    enlaceSinLeer: 'text-texto font-semibold hover:bg-superficie-2',
+    menciones:
+      'ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-acento px-1.5 text-[11px] font-bold text-sobre-acento',
+    almohadilla: 'text-texto-3',
+  },
+  escritura: {
+    contenedor: 'font-texto flex min-h-6 items-center gap-2 text-xs text-texto-2',
+    punto: 'block h-1 w-1 rounded-full bg-acento motion-safe:animate-teclear',
+  },
+  filaDePresencia: {
+    contenedor:
+      'flex w-full items-center gap-3 overflow-x-auto border-b border-linea bg-superficie px-4 py-2 text-left',
+    resumen: 'font-texto text-xs text-texto-2',
+  },
+  hoja: {
+    fondo: 'fixed inset-0 z-40 bg-texto/40',
+    abajo:
+      'fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col rounded-t-2xl bg-superficie text-texto shadow-xl',
+    izquierda:
+      'fixed inset-y-0 left-0 z-50 flex w-[85vw] max-w-80 flex-col bg-superficie text-texto shadow-xl',
+    cabecera: 'flex items-center justify-between gap-3 border-b border-linea px-4 py-2',
+    titulo: 'font-titulos text-base font-semibold text-texto',
+    cerrar:
+      'inline-flex h-11 w-11 items-center justify-center rounded-full text-texto-2 hover:bg-superficie-2 hover:text-texto',
+  },
+  propuesta: {
+    contenedor: 'rounded-xl border border-acento bg-superficie p-4 text-texto',
+    etiqueta: 'font-texto text-xs font-medium uppercase tracking-widest text-acento',
+    dato: 'font-texto text-xs text-texto-3',
+    valor: 'font-texto text-sm text-texto',
+    hecha: 'font-texto rounded-lg bg-correcto-suave px-3 py-2 text-sm text-texto-correcto',
+  },
 } as const;

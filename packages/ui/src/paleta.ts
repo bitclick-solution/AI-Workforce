@@ -32,6 +32,10 @@ export interface PaletaDeModo {
   azul: string;
   azulSuave: string;
   sobreAzul: string;
+  /** Marca de presencia «en la sala», «trabajando»: gráfico, 3:1 sobre la superficie. */
+  presenciaActiva: string;
+  /** Luna de «inactivo»: gráfico, 3:1 sobre la superficie. */
+  presenciaInactiva: string;
 }
 
 export const PALETA_CLARA: PaletaDeModo = {
@@ -63,6 +67,8 @@ export const PALETA_CLARA: PaletaDeModo = {
   azul: '#2F62D1',
   azulSuave: '#E3ECFB',
   sobreAzul: '#FFFFFF',
+  presenciaActiva: '#1F9D55',
+  presenciaInactiva: '#5B7DB8',
 };
 
 export const PALETA_OSCURA: PaletaDeModo = {
@@ -94,6 +100,8 @@ export const PALETA_OSCURA: PaletaDeModo = {
   azul: '#9DB8FF',
   azulSuave: '#1F2B4D',
   sobreAzul: '#0E1733',
+  presenciaActiva: '#4ACB84',
+  presenciaInactiva: '#8FB0F0',
 };
 
 /** Fondos pastel de los avatares de agente. Fijos: no cambian con el modo. */

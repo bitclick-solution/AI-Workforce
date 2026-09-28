@@ -61,7 +61,7 @@ describe('crearAdaptadorAnthropic', () => {
       configuracion: { esfuerzoPorClasePaso: { conciliacion: 'xhigh' } },
     });
 
-    expect(puerto.modelo).toBe('anthropic.claude-sonnet-4-6');
+    expect(puerto.modelo).toBe('eu.anthropic.claude-sonnet-4-6');
 
     await puerto.completar({
       clasePaso: 'conciliacion',
@@ -72,7 +72,7 @@ describe('crearAdaptadorAnthropic', () => {
       model: string;
       output_config: { effort: string };
     };
-    expect(cuerpo.model).toBe('anthropic.claude-sonnet-4-6');
+    expect(cuerpo.model).toBe('eu.anthropic.claude-sonnet-4-6');
     expect(cuerpo.output_config.effort).toBe('high');
   });
 
@@ -84,7 +84,7 @@ describe('crearAdaptadorAnthropic', () => {
       configuracion: { esfuerzoPorClasePaso: { rutina: 'low' } },
     });
 
-    expect(puerto.modelo).toBe('anthropic.claude-sonnet-4-6');
+    expect(puerto.modelo).toBe('eu.anthropic.claude-sonnet-4-6');
     await puerto.completar({ clasePaso: 'rutina', mensajes: [{ rol: 'user', contenido: 'x' }] });
 
     const cuerpo = servidor.peticiones[0]?.cuerpo as { output_config: { effort: string } };
@@ -250,7 +250,7 @@ describe('crearAdaptadorAnthropic', () => {
       identificadorModelo: '',
     });
 
-    expect(puerto.modelo).toBe('anthropic.claude-sonnet-4-6');
+    expect(puerto.modelo).toBe('eu.anthropic.claude-sonnet-4-6');
     await puerto.completar({
       clasePaso: 'conciliacion',
       mensajes: [{ rol: 'user', contenido: 'x' }],
@@ -260,7 +260,7 @@ describe('crearAdaptadorAnthropic', () => {
       model: string;
       output_config: { effort: string };
     };
-    expect(cuerpo.model).toBe('anthropic.claude-sonnet-4-6');
+    expect(cuerpo.model).toBe('eu.anthropic.claude-sonnet-4-6');
     // Sigue siendo el sustituto provisional: xhigh baja a high como sin anulación.
     expect(cuerpo.output_config.effort).toBe('high');
   });

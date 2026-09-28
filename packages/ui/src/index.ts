@@ -83,3 +83,50 @@ export { AVATARES_PASTEL, PALETA_CLARA, PALETA_OSCURA, TINTA_AVATAR } from './pa
 export type { PaletaDeModo } from './paleta';
 
 export { ratioDeContraste } from './contraste';
+
+export {
+  AvatarConPresencia,
+  ESTADOS_DE_PRESENCIA,
+  ESTADOS_SOLO_DE_AGENTE,
+  EtiquetaIA,
+  MarcaDePresencia,
+  estadoParaTipo,
+  textoDePresencia,
+} from './presencia';
+export type {
+  AvatarConPresenciaProps,
+  EstadoDePresencia,
+  MarcaDePresenciaProps,
+  TamanoDeMarca,
+  TipoDeMiembro,
+} from './presencia';
+
+export {
+  FILTROS_DE_MIEMBROS,
+  FilaDeMiembro,
+  PanelDeMiembros,
+  filtrarMiembros,
+  filtroDeEstado,
+  lineaDeEstado,
+} from './miembros';
+export type {
+  FilaDeMiembroProps,
+  FiltroDeMiembros,
+  MiembroVisible,
+  PanelDeMiembrosProps,
+} from './miembros';
+
+export { NavegacionDeSalas, textoDeContadores } from './navegacion-de-salas';
+export type { NavegacionDeSalasProps, SalaNavegable } from './navegacion-de-salas';
+
+export { IndicadorDeEscritura, textoDeEscritura } from './indicador-de-escritura';
+export type { IndicadorDeEscrituraProps } from './indicador-de-escritura';
+
+export { FilaDePresencia } from './fila-de-presencia';
+export type { FilaDePresenciaProps } from './fila-de-presencia';
+
+export { HojaMovil } from './hoja-movil';
+export type { HojaMovilProps } from './hoja-movil';
+
+export { TarjetaDePropuesta } from './tarjeta-de-propuesta';
+export type { DatoDePropuesta, TarjetaDePropuestaProps } from './tarjeta-de-propuesta';
