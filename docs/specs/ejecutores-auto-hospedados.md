@@ -51,4 +51,4 @@ Presupuesto: 15 €. Consumo real: se registra en la rebanada al abrir el PR. Su
 
 ## Pregunta abierta
 
-Ninguna todavía: la sesión habla directamente con Jesús para las preguntas de dimensionado (versión de Ubuntu, CPU, memoria, disco libre, Docker instalado, qué más corre en el VPS, ejecutor de repositorio o de organización, y si añade su propia máquina) antes de fijar la configuración exacta del runbook.
+Ninguna. Dimensionado resuelto con Jesús en la sesión (28-9-2026): VPS ampliado a 8 vCPU / 16 GiB / 480 GB NVMe, ejecutor a nivel de repositorio, Docker rootless (el VPS aloja contenedores de producción de clientes reales), y un segundo ejecutor opcional en su portátil Windows vía WSL2 (Ubuntu) porque los jobs con `services:` no corren en un ejecutor Windows nativo. Detalle completo en `docs/runbooks/ejecutores-auto-hospedados.md`.
