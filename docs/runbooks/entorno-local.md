@@ -106,9 +106,14 @@ AWS no conceda acceso a Sonnet 5 y Opus 5:
 
 - **«El demonio de Docker no responde»**: arranca Docker Desktop (macOS) o
   `sudo systemctl start docker` (Linux) y repite.
-- **«Puertos ocupados»**: normalmente un arranque anterior que no se paró
-  bien. `pnpm local:parar` y repite; si sigue, `docker ps` para ver qué
-  contenedor quedó vivo.
+- **«Puertos ocupados»**: `pnpm local:arrancar` los comprueba todos antes de
+  tocar Docker y te dice exactamente cuáles y con qué variable de `.env`
+  cambiarlos (por ejemplo `POSTGRES_PORT`), en vez del error crudo de Docker a
+  medio arrancar. La causa más común no es un arranque anterior sin parar
+  bien (`pnpm local:parar` lo resuelve) sino otro proyecto tuyo que ya usa ese
+  puerto — otro Compose en 5432, un Java en 8080, un Node en 3001. Cambia la
+  variable correspondiente en `.env` (ver «Puertos que ocupa» arriba) y
+  repite; no hace falta parar el otro proyecto.
 - **La demo de sala no arranca (se agota el plazo)**: mira
   `.aiw-local/registros/worker-sala.log`. La causa más común es que la
   migración no ha terminado o que `DEMO_CONECTOR_SECRETO` falta en `.env`
@@ -123,7 +128,19 @@ AWS no conceda acceso a Sonnet 5 y Opus 5:
   mano: `git log origin/main..main` para ver qué tienes de más.
 - **Falta memoria o el arranque va muy lento**: sube los recursos de Docker
   Desktop (macOS) o cierra otras aplicaciones; el aviso de `pnpm
-local:arrancar` te dice cuánta memoria tienes libre.
+local:arrancar` te dice cuánta memoria tienes libre. Si tu máquina ya corre
+  otros proyectos en Docker, cada uno se queda con su parte: en una prueba
+  real con 29,7 GB totales y otros tres proyectos arriba, este entorno dejó
+  solo 2,7 GB libres (Langfuse con ClickHouse y Redis es lo que más pesa,
+  ~2,4 GB). Para esos otros contenedores mientras trabajas aquí si vas justo
+  (`docker ps` para verlos, `docker stop <contenedor>`); no hace falta
+  borrarlos, solo pararlos.
+- **`pnpm install` avisa de que ignora los scripts de compilación de
+  `@swc/core` o `protobufjs`**: son dependencias transitivas y el arranque
+  funciona igual sin ejecutar su `postinstall`. Si quieres que corran de
+  verdad, decide tú con `pnpm approve-builds` — no lo automatices sin mirar
+  qué hace cada script: son código de terceros que pnpm bloquea por
+  seguridad, no una bandera de configuración de esta rebanada.
 
 ## Dejar la máquina como estaba
 

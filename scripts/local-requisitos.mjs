@@ -100,9 +100,12 @@ export async function comprobarRequisitos(env, { puertoApi = '3002' } = {}) {
       `Memoria total ${memoriaGb.toFixed(1)} GB: con menos de ${MEMORIA_RECOMENDADA_GB} GB el arranque puede ir lento.`,
     );
   }
-  if (freemem() / GB < 1) {
+  // Umbral de 3 GB fijado con datos reales: en una máquina con 29,7 GB totales pero
+  // otros tres proyectos ya corriendo en Docker, el arranque terminó con 2,7 GB
+  // libres y funcionó, pero justo. Con menos, el aviso llega antes de que algo falle.
+  if (freemem() / GB < 3) {
     avisos.push(
-      `Memoria libre ${(freemem() / GB).toFixed(1)} GB: cierra alguna aplicación antes de arrancar.`,
+      `Memoria libre ${(freemem() / GB).toFixed(1)} GB: si tienes otros proyectos corriendo en Docker, para sus contenedores o cierra alguna aplicación antes de arrancar.`,
     );
   }
 
