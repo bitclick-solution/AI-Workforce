@@ -3,27 +3,41 @@
  *
  * El papel es vocabulario del negocio (`@aiw/domain`): Opus 5 para razonamiento y
  * escrituras, Sonnet 5 por defecto, Haiku 4.5 para moderador/clasificación/rutinas.
- * El identificador real cambia con la plataforma —Bedrock lleva el prefijo
- * `anthropic.`, Vertex y la primera parte llevan el identificador desnudo, nunca
- * con fecha (ADR-018)— y solo vive aquí: el resto del paquete solo conoce papeles.
+ * El identificador real cambia con la plataforma. En Vertex y en primera parte es
+ * el identificador desnudo, nunca con fecha (ADR-018). En Bedrock UE depende del
+ * camino: el endpoint de Mensajes (`bedrock-mantle`) usaría el identificador con
+ * el prefijo `anthropic.`, pero hoy la cuenta no tiene acceso a ningún modelo de
+ * Anthropic por ese camino en las regiones de la UE contratadas (403 «not
+ * available for this account», comprobado el 2026-09-28); la integración clásica
+ * (`bedrock-runtime`, cliente `AnthropicBedrock`) sí funciona, y en ella los
+ * modelos se piden por un perfil de inferencia entre regiones con el prefijo
+ * `eu.`, no por el identificador bajo demanda. Esta tabla vive solo aquí: el
+ * resto del paquete solo conoce papeles.
  *
- * Resolución provisional (decisión de Jesús, 2026-09-25, revisada el mismo día):
- * Bedrock en Frankfurt denegó la cuota de Sonnet 5 y la de Opus 4.6; la de Opus
- * 5.5 está pedida, la de Opus 5 sigue pendiente. Mientras no haya cuota de ningún
- * Opus, `opus5` y `sonnet5` se sirven los dos con Sonnet 4.6 en Bedrock —el
- * mismo modelo, con esfuerzo alto para `opus5` como suelo, porque hace el trabajo
- * de razonamiento y de decisión de escritura con un modelo que no es un Opus—.
- * Orden de preferencia para volver a un Opus en cuanto haya cuota: Opus 5.5,
- * Opus 5, Opus 4.6. Haiku 4.5 no cambia, ya está disponible.
+ * Resolución provisional en Bedrock UE (decisión de Jesús, 2026-09-25, revisada el
+ * mismo día; identificadores del camino clásico confirmados el 2026-09-28): sin
+ * acceso de la cuenta a ningún Opus ni a Sonnet 5, `opus5` y `sonnet5` se sirven
+ * los dos con el perfil de inferencia UE de Sonnet 4.6
+ * (`eu.anthropic.claude-sonnet-4-6`) —el mismo modelo, con esfuerzo alto para
+ * `opus5` como suelo, porque hace el trabajo de razonamiento y de decisión de
+ * escritura con un modelo que no es un Opus—. `haiku45` usa el perfil de
+ * inferencia UE de Haiku 4.5, que Bedrock solo ofrece con fecha
+ * (`eu.anthropic.claude-haiku-4-5-20251001-v1:0`): excepción anotada al «nunca con
+ * fecha» del ADR-018, porque no es una sustitución de modelo, es la única forma
+ * que expone la plataforma para ese modelo. Orden de preferencia para volver a un
+ * Opus en cuanto haya cuota: Opus 5.5, Opus 5, Opus 4.6. Cuando AWS conceda acceso
+ * al endpoint de Mensajes para la familia 5, retirar la fila de `bedrock-eu` de
+ * esta tabla es lo único que hace falta aquí — ver
+ * `docs/runbooks/modelos-funciones-ausentes.md`.
  *
  * El papel que guarda la versión de puesto sigue siendo `opus5`/`sonnet5`
- * (ADR-018): el cambio a la familia 5, cuando Bedrock conceda la cuota, es
+ * (ADR-018): el cambio a la familia 5, cuando Bedrock conceda el acceso, es
  * retirar esta tabla, no una promoción de ninguna versión de puesto — la versión
  * de puesto nunca supo que estaba en modo provisional.
  */
 import type { PapelModelo, PlataformaModelo } from '@aiw/domain';
 
-/** Identificador desnudo objetivo del papel (ADR-018): nunca con fecha. */
+/** Identificador desnudo objetivo del papel (ADR-018): nunca con fecha. Vertex y primera parte. */
 const IDENTIFICADOR_DESNUDO_OBJETIVO: Record<PapelModelo, string> = {
   opus5: 'claude-opus-5',
   sonnet5: 'claude-sonnet-5',
@@ -31,24 +45,29 @@ const IDENTIFICADOR_DESNUDO_OBJETIVO: Record<PapelModelo, string> = {
 };
 
 /**
- * Sustitución provisional en Bedrock mientras no hay cuota de la familia 5 ni de
- * ningún Opus (decisión de Jesús, 2026-09-25). Solo Bedrock: no hay indicio de
- * que Vertex ni la primera parte tengan la misma limitación, así que ahí se sigue
- * pidiendo la familia 5 objetivo.
+ * Sustitución provisional solo para `opus5`/`sonnet5`: `esfuerzoSoportado` en
+ * `anthropic.ts` la usa para bajar `xhigh` a `high` y aplicar el suelo de esfuerzo
+ * alto de `opus5`. `haiku45` no está aquí porque no tiene sustituto: sirve el
+ * mismo modelo objetivo, solo que Bedrock lo expone con un identificador distinto
+ * (perfil de inferencia UE con fecha, ver arriba).
  */
-const IDENTIFICADOR_DESNUDO_PROVISIONAL_BEDROCK: Partial<Record<PapelModelo, string>> = {
-  opus5: 'claude-sonnet-4-6',
-  sonnet5: 'claude-sonnet-4-6',
-};
+const PAPELES_CON_SUSTITUTO_PROVISIONAL_BEDROCK: ReadonlySet<PapelModelo> = new Set([
+  'opus5',
+  'sonnet5',
+]);
 
-function identificadorDesnudo(papel: PapelModelo, plataforma: PlataformaModelo): string {
-  if (plataforma === 'bedrock-eu') {
-    return (
-      IDENTIFICADOR_DESNUDO_PROVISIONAL_BEDROCK[papel] ?? IDENTIFICADOR_DESNUDO_OBJETIVO[papel]
-    );
-  }
-  return IDENTIFICADOR_DESNUDO_OBJETIVO[papel];
-}
+/**
+ * Identificadores del perfil de inferencia UE que ofrece hoy la integración
+ * clásica de Bedrock (`aws bedrock-runtime converse`, comprobado el 2026-09-28 en
+ * `eu-north-1`). Llevan el prefijo `eu.` porque son perfiles de inferencia entre
+ * regiones de la integración clásica: ese prefijo y los ARN de perfil no existen
+ * en el endpoint de Mensajes, que da 404 con ellos.
+ */
+const IDENTIFICADOR_BEDROCK_EU: Record<PapelModelo, string> = {
+  opus5: 'eu.anthropic.claude-sonnet-4-6',
+  sonnet5: 'eu.anthropic.claude-sonnet-4-6',
+  haiku45: 'eu.anthropic.claude-haiku-4-5-20251001-v1:0',
+};
 
 /**
  * Resuelve el identificador de modelo que espera cada plataforma para un papel.
@@ -65,9 +84,8 @@ export function identificadorDeModelo(papel: PapelModelo, plataforma: Plataforma
         'la resuelve el adaptador de AI SDK con su propio catálogo de modelos.',
     );
   }
-  const desnudo = identificadorDesnudo(papel, plataforma);
-  if (plataforma === 'bedrock-eu') return `anthropic.${desnudo}`;
-  return desnudo;
+  if (plataforma === 'bedrock-eu') return IDENTIFICADOR_BEDROCK_EU[papel];
+  return IDENTIFICADOR_DESNUDO_OBJETIVO[papel];
 }
 
 /**
@@ -75,10 +93,12 @@ export function identificadorDeModelo(papel: PapelModelo, plataforma: Plataforma
  * en vez del modelo objetivo del ADR-018 (por ejemplo, Sonnet 4.6 en Bedrock en
  * vez de Opus 5). Lo usa el adaptador para ajustar lo que el modelo provisional no
  * admite todavía (`anthropic.ts`: el esfuerzo `xhigh` y el suelo de esfuerzo alto
- * para `opus5`).
+ * para `opus5`). `haiku45` no es provisional en ninguna plataforma: el
+ * identificador con fecha de Bedrock es una excepción de nombrado, no una
+ * sustitución de modelo.
  */
 export function esProvisional(papel: PapelModelo, plataforma: PlataformaModelo): boolean {
-  return plataforma === 'bedrock-eu' && papel in IDENTIFICADOR_DESNUDO_PROVISIONAL_BEDROCK;
+  return plataforma === 'bedrock-eu' && PAPELES_CON_SUSTITUTO_PROVISIONAL_BEDROCK.has(papel);
 }
 
 /** El nombre canónico de un papel, tal como se registra en el contador (`modelo`). Es el objetivo del ADR-018, no la sustitución provisional. */
