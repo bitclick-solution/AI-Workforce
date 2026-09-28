@@ -19,7 +19,7 @@ Hoy el servidor de Next lee el tenant y la persona de `AIW_SALA_TENANT`, `AIW_SA
 
 ## Endpoints, flujos y datos
 
-- **Tablas nuevas.** `usuario` (identidad global, correo único, enlazada a una `persona` y su `tenant_id`), `sesion` (con `tenant_id` y `persona_id` copiados de `usuario` por un disparador: la aplicación no puede elegirlos), `cuenta` (exigida por Better Auth; sin contraseña por `check`), `verificacion` (enlaces y retos de WebAuthn, identificador con hash) y `clave_acceso` (passkeys). UUID v7 en todas.
+- **Tablas nuevas.** `usuario` (identidad global, correo único, enlazada a una `persona` y su `tenant_id`), `sesion` (con `tenant_id` y `persona_id` copiados de `usuario` por un disparador: la aplicación no puede elegirlos), `cuenta` (exigida por Better Auth; sin contraseña por `check`), `verificacion` (enlaces y retos de WebAuthn, identificador con hash) y `clave_acceso` (passkeys). UUID v7 en todas salvo `verificacion.id`, que es texto: Better Auth reserva el un solo uso del enlace insertando una fila con un `id` derivado del token.
 - **Rol nuevo `aiw_identidad`.** Solo él lee y escribe esas tablas (política `…_identidad`), porque el acceso ocurre antes de conocer el tenant. `aiw_app` no tiene ningún permiso sobre ellas: una consulta de negocio no puede leer un token de sesión ni de su propio tenant. `usuario` y `sesion` llevan además la política estándar por tenant, que es la que usa la purga.
 - **API.** `/api/auth/*` es Better Auth (enlace por correo, passkey, `get-session`, `sign-out`) detrás de `AIW_ACCESO_PANEL`. `/sala/*` y `/contador/*` exigen sesión válida y leen con `conTenant(tenantDeLaSesion)`; las cabeceras `x-aiw-tenant` y `x-aiw-persona` se ignoran.
 - **Web.** El navegador habla con Next; Next reenvía `/api/auth/*` a la API y solo pasa la cookie `aiw.session_token`. `baseURL` de Better Auth es la URL pública del panel, así que la passkey usa `rpID=localhost` y origen `http://localhost:3000` en local.
@@ -43,7 +43,7 @@ Hoy el servidor de Next lee el tenant y la persona de `AIW_SALA_TENANT`, `AIW_SA
 - Integración con PostgreSQL: flujo completo con Better Auth real (enlace → sesión → `get-session` → datos del tenant → cierre), caducidad, persona inactiva, correo no invitado, aislamiento entre dos organizaciones, entradas del libro y cadena verificada, disparador que impone tenant y persona.
 - Eval: no aplica; no hay comportamiento de agente nuevo.
 - Auditoría y contador: `acceso.propietario.invitado`, `acceso.enlace.enviado`, `acceso.sesion.iniciada`, `acceso.sesion.cerrada`, `acceso.sesion.caducada`; se comprueban con `verificarCadena` y con `contador_consumo.acciones`.
-- Secretos: `buscarSecretos` sobre `apps/api` y `apps/web`; el secreto de Better Auth llega por `AIW_ACCESO_SECRETO` (`GENERAR` en `.env.example`) y no aparece en registros ni en errores.
+- Secretos: `buscarSecretos` sobre `apps/api` y `gitleaks` en la CI; el secreto de Better Auth llega por `AIW_ACCESO_SECRETO` (`GENERAR` en `.env.example`) envuelto en `Secreto`, y los errores de Better Auth y Drizzle se registran sin mensaje ni parámetros (prueba de `descripcionSaneada` y `registroSaneado`).
 
 ## Fuera de alcance
 
