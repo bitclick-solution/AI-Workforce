@@ -15,13 +15,19 @@ import { randomBytes } from 'node:crypto';
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { ROL_APLICACION, conTenantYRol } from '../cliente.js';
+import {
+  ROL_APLICACION,
+  ROL_MIGRADOR,
+  conTenantYRol,
+  crearConexion,
+  type Conexion,
+} from '../cliente.js';
 import { ROL_IDENTIDAD } from '../identidad.js';
 import { uuidV7 } from '../identificadores.js';
 import { purgarOrganizacion } from '../mantenimiento.js';
 import { aplicarMigraciones } from '../migrador.js';
 import { NOMBRES_TABLAS_IDENTIDAD } from '../tablas.js';
-import { HAY_BASE_DE_DATOS, MOTIVO_SALTO, conectar } from './entorno.js';
+import { HAY_BASE_DE_DATOS, MOTIVO_SALTO, URL_BASE_DE_DATOS, conectar } from './entorno.js';
 import { sembrarOrganizacion, type OrganizacionSembrada } from './semilla.js';
 
 const TITULO = HAY_BASE_DE_DATOS
@@ -61,6 +67,8 @@ async function crearUsuario(
 
 describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
   let cliente: postgres.Sql;
+  let conexionApp: Conexion;
+  let conexionDueno: Conexion;
   let alfa: OrganizacionSembrada;
   let beta: OrganizacionSembrada;
   let usuarioAlfa: string;
@@ -74,11 +82,27 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     const sufijo = uuidV7().slice(-8);
     usuarioAlfa = await crearUsuario(cliente, alfa, `alfa-${sufijo}@ejemplo.local`);
     usuarioBeta = await crearUsuario(cliente, beta, `beta-${sufijo}@ejemplo.local`);
+    // La purga es de plataforma (ADR-007): la ejecuta el dueño del esquema con el
+    // tenant fijado, nunca `aiw_app`. Las dos conexiones fijan su rol al conectar y
+    // ninguno de los dos es superusuario, así que la RLS forzada se aplica igual que
+    // en producción; con la conexión sin restringir de las pruebas no se vería.
+    conexionDueno = crearConexion({
+      url: URL_BASE_DE_DATOS ?? '',
+      rolAplicacion: ROL_MIGRADOR,
+      maxConexiones: 2,
+    });
+    conexionApp = crearConexion({
+      url: URL_BASE_DE_DATOS ?? '',
+      rolAplicacion: ROL_APLICACION,
+      maxConexiones: 2,
+    });
   });
 
   afterAll(async () => {
     if (alfa) await purgarOrganizacion(cliente, alfa.tenantId);
     if (beta) await purgarOrganizacion(cliente, beta.tenantId);
+    await conexionApp?.cerrar();
+    await conexionDueno?.cerrar();
     await cliente?.end({ timeout: 5 });
   });
 
@@ -225,7 +249,15 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       `;
     });
 
-    const borradas = await purgarOrganizacion(cliente, gamma.tenantId);
+    // `aiw_app` no purga: no tiene ningún permiso sobre la identidad (0006) ni
+    // borra las tablas inmutables (0000). La transacción se deshace entera.
+    await expect(purgarOrganizacion(conexionApp.cliente, gamma.tenantId)).rejects.toThrow(
+      /permission denied/,
+    );
+
+    // El dueño del esquema sí, con el tenant fijado y la RLS forzada: las políticas
+    // `_tenant` de la identidad le dejan ver solo las filas de gamma.
+    const borradas = await purgarOrganizacion(conexionDueno.cliente, gamma.tenantId);
     expect(borradas['usuario']).toBe(1);
     expect(borradas['sesion']).toBe(1);
     expect(borradas['clave_acceso']).toBe(1);
