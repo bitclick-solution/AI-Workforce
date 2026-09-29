@@ -13,14 +13,11 @@ import {
 } from './sala';
 import type { CambioDeSala } from './sala-contrato';
 
-const TENANT = '01a0d39e-98c3-7970-814a-0a98ad132311';
-const PERSONA = '01a0d39e-98c3-7970-814a-0a98ad132312';
+const COOKIE = 'aiw.session_token=de-la-prueba';
 const ENTORNO = {
   AIW_SALA_V0: '1',
   AIW_API_URL: 'http://api.local/',
   AIW_SALA_TOKEN: crypto.randomUUID(),
-  AIW_SALA_TENANT: TENANT,
-  AIW_SALA_PERSONA: PERSONA,
 };
 
 function mensaje(parcial: Partial<MensajeDeLaSala>): MensajeDeLaSala {
@@ -38,11 +35,16 @@ describe('sala en el panel', () => {
   it('sin bandera o sin configuración completa no hay sala', () => {
     expect(salaActiva({})).toBe(false);
     expect(configuracionSala({ ...ENTORNO, AIW_SALA_V0: '0' })).toBeUndefined();
-    expect(configuracionSala({ ...ENTORNO, AIW_SALA_PERSONA: 'no-es-uuid' })).toBeUndefined();
+    expect(configuracionSala({ ...ENTORNO, AIW_SALA_TOKEN: ' ' })).toBeUndefined();
+    // El tenant y la persona de entorno ya no existen: aunque estén, no se usan.
+    expect(configuracionSala({ ...ENTORNO, AIW_SALA_TENANT: 'x' })).toEqual({
+      apiUrl: 'http://api.local',
+      token: ENTORNO.AIW_SALA_TOKEN,
+    });
     expect(configuracionSala(ENTORNO)?.apiUrl).toBe('http://api.local');
   });
 
-  it('pone el token, el tenant y la persona en el servidor, no en el navegador', async () => {
+  it('pone el token y la cookie de sesión en el servidor, y ningún tenant ni persona', async () => {
     const configuracion = configuracionSala(ENTORNO);
     if (!configuracion) throw new Error('falta configuración');
     let vista: { url: string; headers: Record<string, string>; body?: string } | undefined;
@@ -58,11 +60,14 @@ describe('sala en el panel', () => {
         };
         return Promise.resolve(new Response(JSON.stringify({ mensajeId: 'x' }), { status: 202 }));
       },
+      COOKIE,
       { texto: 'hola' },
     );
     expect(respuesta).toEqual({ estado: 202, cuerpo: { mensajeId: 'x' } });
     expect(vista?.url).toBe('http://api.local/sala/mensajes');
-    expect(vista?.headers['x-aiw-persona']).toBe(PERSONA);
+    expect(vista?.headers['cookie']).toBe(COOKIE);
+    expect(vista?.headers['x-aiw-persona']).toBeUndefined();
+    expect(vista?.headers['x-aiw-tenant']).toBeUndefined();
     expect(vista?.headers['authorization']).toBe(`Bearer ${ENTORNO.AIW_SALA_TOKEN}`);
     expect(vista?.body).toBe('{"texto":"hola"}');
   });
@@ -70,8 +75,12 @@ describe('sala en el panel', () => {
   it('una API caída no filtra su dirección', async () => {
     const configuracion = configuracionSala(ENTORNO);
     if (!configuracion) throw new Error('falta configuración');
-    const respuesta = await llamarSala(configuracion, 'GET', '/sala', () =>
-      Promise.reject(new Error('connect ECONNREFUSED 10.0.0.7:3002')),
+    const respuesta = await llamarSala(
+      configuracion,
+      'GET',
+      '/sala',
+      () => Promise.reject(new Error('connect ECONNREFUSED 10.0.0.7:3002')),
+      COOKIE,
     );
     expect(respuesta.estado).toBe(502);
     expect(JSON.stringify(respuesta.cuerpo)).not.toContain('10.0.0.7');

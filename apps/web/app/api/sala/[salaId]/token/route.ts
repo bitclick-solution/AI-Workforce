@@ -3,6 +3,7 @@
  * pública del WebSocket, que no es un secreto pero solo el servidor la conoce: el
  * navegador no lee variables de entorno.
  */
+import { cookiesDelAcceso } from '../../../../../lib/acceso';
 import { configuracionSala, llamarSala, urlWebSocketCentrifugo } from '../../../../../lib/sala';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +14,7 @@ const SIN_CACHE = {
 };
 
 export async function POST(
-  _peticion: Request,
+  peticion: Request,
   { params }: { params: Promise<{ salaId: string }> },
 ): Promise<Response> {
   const configuracion = configuracionSala(process.env);
@@ -29,6 +30,7 @@ export async function POST(
     'POST',
     `/sala/${encodeURIComponent(salaId)}/token`,
     fetch,
+    cookiesDelAcceso(peticion.headers.get('cookie')),
   );
   const wsUrl = urlWebSocketCentrifugo(process.env);
   const conWsUrl =

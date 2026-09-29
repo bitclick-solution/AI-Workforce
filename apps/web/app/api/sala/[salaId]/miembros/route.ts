@@ -1,4 +1,5 @@
 /** Proxy de lectura de los miembros de una sala, con su estado (sala v1). */
+import { cookiesDelAcceso } from '../../../../../lib/acceso';
 import { configuracionSala, llamarSala } from '../../../../../lib/sala';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,7 @@ const SIN_CACHE = {
 };
 
 export async function GET(
-  _peticion: Request,
+  peticion: Request,
   { params }: { params: Promise<{ salaId: string }> },
 ): Promise<Response> {
   const configuracion = configuracionSala(process.env);
@@ -25,6 +26,7 @@ export async function GET(
     'GET',
     `/sala/${encodeURIComponent(salaId)}/miembros`,
     (url, opciones) => fetch(url, { ...opciones, cache: 'no-store' }),
+    cookiesDelAcceso(peticion.headers.get('cookie')),
   );
   return new Response(JSON.stringify(cuerpo), { status: estado, headers: SIN_CACHE });
 }

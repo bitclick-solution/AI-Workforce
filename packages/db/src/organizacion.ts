@@ -74,8 +74,9 @@ export const organizacion = pgTable(
 
 /**
  * Persona del tenant: aprueba, recibe notificaciones y supervisa departamentos.
- * La identidad completa (Better Auth, SSO, SCIM) llega en su propia rebanada;
- * aquí solo existe lo que necesitan las claves foráneas del modelo.
+ * Quien entra al panel es un `usuario` de `identidad.ts` enlazado a una persona;
+ * SSO y SCIM llegan en su propia rebanada. Aquí solo existe lo que necesitan las
+ * claves foráneas del modelo.
  */
 export const persona = pgTable(
   'persona',

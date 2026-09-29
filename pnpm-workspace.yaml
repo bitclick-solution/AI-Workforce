@@ -10,6 +10,7 @@ catalog:
   '@anthropic-ai/sdk': ^0.128.0
   '@anthropic-ai/bedrock-sdk': ^0.33.8
   '@anthropic-ai/vertex-sdk': ^0.19.11
+  '@better-auth/passkey': ^1.7.6
   '@modelcontextprotocol/sdk': ^1.30.0
   '@temporalio/activity': ^1.24.0
   '@temporalio/client': ^1.24.0
@@ -21,6 +22,7 @@ catalog:
   '@types/react-dom': ^19.3.0
   '@tailwindcss/postcss': ^4.3.3
   ai: ^7.0.114
+  better-auth: ^1.7.6
   drizzle-kit: ^0.31.10
   drizzle-orm: ^0.45.2
   next: ^16.3.5

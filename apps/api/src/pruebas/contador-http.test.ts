@@ -3,8 +3,9 @@
  *
  * Las pruebas de `rutas/contador.test.ts` cubren la puerta sin base de datos; esta
  * comprueba lo que solo se ve montado: que la petición abre una transacción con el
- * tenant fijado, que el rol `aiw_app` no ve nada de otro tenant y que el servidor
- * responde 404 a lo que no es suyo.
+ * tenant de la sesión fijado, que el rol `aiw_app` no ve nada de otro tenant y que
+ * el servidor responde 404 a lo que no es suyo. Cada organización entra con su
+ * propia sesión de Better Auth, como en el panel.
  *
  * Necesita PostgreSQL: sin `DATABASE_URL` se salta con un mensaje.
  */
@@ -14,6 +15,7 @@ import {
   conTenant,
   crearConexion,
   purgarOrganizacion,
+  uuidV7,
 } from '@aiw/db';
 import {
   HAY_BASE_DE_DATOS,
@@ -27,10 +29,14 @@ import { registrarTareaRaiz, registrarTarifa, registrarUsoDeModelo } from '@aiw/
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { BANDERA, CABECERA_TENANT, VARIABLE_AUTORIZACION } from '../rutas/contador';
+import { CorreoEnMemoria } from '../identidad/correo';
+import { invitarPropietario } from '../identidad/invitar';
+import { BANDERA, VARIABLE_AUTORIZACION } from '../rutas/contador';
 import { arrancarApi, type ApiEnMarcha } from '../servidor';
+import { NavegadorDePrueba, secretoDePrueba } from './navegador';
 
 const CLAVE = 'valor-de-prueba-del-contador-http';
+const CABECERA_TENANT = 'x-aiw-tenant';
 const PROVEEDOR = 'proveedor-de-prueba';
 const MODELO = 'modelo-de-prueba';
 
@@ -45,6 +51,11 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
   let org: OrganizacionSembrada;
   let vecina: OrganizacionSembrada;
 
+  const correo = new CorreoEnMemoria();
+  const sufijo = uuidV7().slice(-12);
+  let navOrg: NavegadorDePrueba;
+  let navVecina: NavegadorDePrueba;
+
   async function pedir(
     ruta: string,
     cabeceras: Record<string, string>,
@@ -57,8 +68,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     };
   }
 
-  function cabecerasDe(tenantId: string): Record<string, string> {
-    return { authorization: `Bearer ${CLAVE}`, [CABECERA_TENANT]: tenantId };
+  /** Token del panel y la cookie de la sesión de quien pregunta. */
+  function cabecerasDe(nav: NavegadorDePrueba): Record<string, string> {
+    return { authorization: `Bearer ${CLAVE}`, cookie: nav.cabeceraCookie() };
   }
 
   beforeAll(async () => {
@@ -102,9 +114,25 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
         [BANDERA]: '1',
         [VARIABLE_AUTORIZACION]: CLAVE,
         AIW_API_PUERTO: '0',
+        AIW_ACCESO_PANEL: '1',
+        AIW_ACCESO_SECRETO: secretoDePrueba(),
         DATABASE_URL: URL_BASE_DE_DATOS,
       },
+      correoAcceso: correo,
     });
+
+    const correoOrg = `org-${sufijo}@contador.example`;
+    const correoVecina = `vecina-${sufijo}@contador.example`;
+    await invitarPropietario(cliente, { tenantId: org.tenantId, nombre: 'Org', correo: correoOrg });
+    await invitarPropietario(cliente, {
+      tenantId: vecina.tenantId,
+      nombre: 'Vecina',
+      correo: correoVecina,
+    });
+    navOrg = new NavegadorDePrueba(`http://127.0.0.1:${api.puerto}`);
+    navVecina = new NavegadorDePrueba(`http://127.0.0.1:${api.puerto}`);
+    await navOrg.entrarConEnlace(correo, correoOrg);
+    await navVecina.entrarConEnlace(correo, correoVecina);
   });
 
   afterAll(async () => {
@@ -117,7 +145,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
   });
 
   it('el consumo del periodo llega con el coste de los usos reales', async () => {
-    const { estado, cuerpo } = await pedir('/contador/periodo', cabecerasDe(org.tenantId));
+    const { estado, cuerpo } = await pedir('/contador/periodo', cabecerasDe(navOrg));
     expect(estado).toBe(200);
     expect(Number(cuerpo['tareas'])).toBeGreaterThan(0);
     expect(Number(cuerpo['costeModelosEuros'])).toBeCloseTo(0.9, 4);
@@ -125,14 +153,14 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
   });
 
   it('las tareas del periodo traen la raíz con su coste', async () => {
-    const { estado, cuerpo } = await pedir('/contador/tareas?limite=5', cabecerasDe(org.tenantId));
+    const { estado, cuerpo } = await pedir('/contador/tareas?limite=5', cabecerasDe(navOrg));
     expect(estado).toBe(200);
     const tareas = cuerpo['tareas'] as { tareaId: string; costeModelosEuros: number }[];
     expect(tareas.some((t) => t.tareaId === org.tareaId)).toBe(true);
   });
 
   it('el coste por puesto llega agrupado', async () => {
-    const { estado, cuerpo } = await pedir('/contador/coste-por-puesto', cabecerasDe(org.tenantId));
+    const { estado, cuerpo } = await pedir('/contador/coste-por-puesto', cabecerasDe(navOrg));
     expect(estado).toBe(200);
     const puestos = cuerpo['puestos'] as { puesto: string; costeModelosEuros: number }[];
     expect(puestos[0]?.puesto).toBe('Contable');
@@ -140,30 +168,34 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
   });
 
   it('el vecino pregunta lo mismo y recibe ceros: la RLS no se lo salta', async () => {
-    const { estado, cuerpo } = await pedir('/contador/periodo', cabecerasDe(vecina.tenantId));
+    // Aunque pida el tenant de la otra organización por cabecera.
+    const { estado, cuerpo } = await pedir('/contador/periodo', {
+      ...cabecerasDe(navVecina),
+      [CABECERA_TENANT]: org.tenantId,
+    });
     expect(estado).toBe(200);
     expect(Number(cuerpo['costeModelosEuros'])).toBe(0);
     expect(Number(cuerpo['tareas'])).toBe(2); // Lo que dejó la semilla, nada de la otra.
 
-    const puestos = await pedir('/contador/coste-por-puesto', cabecerasDe(vecina.tenantId));
+    const puestos = await pedir('/contador/coste-por-puesto', cabecerasDe(navVecina));
     expect(puestos.cuerpo['puestos']).toEqual([]);
   });
 
-  it('sin token no se lee nada', async () => {
-    const { estado } = await pedir('/contador/periodo', { [CABECERA_TENANT]: org.tenantId });
+  it('sin token no se lee nada, ni con sesión', async () => {
+    const { estado } = await pedir('/contador/periodo', { cookie: navOrg.cabeceraCookie() });
     expect(estado).toBe(401);
   });
 
-  it('con un tenant que no es UUID responde 400', async () => {
+  it('sin sesión no se lee nada, ni con la cabecera de tenant', async () => {
     const { estado } = await pedir('/contador/periodo', {
       authorization: `Bearer ${CLAVE}`,
-      [CABECERA_TENANT]: 'alfa',
+      [CABECERA_TENANT]: org.tenantId,
     });
-    expect(estado).toBe(400);
+    expect(estado).toBe(401);
   });
 
   it('lo que no es del contador es 404 y no filtra nada', async () => {
-    const { estado, cuerpo } = await pedir('/aprobaciones/1', cabecerasDe(org.tenantId));
+    const { estado, cuerpo } = await pedir('/aprobaciones/1', cabecerasDe(navOrg));
     expect(estado).toBe(404);
     expect(JSON.stringify(cuerpo)).not.toContain(CLAVE);
   });

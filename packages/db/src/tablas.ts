@@ -24,6 +24,7 @@ import {
   puesto,
   versionPuesto,
 } from './equipo.js';
+import { claveAcceso, cuenta, sesion, usuario, verificacion } from './identidad.js';
 import { eventoSalida, indicador, indicadorValor, notificacion } from './observacion.js';
 import { propuestaOperacion } from './operaciones.js';
 import {
@@ -78,6 +79,37 @@ export const TABLAS_RAIZ = [
   organizacion,
   organizacionParaguas,
 ] as const satisfies readonly PgTable[];
+
+/**
+ * Tablas de identidad del panel (rebanada «Acceso al panel»). Las lee el rol
+ * `aiw_identidad` y no el de aplicación, porque el acceso ocurre antes de saber el
+ * tenant. Van aparte de `TABLAS_CON_TENANT` a propósito: no se exportan con los datos
+ * del cliente —llevan tokens de sesión— y solo `usuario` y `sesion` tienen
+ * `tenant_id`; el resto cuelga de `usuario`.
+ */
+export const TABLAS_IDENTIDAD = [
+  usuario,
+  sesion,
+  cuenta,
+  verificacion,
+  claveAcceso,
+] as const satisfies readonly PgTable[];
+
+export const NOMBRES_TABLAS_IDENTIDAD: readonly string[] = TABLAS_IDENTIDAD.map((t) =>
+  getTableName(t),
+);
+
+/**
+ * Orden de purga de la identidad de un tenant, de la hoja a la raíz. Va antes que
+ * `ORDEN_PURGA` porque `usuario` y `sesion` referencian `persona` y `organizacion`.
+ * `verificacion` no tiene tenant: caduca en minutos y no se purga por organización.
+ */
+export const ORDEN_PURGA_IDENTIDAD: readonly { tabla: string; porUsuario: boolean }[] = [
+  { tabla: 'clave_acceso', porUsuario: true },
+  { tabla: 'cuenta', porUsuario: true },
+  { tabla: 'sesion', porUsuario: false },
+  { tabla: 'usuario', porUsuario: false },
+];
 
 /** Tablas de infraestructura sin tenant y sin RLS: el rol de aplicación no las toca. */
 export const TABLAS_INFRAESTRUCTURA = [migracionAplicada] as const satisfies readonly PgTable[];
@@ -156,6 +188,7 @@ export const NOMBRES_TABLAS: readonly string[] = [
   ...NOMBRES_TABLAS_CON_TENANT,
   ...NOMBRES_TABLAS_LIBRO,
   ...NOMBRES_TABLAS_CONTADOR,
+  ...NOMBRES_TABLAS_IDENTIDAD,
   ...TABLAS_INFRAESTRUCTURA.map((t) => getTableName(t)),
 ];
 

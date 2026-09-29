@@ -1,15 +1,15 @@
 /**
- * Rutas del contador: bandera, token, tenant y caminos de error.
+ * Rutas del contador: bandera, token, sesión y caminos de error.
  *
- * Sin base de datos: el lector se inyecta. Lo que se prueba aquí es la puerta, que
- * es lo único que separa el consumo de un tenant de quien pase por delante mientras
- * no exista la identidad.
+ * Sin base de datos: el lector y la sesión se inyectan. Lo que se prueba aquí es la
+ * puerta: el tenant sale de la sesión validada, y una cabecera `x-aiw-tenant` que
+ * diga otra cosa no cambia nada.
  */
 import { describe, expect, it, vi } from 'vitest';
 
+import type { ResolutorDeSesion } from '../identidad/acceso';
 import {
   BANDERA,
-  CABECERA_TENANT,
   VARIABLE_AUTORIZACION,
   atenderContador,
   configuracionDesdeEntorno,
@@ -19,6 +19,25 @@ import {
 
 const CLAVE = 'valor-de-prueba-del-contador';
 const TENANT = '01929f00-0000-7000-8000-0000000000c1';
+const OTRO_TENANT = '01929f00-0000-7000-8000-0000000000c9';
+const CABECERA_TENANT = 'x-aiw-tenant';
+const COOKIE = 'aiw.session_token=valida';
+
+/** Sesión falsa: solo la cookie `valida` da sesión, y siempre del mismo tenant. */
+const sesiones: ResolutorDeSesion = (cabeceras) =>
+  Promise.resolve(
+    cabeceras['cookie'] === COOKIE
+      ? {
+          sesionId: '01929f00-0000-7000-8000-0000000000d1',
+          usuarioId: '01929f00-0000-7000-8000-0000000000d2',
+          tenantId: TENANT,
+          personaId: '01929f00-0000-7000-8000-0000000000d3',
+          nombre: 'Propietaria',
+          correo: 'propietaria@ejemplo.local',
+          caducaEn: new Date(Date.now() + 3_600_000),
+        }
+      : null,
+  );
 
 const ENTORNO = { [BANDERA]: '1', [VARIABLE_AUTORIZACION]: CLAVE };
 
@@ -56,7 +75,7 @@ function peticion(parcial: Partial<PeticionContador> = {}): PeticionContador {
   return {
     metodo: 'GET',
     url: '/contador/periodo',
-    cabeceras: { authorization: `Bearer ${CLAVE}`, [CABECERA_TENANT]: TENANT },
+    cabeceras: { authorization: `Bearer ${CLAVE}`, cookie: COOKIE },
     ...parcial,
   };
 }
@@ -111,9 +130,10 @@ describe('atenderContador', () => {
   it('sin token responde 401 y pide autenticación, sin leer nada', async () => {
     const espia = lector();
     const respuesta = await atenderContador(
-      peticion({ cabeceras: { [CABECERA_TENANT]: TENANT } }),
+      peticion({ cabeceras: { cookie: COOKIE } }),
       configuracionDesdeEntorno(ENTORNO),
       espia,
+      sesiones,
     );
     expect(respuesta?.estado).toBe(401);
     expect(respuesta?.cabeceras['www-authenticate']).toBe('Bearer');
@@ -130,26 +150,59 @@ describe('atenderContador', () => {
       CLAVE,
     ]) {
       const respuesta = await atenderContador(
-        peticion({ cabeceras: { authorization: autorizacion, [CABECERA_TENANT]: TENANT } }),
+        peticion({ cabeceras: { authorization: autorizacion, cookie: COOKIE } }),
         configuracionDesdeEntorno(ENTORNO),
         lector(),
+        sesiones,
       );
       expect(respuesta?.estado, `«${autorizacion}» no debería valer`).toBe(401);
     }
   });
 
-  it('sin tenant, o con uno que no es UUID, responde 400', async () => {
-    for (const tenant of [undefined, '', 'alfa', '01929f00-0000-7000-8000', `${TENANT} or 1=1`]) {
-      const cabeceras: Record<string, string> = { authorization: `Bearer ${CLAVE}` };
-      if (tenant !== undefined) cabeceras[CABECERA_TENANT] = tenant;
+  it('sin sesión responde 401 aunque la cabecera traiga un tenant, sin leer nada', async () => {
+    const espia = lector();
+    for (const cabeceras of [
+      { authorization: `Bearer ${CLAVE}` },
+      { authorization: `Bearer ${CLAVE}`, [CABECERA_TENANT]: TENANT },
+      { authorization: `Bearer ${CLAVE}`, cookie: 'aiw.session_token=inventada' },
+    ]) {
       const respuesta = await atenderContador(
         peticion({ cabeceras }),
         configuracionDesdeEntorno(ENTORNO),
-        lector(),
+        espia,
+        sesiones,
       );
-      expect(respuesta?.estado, `«${tenant}» no debería valer como tenant`).toBe(400);
-      expect(respuesta?.cuerpo['error']).toContain(CABECERA_TENANT);
+      expect(respuesta?.estado).toBe(401);
     }
+    expect(espia.consumo).not.toHaveBeenCalled();
+  });
+
+  it('sin acceso configurado nadie tiene sesión: 401', async () => {
+    const respuesta = await atenderContador(
+      peticion(),
+      configuracionDesdeEntorno(ENTORNO),
+      lector(),
+    );
+    expect(respuesta?.estado).toBe(401);
+  });
+
+  it('el tenant es el de la sesión aunque la cabecera diga otro', async () => {
+    const espia = lector();
+    const respuesta = await atenderContador(
+      peticion({
+        cabeceras: {
+          authorization: `Bearer ${CLAVE}`,
+          cookie: COOKIE,
+          [CABECERA_TENANT]: OTRO_TENANT,
+        },
+      }),
+      configuracionDesdeEntorno(ENTORNO),
+      espia,
+      sesiones,
+    );
+    expect(respuesta?.estado).toBe(200);
+    expect(espia.consumo).toHaveBeenCalledWith(TENANT);
+    expect(espia.consumo).not.toHaveBeenCalledWith(OTRO_TENANT);
   });
 
   it('solo se lee: cualquier otro método responde 405', async () => {
@@ -158,6 +211,7 @@ describe('atenderContador', () => {
         peticion({ metodo }),
         configuracionDesdeEntorno(ENTORNO),
         lector(),
+        sesiones,
       );
       expect(respuesta?.estado).toBe(405);
     }
@@ -168,13 +222,19 @@ describe('atenderContador', () => {
       peticion({ url: '/contador/lo-que-sea' }),
       configuracionDesdeEntorno(ENTORNO),
       lector(),
+      sesiones,
     );
     expect(respuesta?.estado).toBe(404);
   });
 
   it('devuelve el consumo del periodo y no deja cachearlo', async () => {
     const espia = lector();
-    const respuesta = await atenderContador(peticion(), configuracionDesdeEntorno(ENTORNO), espia);
+    const respuesta = await atenderContador(
+      peticion(),
+      configuracionDesdeEntorno(ENTORNO),
+      espia,
+      sesiones,
+    );
     expect(respuesta?.estado).toBe(200);
     expect(respuesta?.cuerpo['tareas']).toBe(3);
     expect(respuesta?.cuerpo['costeModelosEuros']).toBe(1.2345);
@@ -190,6 +250,7 @@ describe('atenderContador', () => {
       peticion({ url: '/contador/tareas?limite=7' }),
       configuracionDesdeEntorno(ENTORNO),
       espia,
+      sesiones,
     );
     expect(respuesta?.estado).toBe(200);
     expect(respuesta?.cuerpo['total']).toBe(3);
@@ -204,6 +265,7 @@ describe('atenderContador', () => {
         peticion({ url: `/contador/tareas?limite=${limite}` }),
         configuracion,
         espia,
+        sesiones,
       );
       expect(espia.tareas).toHaveBeenLastCalledWith(TENANT, configuracion?.limiteTareas);
     }
@@ -214,6 +276,7 @@ describe('atenderContador', () => {
       peticion({ url: '/contador/coste-por-puesto' }),
       configuracionDesdeEntorno(ENTORNO),
       lector(),
+      sesiones,
     );
     expect(respuesta?.estado).toBe(200);
     expect(Array.isArray(respuesta?.cuerpo['puestos'])).toBe(true);
@@ -229,14 +292,15 @@ describe('atenderContador', () => {
     ];
     for (const url of rutas) {
       for (const cabeceras of [
-        { authorization: `Bearer ${CLAVE}`, [CABECERA_TENANT]: TENANT },
-        { authorization: 'Bearer otro', [CABECERA_TENANT]: TENANT },
+        { authorization: `Bearer ${CLAVE}`, cookie: COOKIE },
+        { authorization: 'Bearer otro', cookie: COOKIE },
         { [CABECERA_TENANT]: 'no-es-uuid' },
       ]) {
         const respuesta = await atenderContador(
           peticion({ url, cabeceras }),
           configuracion,
           lector(),
+          sesiones,
         );
         const serializada = JSON.stringify(respuesta ?? {});
         expect(serializada, `${url} devuelve el token`).not.toContain(CLAVE);

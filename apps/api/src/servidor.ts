@@ -1,17 +1,35 @@
 /**
  * Servidor HTTP de la API.
  *
- * `node:http` y no un framework: la única cosa que sirve hoy son tres rutas de
- * lectura del contador, y elegir el framework es decisión de la rebanada que monte
- * la API de verdad (el ADR-002 fija el stack, no la capa HTTP). Añadir una
- * dependencia para tres `GET` sería decidir por ella.
+ * `node:http` y no un framework: elegirlo es decisión de la rebanada que monte la
+ * API de verdad (el ADR-002 fija el stack, no la capa HTTP). Hoy sirve las rutas
+ * del contador, las de la sala y el acceso de Better Auth, que habla `Request` y
+ * `Response` y se traduce en `rutas/acceso.ts`.
  *
  * El servidor no sabe nada del contador más allá de una línea: registra su manejador
  * y, si ninguno reconoce la ruta, responde 404.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
-import { crearConexion, type Conexion } from '@aiw/db';
+import { ROL_IDENTIDAD, crearConexion, type Conexion } from '@aiw/db';
+import type { PuertoDeCorreo } from '@aiw/domain';
+
+import {
+  SIN_SESION,
+  crearAcceso,
+  puertoIdentidad,
+  type Acceso,
+  type ResolutorDeSesion,
+} from './identidad/acceso.js';
+import { anotadorConBaseDeDatos } from './identidad/auditoria.js';
+import { configuracionAccesoDesdeEntorno } from './identidad/configuracion.js';
+import { crearCorreo } from './identidad/correo.js';
+import {
+  CuerpoDemasiadoGrande,
+  aPeticionWeb,
+  escribirRespuestaWeb,
+  esRutaDeAcceso,
+} from './rutas/acceso.js';
 
 import {
   atenderContador,
@@ -36,6 +54,8 @@ export interface OpcionesServidor {
   conexion?: Conexion | undefined;
   /** Puerto de la sala ya construido. Solo para pruebas. */
   puertoSala?: PuertoSala | undefined;
+  /** Correo del acceso. Solo para pruebas: si falta, sale de `AIW_CORREO_PROVEEDOR`. */
+  correoAcceso?: PuertoDeCorreo | undefined;
 }
 
 /** Tope del cuerpo de una petición: un mensaje de sala cabe de sobra. */
@@ -80,6 +100,7 @@ async function abrirFlujos(configuracion: ConfiguracionSala) {
 
 export interface ApiEnMarcha {
   servidor: Server;
+  acceso: Acceso | undefined;
   puerto: number;
   cerrar: () => Promise<void>;
 }
@@ -95,6 +116,7 @@ function responder(respuesta: ServerResponse, resultado: RespuestaContador): voi
 
 export function crearApi(opciones: OpcionesServidor = {}): {
   servidor: Server;
+  acceso: Acceso | undefined;
   cerrarConexion: () => Promise<void>;
 } {
   const entorno = opciones.entorno ?? process.env;
@@ -107,6 +129,24 @@ export function crearApi(opciones: OpcionesServidor = {}): {
 
   const manejadores: Manejador[] = [];
 
+  // Acceso al panel: Better Auth con su propia conexión y el rol de identidad, que
+  // es el único que lee usuarios y sesiones. Sin bandera, nadie tiene sesión y las
+  // rutas de datos responden 401: el tenant ya no llega por cabecera.
+  const configuracionAcceso = configuracionAccesoDesdeEntorno(entorno);
+  let conexionIdentidad: Conexion | undefined;
+  let acceso: Acceso | undefined;
+  if (configuracionAcceso && conexion && url) {
+    conexionIdentidad = crearConexion({ url, rolAplicacion: ROL_IDENTIDAD, maxConexiones: 5 });
+    acceso = crearAcceso({
+      configuracion: configuracionAcceso,
+      dbIdentidad: conexionIdentidad.crearDb(),
+      puerto: puertoIdentidad(conexionIdentidad.cliente, conexion.cliente),
+      anotador: anotadorConBaseDeDatos(conexion.cliente),
+      correo: opciones.correoAcceso ?? crearCorreo(configuracionAcceso.correo),
+    });
+  }
+  const resolverSesion: ResolutorDeSesion = acceso?.resolverSesion ?? SIN_SESION;
+
   // Contador de tareas v0: una línea, y el módulo decide si la ruta existe.
   if (conexion) {
     const configuracion = configuracionDesdeEntorno(entorno);
@@ -116,6 +156,7 @@ export function crearApi(opciones: OpcionesServidor = {}): {
         { metodo: peticion.method, url: peticion.url, cabeceras: peticion.headers },
         configuracion,
         lector,
+        resolverSesion,
       ),
     );
   }
@@ -146,6 +187,7 @@ export function crearApi(opciones: OpcionesServidor = {}): {
         },
         configuracionSala,
         puerto,
+        resolverSesion,
       ),
     );
   }
@@ -153,6 +195,10 @@ export function crearApi(opciones: OpcionesServidor = {}): {
   const servidor = createServer((peticion, respuesta) => {
     void (async () => {
       try {
+        if (acceso && esRutaDeAcceso(peticion.url)) {
+          await escribirRespuestaWeb(await acceso.manejar(await aPeticionWeb(peticion)), respuesta);
+          return;
+        }
         for (const manejador of manejadores) {
           const resultado = await manejador(peticion);
           if (resultado) {
@@ -169,6 +215,17 @@ export function crearApi(opciones: OpcionesServidor = {}): {
           },
         });
       } catch (error) {
+        if (error instanceof CuerpoDemasiadoGrande) {
+          responder(respuesta, {
+            estado: 413,
+            cuerpo: { error: error.message },
+            cabeceras: {
+              'content-type': 'application/json; charset=utf-8',
+              'cache-control': 'no-store',
+            },
+          });
+          return;
+        }
         // El detalle va al registro del proceso, no a quien pregunta: un mensaje de
         // la base puede decir más de la cuenta sobre el esquema.
         console.error('[api] la petición falló:', error instanceof Error ? error.message : error);
@@ -186,8 +243,10 @@ export function crearApi(opciones: OpcionesServidor = {}): {
 
   return {
     servidor,
+    acceso,
     cerrarConexion: async () => {
       await flujosAbiertos?.cerrar();
+      await conexionIdentidad?.cerrar();
       if (opciones.conexion === undefined && conexion) await conexion.cerrar();
     },
   };
@@ -198,7 +257,7 @@ export async function arrancarApi(opciones: OpcionesServidor = {}): Promise<ApiE
   const entorno = opciones.entorno ?? process.env;
   const pedido = Number(entorno['AIW_API_PUERTO'] ?? PUERTO_POR_DEFECTO);
   const puerto = Number.isFinite(pedido) && pedido >= 0 ? pedido : PUERTO_POR_DEFECTO;
-  const { servidor, cerrarConexion } = crearApi(opciones);
+  const { servidor, acceso, cerrarConexion } = crearApi(opciones);
 
   await new Promise<void>((resolver, rechazar) => {
     servidor.once('error', rechazar);
@@ -211,6 +270,7 @@ export async function arrancarApi(opciones: OpcionesServidor = {}): Promise<ApiE
   const direccion = servidor.address();
   return {
     servidor,
+    acceso,
     puerto: typeof direccion === 'object' && direccion ? direccion.port : puerto,
     cerrar: async () => {
       await new Promise<void>((resolver) => {

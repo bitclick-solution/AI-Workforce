@@ -7,7 +7,9 @@
  * los tipos de aquí son una copia declarada del contrato, no un `import`.
  *
  * El token nunca llega al navegador: lo pone el manejador de ruta del servidor de
- * Next al llamar a la API, y el componente de cliente solo ve el resultado.
+ * Next al llamar a la API, y el componente de cliente solo ve el resultado. La
+ * organización la decide la API a partir de la cookie de sesión que Next reenvía
+ * («Acceso al panel»); Next no manda ningún tenant.
  */
 
 /** Bandera de funcionalidad del panel. Apagada, la vista no existe. */
@@ -18,8 +20,6 @@ export const SONDEO_MS = 5_000;
 
 /** A partir de aquí el panel avisa de que lo que muestra ya no es de ahora. */
 export const TOLERANCIA_RANCIO_MS = 30_000;
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface ConsumoDelPeriodo {
   periodo: string;
@@ -62,28 +62,21 @@ export interface DatosDelContador {
 export interface ConfiguracionPanel {
   apiUrl: string;
   token: string;
-  tenantId: string;
 }
 
 export function panelActivo(entorno: Record<string, string | undefined>): boolean {
   return entorno[BANDERA_PANEL] === '1' || entorno[BANDERA_PANEL] === 'true';
 }
 
-/**
- * Configuración del proxy, o `undefined` si falta algo.
- *
- * Mientras no haya identidad, el tenant del panel llega por entorno. Se valida como
- * UUID aquí para no mandar a la API una cabecera que solo puede acabar en un 400.
- */
+/** Configuración del proxy, o `undefined` si falta algo. */
 export function configuracionPanel(
   entorno: Record<string, string | undefined>,
 ): ConfiguracionPanel | undefined {
   if (!panelActivo(entorno)) return undefined;
   const apiUrl = entorno['AIW_API_URL']?.trim();
   const token = entorno['AIW_CONTADOR_TOKEN']?.trim();
-  const tenantId = entorno['AIW_PANEL_TENANT']?.trim();
-  if (!apiUrl || !token || !tenantId || !UUID.test(tenantId)) return undefined;
-  return { apiUrl: apiUrl.replace(/\/+$/, ''), token, tenantId };
+  if (!apiUrl || !token) return undefined;
+  return { apiUrl: apiUrl.replace(/\/+$/, ''), token };
 }
 
 type Buscador = (url: string, opciones: { headers: Record<string, string> }) => Promise<Response>;
@@ -92,13 +85,14 @@ async function pedirJson<T>(
   configuracion: ConfiguracionPanel,
   ruta: string,
   buscar: Buscador,
+  cookie: string,
 ): Promise<T> {
   let respuesta: Response;
   try {
     respuesta = await buscar(`${configuracion.apiUrl}${ruta}`, {
       headers: {
         authorization: `Bearer ${configuracion.token}`,
-        'x-aiw-tenant': configuracion.tenantId,
+        ...(cookie ? { cookie } : {}),
       },
     });
   } catch {
@@ -112,21 +106,32 @@ async function pedirJson<T>(
   return (await respuesta.json()) as T;
 }
 
-/** Lee las tres rutas y devuelve lo que el panel pinta de una vez. */
+/**
+ * Lee las tres rutas y devuelve lo que el panel pinta de una vez. `cookie` es la
+ * cabecera ya filtrada a las cookies del acceso (`cookiesDelAcceso`).
+ */
 export async function leerContador(
   configuracion: ConfiguracionPanel,
   buscar: Buscador,
+  cookie: string,
 ): Promise<DatosDelContador> {
-  const consumo = await pedirJson<ConsumoDelPeriodo>(configuracion, '/contador/periodo', buscar);
+  const consumo = await pedirJson<ConsumoDelPeriodo>(
+    configuracion,
+    '/contador/periodo',
+    buscar,
+    cookie,
+  );
   const tareas = await pedirJson<{ tareas: TareaDelPanel[]; porEstado: Record<string, number> }>(
     configuracion,
     '/contador/tareas',
     buscar,
+    cookie,
   );
   const puestos = await pedirJson<{ puestos: PuestoDelPanel[] }>(
     configuracion,
     '/contador/coste-por-puesto',
     buscar,
+    cookie,
   );
   return {
     consumo,

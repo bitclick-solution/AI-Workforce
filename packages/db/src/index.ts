@@ -23,6 +23,7 @@ export type Paquete = typeof PAQUETE;
 export * from './columnas.js';
 export * from './enumeraciones.js';
 export * from './organizacion.js';
+export * from './identidad.js';
 export * from './equipo.js';
 export * from './trabajo.js';
 export * from './aprendizaje.js';

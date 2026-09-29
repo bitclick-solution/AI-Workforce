@@ -74,7 +74,12 @@ if (SERVIR) {
   console.log('— Trabajador escuchando en la cola', cola);
   console.log('  Arranca la API y la web con estas variables y abre /panel/sala:');
   console.log(`    AIW_SALA_V0=1 AIW_SALA_TOKEN=<elige uno> AIW_TEMPORAL_COLA=${cola}`);
-  console.log(`    AIW_SALA_TENANT=${semilla.tenantId} AIW_SALA_PERSONA=${semilla.personaId}`);
+  console.log(
+    '    AIW_ACCESO_PANEL=1 AIW_ACCESO_SECRETO=<secreto>, y entra en /acceso con una persona',
+  );
+  console.log(
+    `    invitada: pnpm --filter @aiw/api invitar-propietario --tenant ${semilla.tenantId} --nombre … --correo …`,
+  );
   console.log('  Ctrl+C para terminar.');
   await montado.trabajador.run();
   await montado.cerrar();

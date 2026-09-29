@@ -1,4 +1,5 @@
 /** Proxy de lectura de las salas de la persona: sin leer y menciones (sala v1). */
+import { cookiesDelAcceso } from '../../../../lib/acceso';
 import { configuracionSala, llamarSala } from '../../../../lib/sala';
 
 export const dynamic = 'force-dynamic';
@@ -8,7 +9,7 @@ const SIN_CACHE = {
   'cache-control': 'no-store',
 };
 
-export async function GET(): Promise<Response> {
+export async function GET(peticion: Request): Promise<Response> {
   const configuracion = configuracionSala(process.env);
   if (!configuracion) {
     return new Response(JSON.stringify({ error: 'La sala no está activa.' }), {
@@ -21,6 +22,7 @@ export async function GET(): Promise<Response> {
     'GET',
     '/sala/salas',
     (url, opciones) => fetch(url, { ...opciones, cache: 'no-store' }),
+    cookiesDelAcceso(peticion.headers.get('cookie')),
   );
   return new Response(JSON.stringify(cuerpo), { status: estado, headers: SIN_CACHE });
 }
