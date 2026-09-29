@@ -323,8 +323,9 @@ jobs:
     runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     timeout-minutes: 25
     env:
-      # En el VPS del ejecutor propio el 3001 lo ocupa un servicio del host.
+      # En el VPS del ejecutor propio el 3000 y el 3001 los ocupan servicios del host.
       LANGFUSE_PORT: '13001'
+      AIW_WEB_PUERTO: '13000'
     steps:
       - uses: actions/checkout@v5
         with:
@@ -367,7 +368,7 @@ jobs:
         run: |
           set -e
           for ruta in panel/muestras panel/sala panel/contador prototipo; do
-            curl -fsS "http://127.0.0.1:3000/$ruta" > /dev/null
+            curl -fsS "http://127.0.0.1:${AIW_WEB_PUERTO:-3000}/$ruta" > /dev/null
             echo "OK /$ruta"
           done
       - name: Estado de los servicios

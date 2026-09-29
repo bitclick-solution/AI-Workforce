@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { freemem, totalmem } from 'node:os';
 import { statfsSync } from 'node:fs';
 
-import { puertoOcupado, raiz } from './local-comun.mjs';
+import { puertoOcupado, raiz, valorEntorno } from './local-comun.mjs';
 
 const NODE_MAYOR_MINIMO = 22;
 const NODE_MAYOR_MAXIMO = 23; // exclusivo, como en package.json#engines
@@ -27,7 +27,6 @@ const VARIABLE_POR_PUERTO = {
   MAILPIT_SMTP_PORT: '1025',
   MAILPIT_UI_PORT: '8025',
 };
-const PUERTO_WEB = '3000';
 
 function comandoDisponible(mandato, argumentos) {
   const resultado = spawnSync(mandato, argumentos, { encoding: 'utf8' });
@@ -38,7 +37,7 @@ function comandoDisponible(mandato, argumentos) {
  * Devuelve `{ errores, avisos }`. Con `errores` no vacío, `local:arrancar` para: la
  * máquina no puede sostener el resto de los pasos. Los `avisos` no paran nada.
  */
-export async function comprobarRequisitos(env, { puertoApi = '3002' } = {}) {
+export async function comprobarRequisitos(env, { puertoApi = '3002', puertoWeb = '3000' } = {}) {
   const errores = [];
   const avisos = [];
 
@@ -74,16 +73,15 @@ export async function comprobarRequisitos(env, { puertoApi = '3002' } = {}) {
     errores.push('pnpm no está en el PATH. Con Corepack: `corepack enable`.');
   }
 
-  const puertos = { ...VARIABLE_POR_PUERTO };
   const ocupados = [];
-  for (const [variable, porDefecto] of Object.entries(puertos)) {
-    const puerto = env[variable] || porDefecto;
+  for (const [variable, porDefecto] of Object.entries(VARIABLE_POR_PUERTO)) {
+    const puerto = valorEntorno(env, variable, porDefecto);
     if (await puertoOcupado(puerto)) ocupados.push(`${puerto} (${variable})`);
   }
-  if (await puertoOcupado(env.AIW_API_PUERTO || puertoApi)) {
-    ocupados.push(`${env.AIW_API_PUERTO || puertoApi} (AIW_API_PUERTO)`);
-  }
-  if (await puertoOcupado(PUERTO_WEB)) ocupados.push(`${PUERTO_WEB} (web)`);
+  const puertoApiReal = valorEntorno(env, 'AIW_API_PUERTO', puertoApi);
+  if (await puertoOcupado(puertoApiReal)) ocupados.push(`${puertoApiReal} (AIW_API_PUERTO)`);
+  const puertoWebReal = valorEntorno(env, 'AIW_WEB_PUERTO', puertoWeb);
+  if (await puertoOcupado(puertoWebReal)) ocupados.push(`${puertoWebReal} (AIW_WEB_PUERTO)`);
   if (ocupados.length > 0) {
     errores.push(
       `Puertos ocupados: ${ocupados.join(', ')}. Si es un arranque anterior, ejecuta \`pnpm local:parar\` primero.`,

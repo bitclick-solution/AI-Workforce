@@ -47,11 +47,23 @@ export function tokenAleatorio() {
   return randomBytes(24).toString('hex');
 }
 
-/** Cadena de conexión compuesta a partir de .env; nunca se escribe en ningún fichero. */
+/**
+ * Valor de una variable de entorno con la misma prioridad que usa Docker Compose
+ * para `--env-file`: el entorno del proceso (lo que fija un `env:` de la CI, por
+ * ejemplo para esquivar un puerto ya ocupado en un ejecutor compartido) gana al
+ * valor de `.env`, y ese gana al valor por defecto. Sin esto, un `env:` del job
+ * cambia el puerto real del contenedor pero deja a este script comprobando y
+ * componiendo con el puerto de `.env`, que ya no es el que se está usando.
+ */
+export function valorEntorno(env, nombre, porDefecto) {
+  return process.env[nombre]?.trim() || env[nombre] || porDefecto;
+}
+
+/** Cadena de conexión compuesta a partir de .env (o su variable de entorno); nunca se escribe en ningún fichero. */
 export function urlBaseDeDatos(env) {
-  const usuario = env.POSTGRES_USER || 'postgres';
+  const usuario = valorEntorno(env, 'POSTGRES_USER', 'postgres');
   const clave = env.POSTGRES_PASSWORD;
-  const puerto = env.POSTGRES_PORT || '5432';
+  const puerto = valorEntorno(env, 'POSTGRES_PORT', '5432');
   if (!clave) {
     throw new Error('Falta POSTGRES_PASSWORD en .env. Ejecuta primero `pnpm local:arrancar`.');
   }

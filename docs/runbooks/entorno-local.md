@@ -61,7 +61,7 @@ siguientes, con las imágenes ya en caché, unos treinta segundos a un minuto.
 
 | Puerto    | Servicio                 |
 | --------- | ------------------------ |
-| 3000      | `web` (Next.js)          |
+| 3000      | `web` (`AIW_WEB_PUERTO`) |
 | 3002      | `api` (`AIW_API_PUERTO`) |
 | 5432      | PostgreSQL               |
 | 7233      | Temporal                 |
@@ -73,7 +73,10 @@ siguientes, con las imágenes ya en caché, unos treinta segundos a un minuto.
 
 Si alguno está ocupado por otra cosa en tu máquina, cambia la variable
 correspondiente en `.env` (por ejemplo `POSTGRES_PORT=5433`) antes de volver a
-arrancar; `pnpm local:arrancar` la respeta.
+arrancar; `pnpm local:arrancar` la respeta. Para `web` y `api` también puedes
+fijar la variable como una del entorno del propio proceso (no solo en `.env`):
+así arranca el job de la CI en el ejecutor autoalojado compartido, donde el
+3000 y el 3001 ya los ocupan servicios de producción del mismo VPS.
 
 ## Registros
 

@@ -30,6 +30,7 @@ import {
   tieneBandera,
   tokenAleatorio,
   urlBaseDeDatos,
+  valorEntorno,
 } from './local-comun.mjs';
 import { comprobarRequisitos } from './local-requisitos.mjs';
 
@@ -121,8 +122,8 @@ paso('Arrancando api y web');
 const salaToken = env.AIW_SALA_TOKEN || tokenAleatorio();
 const contadorToken = env.AIW_CONTADOR_TOKEN;
 if (!contadorToken) fallar('Falta AIW_CONTADOR_TOKEN en .env; borra .env y vuelve a arrancar.');
-const puertoApi = env.AIW_API_PUERTO || '3002';
-const puertoWeb = '3000';
+const puertoApi = valorEntorno(env, 'AIW_API_PUERTO', '3002');
+const puertoWeb = valorEntorno(env, 'AIW_WEB_PUERTO', '3000');
 
 const { proceso: procesoApi, rutaRegistro: registroApi } = lanzarProceso(
   'api',
@@ -150,6 +151,7 @@ const { proceso: procesoWeb, rutaRegistro: registroWeb } = lanzarProceso(
   {
     env: {
       ...env,
+      PORT: puertoWeb,
       AIW_SALA_V0: '1',
       AIW_API_URL: `http://127.0.0.1:${puertoApi}`,
       AIW_SALA_TOKEN: salaToken,
@@ -185,9 +187,9 @@ Entorno local arrancado. Se puede abrir:
   Sala                http://localhost:${puertoWeb}/panel/sala
   Contador de tareas  http://localhost:${puertoWeb}/panel/contador
   Prototipo           http://localhost:${puertoWeb}/prototipo
-  Temporal UI         http://localhost:${env.TEMPORAL_UI_PORT || '8080'}
-  Langfuse            http://localhost:${env.LANGFUSE_PORT || '3001'}
-  Mailpit             http://localhost:${env.MAILPIT_UI_PORT || '8025'}
+  Temporal UI         http://localhost:${valorEntorno(env, 'TEMPORAL_UI_PORT', '8080')}
+  Langfuse            http://localhost:${valorEntorno(env, 'LANGFUSE_PORT', '3001')}
+  Mailpit             http://localhost:${valorEntorno(env, 'MAILPIT_UI_PORT', '8025')}
 
 Organización de demo: ${semilla.tenantId}
 Registros en .aiw-local/registros/. Para parar: pnpm local:parar
