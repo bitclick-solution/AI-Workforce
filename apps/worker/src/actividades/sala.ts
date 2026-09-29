@@ -85,8 +85,8 @@ async function insertarMensaje(
     )
     returning creado_en
   `;
-  void contexto.avisarSala(tenantId, mensaje.salaId, { tipo: 'mensaje' });
   if (!nuevo) throw new Error('El mensaje no se insertó.');
+  void contexto.avisarSala(tenantId, mensaje.salaId, { tipo: 'mensaje' });
   return { creadoEn: nuevo.creado_en, yaEstaba: false };
 }
 
@@ -194,11 +194,12 @@ async function sincronizarParticipantesDeEquipo(
   let anadidos = 0;
   for (const puesto of puestosElegibles) {
     if (puestosActuales.has(puesto.id)) continue;
-    await tx`
+    const insertado = await tx`
       insert into sala_participante (tenant_id, sala_id, puesto_id, rol)
       values (${tenantId}, ${salaId}, ${puesto.id}, 'agente')
       on conflict (tenant_id, sala_id, puesto_id) do nothing
     `;
+    if (insertado.count === 0) continue;
     await anotar(tx, tenantId, {
       actorTipo: 'plataforma',
       puestoId: puesto.id,
@@ -213,11 +214,12 @@ async function sincronizarParticipantesDeEquipo(
   }
   for (const persona of supervisorActivo) {
     if (personasActuales.has(persona.id)) continue;
-    await tx`
+    const insertado = await tx`
       insert into sala_participante (tenant_id, sala_id, persona_id, rol)
       values (${tenantId}, ${salaId}, ${persona.id}, 'humano')
       on conflict (tenant_id, sala_id, persona_id) do nothing
     `;
+    if (insertado.count === 0) continue;
     await anotar(tx, tenantId, {
       actorTipo: 'plataforma',
       actorId: persona.id,
@@ -235,10 +237,11 @@ async function sincronizarParticipantesDeEquipo(
   let quitados = 0;
   for (const puestoId of puestosActuales) {
     if (idsElegibles.has(puestoId)) continue;
-    await tx`
+    const borrado = await tx`
       delete from sala_participante
       where tenant_id = ${tenantId} and sala_id = ${salaId} and puesto_id = ${puestoId}
     `;
+    if (borrado.count === 0) continue;
     await anotar(tx, tenantId, {
       actorTipo: 'plataforma',
       puestoId,
