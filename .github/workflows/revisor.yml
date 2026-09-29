@@ -3,7 +3,9 @@ name: Revisor
 # Dispara al Revisor (.claude/agents/revisor.md) en cada PR listo para revisión.
 # Autenticación: ANTHROPIC_API_KEY (clave de la consola de la API) o CLAUDE_CODE_OAUTH_TOKEN
 # (token de una suscripción de Claude, `claude setup-token`). Para actualizar el tablero, NOTION_TOKEN.
-# runs-on sale de la variable de repositorio AIW_RUNS_ON, igual que en ci.yml.
+# runs-on sale de AIW_RUNS_ON_REVISOR (ejecutor dedicado, sin Docker); sin ella, de AIW_RUNS_ON como
+# ci.yml, y sin ninguna, ubuntu-24.04. Con ejecutor dedicado, el Revisor espera a la CI del mismo
+# commit antes de revisar (docs/runbooks/ejecutores-auto-hospedados.md).
 
 on:
   pull_request:
@@ -19,11 +21,13 @@ permissions:
   issues: write
   checks: read
   statuses: read
+  # Para consultar la ejecución de ci.yml del commit y esperar a que termine.
+  actions: read
 
 jobs:
   comprobar:
     name: Comprobar secretos
-    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON_REVISOR || vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     outputs:
       hay_clave: ${{ steps.clave.outputs.hay_clave }}
     steps:
@@ -40,9 +44,38 @@ jobs:
     name: Revisor
     needs: comprobar
     if: needs.comprobar.outputs.hay_clave == 'true' && github.event.pull_request.draft == false
-    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
-    timeout-minutes: 30
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON_REVISOR || vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
+    # Hasta 60 minutos de espera a la CI más la propia revisión.
+    timeout-minutes: 90
     steps:
+      - name: Esperar a la CI de este commit
+        id: ci
+        # Solo con ejecutor dedicado: en el mismo ejecutor que la CI se bloquearían mutuamente.
+        if: vars.AIW_RUNS_ON_REVISOR != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          limite=$((SECONDS + 3600))
+          while :; do
+            datos=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&event=pull_request&per_page=1" \
+              --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion // "")"' 2>/dev/null || true)
+            estado=${datos%% *}
+            conclusion=${datos#* }
+            if [ "$estado" = "completed" ]; then
+              echo "conclusion=${conclusion:-desconocida}" >> "$GITHUB_OUTPUT"
+              echo "La CI de $SHA ha terminado: ${conclusion:-desconocida}."
+              exit 0
+            fi
+            if [ "$SECONDS" -ge "$limite" ]; then
+              echo "conclusion=sin-terminar" >> "$GITHUB_OUTPUT"
+              echo "::warning::La CI de $SHA no ha terminado en 60 minutos: el Revisor revisa igualmente."
+              exit 0
+            fi
+            echo "CI de $SHA: ${estado:-sin ejecución todavía}. Nueva comprobación en 30 s."
+            sleep 30
+          done
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
@@ -76,6 +109,7 @@ jobs:
             Actúa como el Revisor definido en .claude/agents/revisor.md y sigue CLAUDE.md.
             Repositorio: ${{ github.repository }}. PR número ${{ github.event.pull_request.number }}.
             Rama: ${{ github.event.pull_request.head.ref }} hacia ${{ github.event.pull_request.base.ref }}.
+            Resultado de la CI de este commit antes de empezar: ${{ steps.ci.outputs.conclusion || 'no esperado (el Revisor comparte ejecutor con la CI o corre en GitHub)' }}. Cítalo en el veredicto.
 
             1. Lee la descripción del PR y localiza el enlace a la rebanada de Notion y a docs/specs/<rebanada>.md.
             2. Obtén el diff completo con `gh pr diff ${{ github.event.pull_request.number }}` y el estado de la CI con `gh pr checks ${{ github.event.pull_request.number }}`.
