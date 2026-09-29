@@ -99,6 +99,39 @@ export function respuestaDeTexto(texto: string, opciones: { modelo?: string } = 
   };
 }
 
+/** Fixture de una respuesta de Mensajes en la que el modelo pide una herramienta. */
+export function respuestaDeUsoDeHerramienta(
+  nombre: string,
+  entrada: unknown,
+  opciones: { modelo?: string; texto?: string } = {},
+): unknown {
+  return {
+    id: 'msg_simulado_herramienta',
+    type: 'message',
+    role: 'assistant',
+    model: opciones.modelo ?? 'claude-sonnet-5',
+    content: [
+      ...(opciones.texto !== undefined ? [{ type: 'text', text: opciones.texto }] : []),
+      { type: 'tool_use', id: 'toolu_simulado_01', name: nombre, input: entrada },
+    ],
+    stop_reason: 'tool_use',
+    stop_sequence: null,
+    stop_details: null,
+    container: null,
+    usage: {
+      input_tokens: 150,
+      output_tokens: 30,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+      cache_creation: null,
+      inference_geo: null,
+      output_tokens_details: null,
+      server_tool_use: null,
+      service_tier: 'standard',
+    },
+  };
+}
+
 /** Fixture de un rechazo del clasificador (ADR-018). */
 export function respuestaDeRechazo(
   categoria: 'cyber' | 'bio' | 'frontier_llm' | 'reasoning_extraction' | 'general_harms' | null,
