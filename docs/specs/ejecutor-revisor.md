@@ -1,4 +1,6 @@
-VIGENTE
+REGISTRO HISTÓRICO
+
+> Retirado el 29-9-2026 junto con el resto de ejecutores auto-hospedados: el Revisor vuelve a los ejecutores de GitHub y no espera a la CI. Ver `docs/specs/retirada-ejecutores.md`.
 
 # Especificación · Ejecutor dedicado al Revisor y espera a la CI
 
