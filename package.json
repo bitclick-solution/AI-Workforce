@@ -23,6 +23,12 @@
     "dev": "turbo run dev",
     "dev:up": "node scripts/dev-up.mjs",
     "dev:down": "node scripts/dev-down.mjs",
+    "local:arrancar": "node scripts/local-arrancar.mjs",
+    "local:parar": "node scripts/local-parar.mjs",
+    "local:actualizar": "node scripts/local-actualizar.mjs",
+    "local:a-cero": "node scripts/local-a-cero.mjs",
+    "local:copia": "node scripts/local-copia.mjs",
+    "local:restaurar": "node scripts/local-restaurar.mjs",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "clean": "turbo run clean && rm -rf node_modules/.cache"
