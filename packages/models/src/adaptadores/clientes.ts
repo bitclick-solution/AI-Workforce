@@ -67,13 +67,52 @@ export function clienteBedrockMantleDesdeEntorno(
   return new AnthropicBedrockMantle({ awsRegion: region });
 }
 
-/** Cliente real de Vertex UE (ADR-017). Necesita `AIW_VERTEX_REGION_UE` y `AIW_VERTEX_PROJECT_ID`. */
+/**
+ * Ubicaciones de Vertex AI que cumplen la residencia UE (ADR-017, ADR-023): la
+ * multirregión `eu` (recomendada, la que ha habilitado Jesús — reparte tráfico
+ * entre regiones de la Unión Europea sin salir de ella) o una región concreta
+ * `europe-*` (por ejemplo `europe-west1`). Nunca `global` ni `us`: esas
+ * ubicaciones no garantizan la residencia UE (`docs.claude.com/en/build-with-claude/claude-on-vertex-ai`,
+ * comprobado el 2026-09-29).
+ */
+const REGION_VERTEX_UE_VALIDA = /^(eu|europe-[a-z0-9]+)$/;
+
+/**
+ * `true` cuando la región cumple la residencia UE. Exportada para probarla sin
+ * construir el cliente real: `AnthropicVertex` intenta resolver credenciales de
+ * Google (ADC) en cuanto se construye, incluso con una región válida y sin hacer
+ * ninguna llamada — en un entorno sin ADC eso deja una promesa rechazada sin
+ * capturar (mismo aviso que arriba, en `clientes.test.ts`), así que las pruebas
+ * de esta función no pasan por `clienteVertexDesdeEntorno`.
+ */
+export function esRegionVertexUEValida(region: string): boolean {
+  return REGION_VERTEX_UE_VALIDA.test(region);
+}
+
+function comprobarResidenciaVertexUE(region: string): void {
+  if (!esRegionVertexUEValida(region)) {
+    throw new Error(
+      `AIW_VERTEX_REGION_UE="${region}" no es una ubicación de la UE de Vertex AI (ADR-017): usa la ` +
+        'multirregión "eu" (recomendada) o una región concreta "europe-*" (por ejemplo "europe-west1"). ' +
+        'El arranque rechaza "global", "us" o cualquier otra región fuera de la UE.',
+    );
+  }
+}
+
+/**
+ * Cliente real de Vertex UE (ADR-017, ADR-023: proveedor principal). Necesita
+ * `AIW_VERTEX_REGION_UE` y `AIW_VERTEX_PROJECT_ID`. Sin clave de API: el SDK de
+ * Vertex se autentica siempre con `google-auth-library` (credenciales de
+ * aplicación por defecto de Google o cuenta de servicio) — ver
+ * `docs/runbooks/vertex-wif.md`.
+ */
 export function clienteVertexDesdeEntorno(entorno: Entorno = process.env): ClienteDeMensajes {
   const region = exigirVariable(
     entorno,
     'AIW_VERTEX_REGION_UE',
     'la ruta de Vertex necesita una región de la UE (ADR-017); no se infiere ninguna por defecto.',
   );
+  comprobarResidenciaVertexUE(region);
   const proyecto = exigirVariable(
     entorno,
     'AIW_VERTEX_PROJECT_ID',

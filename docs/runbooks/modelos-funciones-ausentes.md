@@ -32,6 +32,8 @@ datos de Anthropic en cada retro de ciclo.
 | Esfuerzo por clase de paso en el AI SDK (Mistral, locales)                                                                                                                                                       | Ausente: ninguno de esos proveedores tiene un parámetro de razonamiento adaptativo equivalente. Por eso la ruta de AI SDK (`adaptadores/ai-sdk.ts`) es para pasos baratos o deterministas, nunca para razonamiento financiero, conciliación o decisiones de escritura, que van siempre por Anthropic.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Opus 5 y Sonnet 5 en Bedrock UE por el endpoint de Mensajes (sin acceso concedido a la cuenta)                                                                                                                   | Ausente por acceso de cuenta, no por la plataforma ni por el modelo (comprobado el 2026-09-28, ver «Los dos caminos de Bedrock UE» más abajo): la cuenta recibe 403 «not available for this account» al pedir `anthropic.claude-sonnet-5` o `anthropic.claude-opus-4-8` al endpoint de Mensajes en `eu-north-1`/`eu-west-1`, y ese endpoint no ofrece ningún modelo de Anthropic en `eu-central-1`. Mientras AWS no conceda el acceso, `opus5` y `sonnet5` se sirven los dos con el perfil de inferencia UE de Sonnet 4.6 del camino clásico (`eu.anthropic.claude-sonnet-4-6`, tabla `IDENTIFICADOR_BEDROCK_EU` en `identificadores.ts`). El esfuerzo `xhigh` tampoco lo admite ese sustituto (llegó con Opus 4.7): `anthropic.ts` lo baja a `high` solo cuando el papel es provisional.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Identificador de Haiku 4.5 con fecha en Bedrock UE (excepción al ADR-018)                                                                                                                                        | El perfil de inferencia UE del camino clásico solo expone Haiku 4.5 como `eu.anthropic.claude-haiku-4-5-20251001-v1:0` (comprobado el 2026-09-28): no es un sustituto de modelo — es el mismo Haiku 4.5 objetivo —, así que `esProvisional('haiku45', 'bedrock-eu')` sigue en `false`; es solo el identificador el que lleva fecha, anotado aquí como excepción al «nunca con fecha» del ADR-018.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Identificador de Haiku 4.5 con fecha en Vertex UE (excepción al ADR-018)                                                                                                                                         | La tabla de identificadores de Agent Platform (`docs.claude.com/en/build-with-claude/claude-on-vertex-ai`, comprobada el 2026-09-29) publica Haiku 4.5 en Vertex solo como `claude-haiku-4-5@20251001` — misma forma que Opus 4.5 (`claude-opus-4-5@20251101`) para los modelos que Vertex versiona con fecha. No es un sustituto de modelo: `esProvisional('haiku45', 'vertex-eu')` sigue en `false`. Pendiente de verificar con una llamada real (`docs/runbooks/vertex-wif.md`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Opus 5.5 en Vertex UE sirviendo el papel `opus5` en vez de Opus 5 (ADR-023)                                                                                                                                      | No es una función ausente ni un sustituto degradado: Jesús eligió Opus 5.5 a propósito el 29-9-2026 porque es el sucesor de Opus 5 en el mismo escalón, más barato y con el mismo nivel de capacidad (`IDENTIFICADOR_VERTEX_UE.opus5` en `identificadores.ts`). `esProvisional('opus5', 'vertex-eu')` sigue en `false`, a diferencia del sustituto provisional de Bedrock (fila de arriba, «Opus 5 y Sonnet 5 en Bedrock UE»).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Cómo comprobar si algo sigue ausente
 
@@ -177,19 +179,40 @@ endpoint de Mensajes, o al revés.
    `clientes.test.ts`) a los identificadores objetivo y repite el paso 7 de
    arriba con los casos dorados.
 
-## Activar el proveedor real de Vertex UE
+## Activar el proveedor real de Vertex UE (proveedor principal, ADR-023)
 
-1. Proyecto de Google Cloud con Vertex AI activado y acceso concedido a Opus 5,
-   Sonnet 5 y Haiku 4.5 en una región de la UE (`europe-west1`, `europe-west4`, o
-   `eu` como multi-región) del Model Garden de Anthropic en Vertex.
-2. Credenciales de aplicación por defecto de Google (`gcloud auth application-default login`
-   en desarrollo, o una cuenta de servicio con el rol de invocador de Vertex AI en
-   producción).
-3. Variables de entorno del worker: `AIW_VERTEX_REGION_UE` con la región elegida y
-   `AIW_VERTEX_PROJECT_ID` con el proyecto de GCP.
-4. `clienteVertexDesdeEntorno` construye el cliente real en cuanto las dos
-   variables existen; antes de eso, lanza con el nombre exacto de lo que falta.
-5. Mismos pasos 5 y 6 que en Bedrock, con la plataforma `vertex-eu`.
+Estado a 2026-09-29: Jesús ha habilitado Vertex AI en el proyecto de Google
+Cloud de Bitclick, con Opus 5.5, Sonnet 5 y Haiku 4.5 activos en la
+multirregión europea (`eu`). Pasos completos, con los comandos de Cloud Shell
+y la política mínima de la cuenta de servicio de la CI:
+`docs/runbooks/vertex-wif.md`. Resumen:
+
+1. Proyecto de Google Cloud con Vertex AI activado y acceso concedido a
+   Opus 5.5, Sonnet 5 y Haiku 4.5 en la multirregión `eu` del Model Garden de
+   Anthropic en Vertex — ya hecho.
+2. Credenciales de Google, nunca una clave de API (el SDK de Vertex no la
+   admite): `gcloud auth application-default login` en desarrollo, o una
+   cuenta de servicio con el rol mínimo en producción; en GitHub Actions, sin
+   ninguna clave guardada, la cuenta de servicio `aiw-ci-vertex` se asume por
+   federación de identidades (WIF) — `docs/runbooks/vertex-wif.md`.
+3. Variables de entorno: `AIW_VERTEX_REGION_UE=eu` y `AIW_VERTEX_PROJECT_ID`
+   con el proyecto de GCP. `clienteVertexDesdeEntorno` construye el cliente
+   real en cuanto las dos existen y con una ubicación de la UE válida
+   (`eu` o una región concreta `europe-*`); antes de eso, o con cualquier otra
+   ubicación, lanza con el nombre exacto de lo que falta o de por qué la
+   rechaza.
+4. Cambiar de proveedor principal entre Vertex UE y Bedrock UE (ADR-023) es
+   cambiar `AIW_PROVEEDOR_MODELOS` (por defecto `vertex-ue`), sin tocar
+   código — `packages/models/src/proveedor.ts`, detallado en
+   `docs/runbooks/vertex-wif.md`.
+5. En cuanto la prueba de integración
+   (`packages/models/src/adaptadores/anthropic.vertex.integracion.test.ts`)
+   pase en la CI, repite los casos dorados de Cobros y de Conciliación contra
+   el cliente real
+   (`packages/evals/smoke/cobros-modelos-v1.vertex.integracion.test.ts`,
+   `conciliacion-modelos-v1.vertex.integracion.test.ts`).
+6. Mismo paso 6 que en Bedrock (tarifas reales en el catálogo de desarrollo),
+   con la plataforma `vertex-eu`.
 
 ## Activar el coste por tarea en Langfuse
 
