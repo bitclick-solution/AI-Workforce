@@ -18,6 +18,9 @@ blob-report/
 .env.*
 !.env.example
 
+# Estado de `pnpm local:*`: registros y procesos arrancados, copias de seguridad
+.aiw-local/
+
 # Python (servicios aislados)
 __pycache__/
 *.pyc
