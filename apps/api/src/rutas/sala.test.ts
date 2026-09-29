@@ -18,6 +18,7 @@ const PERSONA = '01a0d39e-98c3-7970-814a-0a98ad132312';
 const SALA = '01a0d39e-98c3-7970-814a-0a98ad132313';
 const PROPUESTA = '01a0d39e-98c3-7970-814a-0a98ad132314';
 const SALA_EQUIPO = '01a0d39e-98c3-7970-814a-0a98ad132315';
+const SALA_AJENA = '01a0d39e-98c3-7970-814a-0a98ad132399';
 // Nace con la prueba: ni de juguete se escribe una credencial en el código.
 const TOKEN = randomUUID();
 const SECRETO_HMAC = randomUUID();
@@ -231,7 +232,7 @@ describe('rutas de la sala v0', () => {
     expect(senales).toEqual([]);
   });
 
-  it('GET /sala acepta ?salaId= y por defecto usa la general', async () => {
+  it('GET /sala acepta ?salaId= de una sala propia y por defecto usa la general', async () => {
     const { puerto } = puertoFalso();
     const pedida = await atenderSala(
       peticion({ url: `/sala?salaId=${SALA_EQUIPO}` }),
@@ -247,7 +248,17 @@ describe('rutas de la sala v0', () => {
     expect(malFormada?.estado).toBe(400);
   });
 
-  it('POST /sala/mensajes acepta salaId en el cuerpo y por defecto usa la general', async () => {
+  it('GET /sala rechaza la sala de otro equipo aunque se conozca su salaId', async () => {
+    const { puerto } = puertoFalso();
+    const ajena = await atenderSala(
+      peticion({ url: `/sala?salaId=${SALA_AJENA}` }),
+      CONFIGURACION,
+      puerto,
+    );
+    expect(ajena?.estado).toBe(403);
+  });
+
+  it('POST /sala/mensajes acepta salaId en el cuerpo de una sala propia y por defecto usa la general', async () => {
     const { puerto, arrancados } = puertoFalso();
     await atenderSala(
       peticion({
@@ -259,6 +270,21 @@ describe('rutas de la sala v0', () => {
       puerto,
     );
     expect(arrancados).toEqual([expect.objectContaining({ salaId: SALA_EQUIPO })]);
+  });
+
+  it('POST /sala/mensajes rechaza escribir en la sala de otro equipo aunque se conozca su salaId', async () => {
+    const { puerto, arrancados } = puertoFalso();
+    const ajena = await atenderSala(
+      peticion({
+        metodo: 'POST',
+        url: '/sala/mensajes',
+        cuerpo: { texto: 'intento ajeno', salaId: SALA_AJENA },
+      }),
+      CONFIGURACION,
+      puerto,
+    );
+    expect(ajena?.estado).toBe(403);
+    expect(arrancados).toEqual([]);
   });
 });
 
@@ -305,7 +331,7 @@ describe('rutas de la sala v1', () => {
     ]);
 
     const ajena = await atenderSala(
-      peticion({ url: '/sala/01a0d39e-98c3-7970-814a-0a98ad132399/miembros' }),
+      peticion({ url: `/sala/${SALA_AJENA}/miembros` }),
       CONFIGURACION_V1,
       puerto,
     );

@@ -202,15 +202,25 @@ function campo(cuerpo: unknown, nombre: string): unknown {
     : undefined;
 }
 
-/** Sala pedida por consulta o por cuerpo; sin ella, la sala general (v0 y v1). */
+/**
+ * Sala pedida por consulta o por cuerpo; sin ella, la sala general (v0 y v1).
+ * Una sala pedida explícitamente exige ser miembro (privacidad de la sala v1,
+ * decisión 2 de la especificación): sin este control, cualquier persona activa
+ * del tenant podía leer y escribir en la sala de cualquier equipo con solo
+ * conocer su UUID.
+ */
 async function resolverSalaPorDefecto(
   puerto: PuertoSala,
   tenantId: string,
+  personaId: string,
   pedida: string | undefined,
 ): Promise<string | { error: RespuestaContador }> {
   if (pedida !== undefined) {
     if (!UUID.test(pedida)) {
       return { error: respuesta(400, { error: 'salaId tiene que ser un UUID.' }) };
+    }
+    if (!(await puerto.esMiembro(tenantId, pedida, personaId))) {
+      return { error: respuesta(403, { error: 'Solo los miembros de la sala acceden a ella.' }) };
     }
     return pedida;
   }
@@ -252,7 +262,7 @@ export async function atenderSala(
   if (camino === PREFIJO_SALA) {
     if (peticion.metodo !== 'GET') return respuesta(405, { error: 'La sala se lee con GET.' });
     const pedida = new URLSearchParams(consulta).get('salaId') ?? undefined;
-    const resuelta = await resolverSalaPorDefecto(puerto, tenantId, pedida);
+    const resuelta = await resolverSalaPorDefecto(puerto, tenantId, personaId, pedida);
     if (typeof resuelta !== 'string') return resuelta.error;
     const salaId = resuelta;
     const mensajes = await puerto.mensajes(tenantId, salaId, LIMITE_MENSAJES);
@@ -283,6 +293,7 @@ export async function atenderSala(
     const resuelta = await resolverSalaPorDefecto(
       puerto,
       tenantId,
+      personaId,
       typeof salaIdPedida === 'string' ? salaIdPedida : undefined,
     );
     if (typeof resuelta !== 'string') return resuelta.error;
