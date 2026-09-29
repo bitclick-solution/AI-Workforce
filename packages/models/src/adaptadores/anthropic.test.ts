@@ -11,8 +11,20 @@ import {
 import { crearAdaptadorAnthropic, MAX_TOKENS_POR_DEFECTO } from './anthropic.js';
 import { clienteSimulado } from './clientes.js';
 
-/** Palabras clave de JSON Schema que la API rechaza en `strict`/`output_config.format` (ver anthropic.ts). */
-const PALABRAS_CLAVE_NO_ADMITIDAS = ['minimum', 'maximum', 'multipleOf', 'minLength', 'maxLength'];
+/**
+ * Palabras clave de JSON Schema que la API rechaza en `strict`/`output_config.format`
+ * (ver anthropic.ts). `minItems` no está aquí a propósito: `transformJSONSchema` sí lo
+ * deja pasar cuando vale 0 o 1 (el caso habitual de un array no vacío), así que no es
+ * una palabra clave prohibida sin más — solo `maxItems` lo es siempre.
+ */
+const PALABRAS_CLAVE_NO_ADMITIDAS = [
+  'minimum',
+  'maximum',
+  'multipleOf',
+  'minLength',
+  'maxLength',
+  'maxItems',
+];
 
 /** Recorre un JSON Schema entero —incluidos `anyOf`, `items` y `$defs`— y devuelve las claves prohibidas que encuentre. */
 function palabrasClaveProhibidasEn(valor: unknown): string[] {
