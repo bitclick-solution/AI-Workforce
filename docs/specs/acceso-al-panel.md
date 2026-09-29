@@ -5,7 +5,7 @@ VIGENTE
 - Rebanada: [Notion](https://app.notion.com/p/3e553066189881e9a248f4fae6ae2e96) · Ciclo, tipo y prioridad: los del tablero (esta sesión no tuvo acceso al MCP de Notion; ver «Pregunta abierta») · Paquetes `apps/api`, `apps/web`, `packages/db` · Presupuesto 40 €
 - Rama: `rebanada/acceso-al-panel`
 - Plan de referencia: ADR-002 (Better Auth en el stack), ADR-007 (PostgreSQL única fuente de verdad, `tenant_id` y RLS, UUID v7, filas inmutables), ADR-001 (plano de control agnóstico, interfaz de aprobación genérica) y las fronteras de `CLAUDE.md` (libro con un único punto de escritura, credenciales fuera del contexto).
-- Zona crítica: sí: identidad y permisos, migración de datos (`0005_acceso_al_panel.sql`), RLS y libro de auditoría (se escribe con `anotar`; `packages/ledger` no cambia). «Revisión humana obligatoria» en la rebanada.
+- Zona crítica: sí: identidad y permisos, migración de datos (`0006_acceso_al_panel.sql`), RLS y libro de auditoría (se escribe con `anotar`; `packages/ledger` no cambia). «Revisión humana obligatoria» en la rebanada.
 
 ## Objetivo
 
@@ -13,7 +13,7 @@ Hoy el servidor de Next lee el tenant y la persona de `AIW_SALA_TENANT`, `AIW_SA
 
 ## Paquetes tocados
 
-- `packages/db`: `src/identidad.ts` (tablas `usuario`, `sesion`, `cuenta`, `verificacion`, `clave_acceso`), registro en `tablas.ts`, purga en `mantenimiento.ts`, migración `drizzle/0005_acceso_al_panel.sql` y su reverso, y pruebas de aislamiento con dos organizaciones.
+- `packages/db`: `src/identidad.ts` (tablas `usuario`, `sesion`, `cuenta`, `verificacion`, `clave_acceso`), registro en `tablas.ts`, purga en `mantenimiento.ts`, migración `drizzle/0006_acceso_al_panel.sql` y su reverso, y pruebas de aislamiento con dos organizaciones.
 - `apps/api`: `src/identidad/` (configuración, Better Auth, correo, resolución de sesión, anotaciones del libro, invitación) y `src/rutas/acceso.ts`; `rutas/sala.ts` y `rutas/contador.ts` toman tenant y persona de la sesión; comando `invitar-propietario`.
 - `apps/web`: `app/api/auth/[...ruta]` (reenvío a la API), `app/acceso` (entrar), `app/panel/cuenta` (passkey y cierre), `app/panel/layout.tsx` (sin sesión, a `/acceso`), y los proxies de sala y contador reenvían la cookie de sesión en vez de un tenant de entorno.
 

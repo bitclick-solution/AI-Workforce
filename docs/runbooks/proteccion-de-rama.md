@@ -14,7 +14,8 @@ Ajustes de GitHub que Jesús configura una vez para que la fábrica funcione. Ni
 1. En GitHub, abre **Settings > Rules > Rulesets** y crea un ruleset para `main`.
 2. Activa **Require a pull request before merging** con una aprobación y **Require review from Code Owners**. `CODEOWNERS` asigna las zonas críticas a Jesús.
 3. Activa **Dismiss stale pull request approvals when new commits are pushed**.
-4. Activa **Require status checks to pass** y añade los checks de `ci.yml`: `Lint y formato`, `Tipos`, `Pruebas`, `Evals de humo`, `Build`, `Playwright`, `Sin secretos en el repositorio`, `Compose de desarrollo arranca` y las cinco `Imagen <app>`. Añade `Revisor` cuando haya corrido al menos una vez.
+4. Activa **Require status checks to pass** y añade los checks de `ci.yml`: `Lint y formato`, `Tipos`, `Pruebas`, `Evals de humo`, `Build`, `Playwright`, `Sin secretos en el repositorio`, `Entorno local arranca desde cero` y las cinco `Imagen <app>`. Añade `Revisor` cuando haya corrido al menos una vez.
+   Nota (rebanada «Entorno local», 2026-09-28): el check se llamaba `Compose de desarrollo arranca`; si ya lo tenías añadido con ese nombre, quítalo y añade el nuevo o el ruleset seguirá esperando un check que ya no existe.
 5. Activa **Block force pushes** y **Restrict deletions**.
 6. Deja la fusión con **squash** como única opción para que cada rebanada sea un commit en `main`.
 

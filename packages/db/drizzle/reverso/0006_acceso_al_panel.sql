@@ -1,5 +1,5 @@
 -- Reverso del acceso al panel. Deja la base como estaba antes de
--- `0005_acceso_al_panel.sql`: sin las tablas de identidad, sin sus funciones y sin
+-- `0006_acceso_al_panel.sql`: sin las tablas de identidad, sin sus funciones y sin
 -- el rol `aiw_identidad`.
 --
 -- No toca roles, funciones ni tablas de otras migraciones. El orden es de la hoja a

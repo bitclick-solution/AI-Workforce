@@ -42,6 +42,14 @@ Plataforma de equipos de agentes de IA de Bitclick Solutions: se contratan como 
 
 Para parar la infraestructura conservando los datos: `pnpm dev:down`. Para borrar también los volúmenes: `pnpm dev:down --volumes`.
 
+### Entorno local completo, con datos de demostración
+
+`pnpm dev:up` solo levanta la infraestructura. Para migrar, sembrar una
+organización de demostración y arrancar `api` y `web` con un solo comando,
+usa `pnpm local:arrancar`; para pararlo, actualizarlo, volverlo a cero o
+copiar y restaurar PostgreSQL, ver
+[`docs/runbooks/entorno-local.md`](docs/runbooks/entorno-local.md).
+
 ## Comandos
 
 | Comando                           | Qué hace                                                  |

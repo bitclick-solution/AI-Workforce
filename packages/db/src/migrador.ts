@@ -53,10 +53,17 @@ export const MIGRACIONES: readonly Migracion[] = [
     ),
   },
   {
-    nombre: '0005_acceso_al_panel',
-    ruta: fileURLToPath(new URL('../drizzle/0005_acceso_al_panel.sql', import.meta.url)),
+    nombre: '0005_sala_v1_ultima_lectura',
+    ruta: fileURLToPath(new URL('../drizzle/0005_sala_v1_ultima_lectura.sql', import.meta.url)),
     rutaReverso: fileURLToPath(
-      new URL('../drizzle/reverso/0005_acceso_al_panel.sql', import.meta.url),
+      new URL('../drizzle/reverso/0005_sala_v1_ultima_lectura.sql', import.meta.url),
+    ),
+  },
+  {
+    nombre: '0006_acceso_al_panel',
+    ruta: fileURLToPath(new URL('../drizzle/0006_acceso_al_panel.sql', import.meta.url)),
+    rutaReverso: fileURLToPath(
+      new URL('../drizzle/reverso/0006_acceso_al_panel.sql', import.meta.url),
     ),
   },
 ];

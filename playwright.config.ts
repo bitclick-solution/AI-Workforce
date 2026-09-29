@@ -30,7 +30,8 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: !process.env['CI'],
     timeout: 120_000,
-    // Sala v1 con la fuente simulada: sin API ni datos reales (e2e/sala-v1.spec.ts).
+    // Sala v1 sin API ni datos reales (e2e/sala-v1.spec.ts): la vista pide la
+    // simulada explícitamente con `?fuenteSimulada=1` (lib/sala-fuente.ts).
     env: { AIW_SALA_V1: '1' },
   },
 });

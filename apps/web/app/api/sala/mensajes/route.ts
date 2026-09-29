@@ -1,6 +1,7 @@
 /**
- * Proxy de escritura en la sala: solo pasa el texto y la cookie de sesión; la
- * persona la decide la API a partir de la sesión.
+ * Proxy de escritura en la sala: pasa el texto, la cookie de sesión y, si llega, la
+ * sala (sala v1); la persona la decide la API a partir de la sesión. Sin
+ * `salaId`, la sala general, igual que siempre.
  */
 import { cookiesDelAcceso } from '../../../../lib/acceso';
 import { configuracionSala, llamarSala } from '../../../../lib/sala';
@@ -20,14 +21,17 @@ export async function POST(peticion: Request): Promise<Response> {
       headers: SIN_CACHE,
     });
   }
-  const leido = (await peticion.json().catch(() => ({}))) as { texto?: unknown };
+  const leido = (await peticion.json().catch(() => ({}))) as { texto?: unknown; salaId?: unknown };
   const { estado, cuerpo } = await llamarSala(
     configuracion,
     'POST',
     '/sala/mensajes',
     fetch,
     cookiesDelAcceso(peticion.headers.get('cookie')),
-    { texto: typeof leido.texto === 'string' ? leido.texto : '' },
+    {
+      texto: typeof leido.texto === 'string' ? leido.texto : '',
+      ...(typeof leido.salaId === 'string' ? { salaId: leido.salaId } : {}),
+    },
   );
   return new Response(JSON.stringify(cuerpo), { status: estado, headers: SIN_CACHE });
 }

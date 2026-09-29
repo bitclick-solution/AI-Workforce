@@ -14,7 +14,7 @@ import {
   ORDEN_PURGA_IDENTIDAD,
 } from './tablas.js';
 
-const migracion = MIGRACIONES.find((m) => m.nombre === '0005_acceso_al_panel');
+const migracion = MIGRACIONES.find((m) => m.nombre === '0006_acceso_al_panel');
 if (!migracion) throw new Error('No hay migración del acceso al panel.');
 const sql = readFileSync(migracion.ruta, 'utf8');
 const reverso = readFileSync(migracion.rutaReverso, 'utf8');

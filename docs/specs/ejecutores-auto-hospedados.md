@@ -1,4 +1,6 @@
-VIGENTE
+REGISTRO HISTÓRICO
+
+> Retirados el 29-9-2026 por decisión de Jesús: la CI vuelve a los ejecutores de GitHub. Qué se montó, por qué se retiró y las lecciones están en `docs/runbooks/ejecutores-auto-hospedados.md` y en `docs/specs/retirada-ejecutores.md`.
 
 # Especificación · Ejecutores auto-hospedados de GitHub Actions en el VPS Ubuntu y en la máquina de Jesús
 
@@ -51,4 +53,4 @@ Presupuesto: 15 €. Consumo real: se registra en la rebanada al abrir el PR. Su
 
 ## Pregunta abierta
 
-Ninguna. Dimensionado resuelto con Jesús en la sesión (28-9-2026): VPS ampliado a 8 vCPU / 16 GiB / 480 GB NVMe, ejecutor a nivel de repositorio, Docker rootless (el VPS aloja contenedores de producción de clientes reales), y un segundo ejecutor opcional en su portátil Windows vía WSL2 (Ubuntu) porque los jobs con `services:` no corren en un ejecutor Windows nativo. Detalle completo en `docs/runbooks/ejecutores-auto-hospedados.md`.
+Ninguna. Dimensionado resuelto con Jesús en la sesión (28-9-2026): VPS ampliado, ejecutor a nivel de repositorio, Docker rootless para aislarlo de los servicios del host, y un segundo ejecutor opcional en su portátil Windows vía WSL2 (Ubuntu), porque los jobs con `services:` no corren en un ejecutor Windows nativo.

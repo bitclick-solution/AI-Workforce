@@ -37,7 +37,7 @@ import {
 import { columnasMutables, idPrimario, tenantId } from './columnas.js';
 import { organizacion, persona } from './organizacion.js';
 
-/** Rol con el que corre Better Auth. Lo crea la migración `0005_acceso_al_panel`. */
+/** Rol con el que corre Better Auth. Lo crea la migración `0006_acceso_al_panel`. */
 export const ROL_IDENTIDAD = 'aiw_identidad';
 
 const momento = (nombre: string) => timestamp(nombre, { withTimezone: true });

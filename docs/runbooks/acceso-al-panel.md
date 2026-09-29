@@ -6,7 +6,7 @@ Cómo se enciende el inicio de sesión del panel en un entorno, cómo entra el p
 
 ## Requisitos previos
 
-- La migración `0005_acceso_al_panel` aplicada (`pnpm --filter @aiw/db db:migrar`). Crea el rol `aiw_identidad`.
+- La migración `0006_acceso_al_panel` aplicada (`pnpm --filter @aiw/db db:migrar`). Crea el rol `aiw_identidad`.
 - El usuario de base con el que corre la API puede asumir `aiw_app` y `aiw_identidad`. En desarrollo y en la CI es superusuario y ya puede; en staging y producción, desde un rol con opción de administración: `grant aiw_app, aiw_identidad to <usuario de la API>;`. Quien ejecute `invitar-propietario` necesita los mismos dos roles.
 - Un secreto para firmar las cookies, de 32 caracteres o más, en el gestor de secretos del entorno: `openssl rand -base64 48`. Nunca en el repositorio.
 

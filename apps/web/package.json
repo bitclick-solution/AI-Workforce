@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Next.js: panel, sala común, onboarding de contratación y aprobaciones móviles.",
   "scripts": {
-    "dev": "next dev --port 3000",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "typecheck": "next typegen && tsc -p tsconfig.json",
