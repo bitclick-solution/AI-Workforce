@@ -69,16 +69,24 @@ const semilla = await sembrarSala(cliente, { nombre: `Sala v0 ${new Date().toISO
 console.log(`  organización: ${semilla.tenantId}`);
 console.log(`  sala general: ${semilla.salaId}`);
 console.log('');
+// Contrato estable con scripts/local-arrancar.mjs: la única línea con la que el
+// script sabe que la semilla terminó y con qué cola y tenant, por sondeo del
+// registro (ver la nota de `esperarEnFichero`). No imprime personaId: desde
+// «Acceso al panel», la persona la decide la sesión, no un valor fijo de la demo.
+console.log(`SEMILLA_SALA cola=${cola} tenant=${semilla.tenantId}`);
 
 if (SERVIR) {
   console.log('— Trabajador escuchando en la cola', cola);
   console.log('  Arranca la API y la web con estas variables y abre /panel/sala:');
   console.log(`    AIW_SALA_V0=1 AIW_SALA_TOKEN=<elige uno> AIW_TEMPORAL_COLA=${cola}`);
   console.log(
-    '    AIW_ACCESO_PANEL=1 AIW_ACCESO_SECRETO=<secreto>, y entra en /acceso con una persona',
+    '    AIW_ACCESO_PANEL=1 AIW_ACCESO_SECRETO=<secreto>, en api y en web, para entrar en /acceso',
   );
   console.log(
-    `    invitada: pnpm --filter @aiw/api invitar-propietario --tenant ${semilla.tenantId} --nombre … --correo …`,
+    `    invita a una persona: pnpm --filter @aiw/api invitar-propietario --tenant ${semilla.tenantId} --nombre … --correo …`,
+  );
+  console.log(
+    '  (`pnpm local:arrancar` hace ya las dos cosas: invita a una persona de demo y arranca api/web con el acceso encendido.)',
   );
   console.log('  Ctrl+C para terminar.');
   await montado.trabajador.run();
