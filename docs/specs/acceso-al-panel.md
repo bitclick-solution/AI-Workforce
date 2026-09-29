@@ -51,6 +51,7 @@ Hoy el servidor de Next lee el tenant y la persona de `AIW_SALA_TENANT`, `AIW_SA
 - Guardar el token de sesión con hash (Better Auth 1.7 no lo ofrece) y limpiar sesiones caducadas que nadie vuelve a presentar: propuesta de rebanada.
 - Mover los transportes de correo de `apps/channels` a `packages/notifications`: propuesta de rebanada; aquí hay un transporte mínimo propio en `apps/api`.
 - La presencia de la sala y su migración: «Sala v1 · presencia».
+- **Riesgo conocido:** `verificacion` no tiene `tenant_id` (caduca en minutos, antes de conocer el tenant) y por eso queda fuera de `ORDEN_PURGA_IDENTIDAD`. Purgar una organización no la limpia: los enlaces mágicos y los retos de WebAuthn ya usados o caducados de esa organización quedan huérfanos en la tabla hasta que Better Auth los reemplace o hasta la rebanada «Borrado y exportación». No hay dato de negocio ni tenant expuesto, solo filas muertas.
 
 ## Presupuesto de tokens
 
