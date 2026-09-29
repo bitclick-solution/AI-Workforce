@@ -14,14 +14,15 @@ El VPS aloja producción con tráfico real: Nginx Proxy Manager (`bitclick-proxy
 4. **`aiw-runner` no entra nunca en el grupo `docker`.** Así no puede hablar con el demonio de producción ni por error: si su `DOCKER_HOST` apuntara mal, obtendría `permission denied` en `/var/run/docker.sock`.
 5. **Un paso cada vez, con comprobación.** Cada paso termina con una comprobación de solo lectura. Si no sale lo esperado, para.
 
-## Los dos ejecutores
+## Los ejecutores
 
-| Ejecutor  | Máquina                                                    | Disponibilidad                                                     | Etiquetas                      |
-| --------- | ---------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------ |
-| `vps-aiw` | VPS Ubuntu 24.04 de Bitclick (8 vCPU, 16 GiB, 480 GB NVMe) | Permanente, como servicio de `systemd` con el usuario `aiw-runner` | `self-hosted, linux, x64, aiw` |
-| `wsl-aiw` | WSL2 en el portátil Windows 11 de Jesús                    | Opcional: solo cuando él lo arranca a mano                         | `self-hosted, linux, x64, aiw` |
+| Ejecutor          | Máquina                                                    | Disponibilidad                                                     | Etiquetas                              |
+| ----------------- | ---------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------- |
+| `vps-aiw`         | VPS Ubuntu 24.04 de Bitclick (8 vCPU, 16 GiB, 480 GB NVMe) | Permanente, como servicio de `systemd` con el usuario `aiw-runner` | `self-hosted, linux, x64, aiw`         |
+| `vps-aiw-revisor` | El mismo VPS                                               | Permanente, como servicio con el usuario `aiw-revisor`, sin Docker | `self-hosted, linux, x64, aiw-revisor` |
+| `wsl-aiw`         | WSL2 en el portátil Windows 11 de Jesús                    | Opcional: solo cuando él lo arranca a mano                         | `self-hosted, linux, x64, aiw`         |
 
-GitHub reparte los jobs entre los ejecutores libres con esas etiquetas. Con el portátil apagado, todo va a `vps-aiw`. Los dos son Linux porque los jobs con `services:` (PostgreSQL de `base-de-datos`, `flujos-durables` y `base-de-datos-carga`) solo funcionan en ejecutores Linux, y `secretos`, `compose` e `imagenes` llaman a `docker` directamente.
+`vps-aiw-revisor` solo recibe el workflow del Revisor: no lleva la etiqueta `aiw`, así que ningún job de la CI cae en él (sección [Ejecutor del Revisor](#ejecutor-del-revisor--vps-aiw-revisor)). GitHub reparte los jobs de la CI entre los ejecutores libres con la etiqueta `aiw`. Con el portátil apagado, todo va a `vps-aiw`. Los dos son Linux porque los jobs con `services:` (PostgreSQL de `base-de-datos`, `flujos-durables` y `base-de-datos-carga`) solo funcionan en ejecutores Linux, y `secretos`, `compose` e `imagenes` llaman a `docker` directamente.
 
 El ejecutor es de repositorio (`bitclick-solution/AI-Workforce`), no de organización.
 
@@ -239,18 +240,113 @@ En **Settings → Secrets and variables → Actions → Variables**, crea `AIW_R
 
 Solo lo leen los workflows que ya incluyen el cambio de esta rebanada: primero el PR de la rebanada y, cuando se fusione, `main` y todo PR nuevo.
 
+## Ejecutor del Revisor · `vps-aiw-revisor`
+
+Con un solo ejecutor, el Revisor ocupaba `vps-aiw` mientras la CI de su commit esperaba en cola, y siempre revisaba con la CI a medias ([especificación](../specs/ejecutor-revisor.md)). Con este ejecutor, `revisor.yml` corre aparte y, antes de revisar, espera a que termine la ejecución de `ci.yml` del mismo commit (hasta 3 horas, porque con varios PR en cola la CI de uno puede tardar más de una hora). El resultado llega al prompt del Revisor.
+
+El Revisor no usa Docker ni publica puertos, así que este ejecutor no necesita Docker rootless y no puede chocar con los puertos de la CI. Las reglas de este host siguen valiendo: aquí tampoco se instala ningún paquete.
+
+### Paso R0 · Comprobaciones previas (solo lectura)
+
+```bash
+id aiw-revisor 2>&1 | head -1
+command -v gh jq git curl tar
+dpkg -l | grep -E '^ii\s+libicu74\s' | awk '{print $2, $3}'
+free -h | head -2
+```
+
+Resultado esperado: `aiw-revisor` no existe todavía. `gh`, `jq`, `git`, `curl` y `tar` están instalados, y también `libicu74` (los dejó el paso 1 de `vps-aiw`). Si falta algo, para: no se instala nada sin simular (regla 2).
+
+### Paso R1 · Usuario sin privilegios y sin Docker
+
+```bash
+sudo useradd --create-home --shell /usr/sbin/nologin aiw-revisor
+groups aiw-revisor
+sudo -u aiw-revisor test -w /var/run/docker.sock && echo "ACCESIBLE: PARA" || echo "sin acceso al Docker de producción"
+```
+
+Resultado esperado: `aiw-revisor` solo está en su propio grupo, y la última orden dice `sin acceso al Docker de producción`. No hace falta `enable-linger`, porque este usuario no tiene servicios propios.
+
+### Paso R2 · Descargar y registrar
+
+Usa la misma versión que `vps-aiw` (`2.337.0` a 28-9-2026) o la que proponga **Settings → Actions → Runners → New self-hosted runner**. Escribe el token de esa página **solo en tu terminal**.
+
+```bash
+cd /tmp
+sudo -u aiw-revisor bash -c '
+  set -e
+  mkdir -p ~/actions-runner && cd ~/actions-runner
+  curl -fsSL -o runner.tar.gz \
+    https://github.com/actions/runner/releases/download/v2.337.0/actions-runner-linux-x64-2.337.0.tar.gz
+  tar xzf runner.tar.gz && rm runner.tar.gz
+  ./config.sh --url https://github.com/bitclick-solution/AI-Workforce \
+    --token <TOKEN> --name vps-aiw-revisor --labels aiw-revisor \
+    --work _work --unattended
+'
+```
+
+`config.sh` añade por su cuenta las etiquetas `self-hosted`, `Linux` y `X64`. Si pide ejecutar `installdependencies.sh`, **no lo ejecutes**: para y pega el mensaje.
+
+### Paso R3 · Servicio con límites
+
+```bash
+cd /tmp
+sudo bash -c 'cd /home/aiw-revisor/actions-runner && ./svc.sh install aiw-revisor'
+SERVICIO=actions.runner.bitclick-solution-AI-Workforce.vps-aiw-revisor.service
+sudo mkdir -p "/etc/systemd/system/$SERVICIO.d"
+sudo tee "/etc/systemd/system/$SERVICIO.d/limites.conf" > /dev/null <<'EOF'
+[Service]
+MemoryMax=3G
+MemorySwapMax=0
+CPUQuota=100%
+CPUWeight=20
+IOWeight=20
+EOF
+sudo systemctl daemon-reload
+sudo bash -c 'cd /home/aiw-revisor/actions-runner && ./svc.sh start'
+sleep 5
+systemctl show "$SERVICIO" -p ActiveState -p MemoryMax -p CPUQuotaPerSecUSec
+sudo journalctl -u "$SERVICIO" -n 3 --no-pager
+echo "contenedores de producción caídos: $(sudo docker ps --format '{{.Names}} {{.Status}}' | grep -vc ' Up ')"
+```
+
+Resultado esperado:
+
+- `ActiveState=active`, `MemoryMax=3221225472` y `CPUQuotaPerSecUSec=1s`.
+- El registro del servicio termina en `Listening for Jobs`.
+- `contenedores de producción caídos: 0`.
+- En **Settings → Actions → Runners**, `vps-aiw-revisor` aparece `Idle`.
+
+Los 3 GiB cubren `pnpm install` y Claude Code. Con los 10 GiB de `vps-aiw`, la CI entera se queda por debajo de 13 GiB.
+
+### Paso R4 · Activar
+
+En **Settings → Secrets and variables → Actions → Variables**, crea `AIW_RUNS_ON_REVISOR` con este valor:
+
+```json
+["self-hosted", "linux", "x64", "aiw-revisor"]
+```
+
+Mientras exista, el Revisor corre en `vps-aiw-revisor` y espera a la CI. Sin ella, vuelve a `AIW_RUNS_ON` y no espera, porque compartiría ejecutor con la CI y se bloquearían mutuamente.
+
 ## Portátil de Jesús · ejecutor opcional en WSL2
 
 No lo montes hasta que `vps-aiw` haya pasado la CI completa en verde. Tampoco hace falta para desbloquear nada.
 
 - Usa una distro de WSL2 aparte solo para la CI (Ubuntu 24.04) y **desactiva para ella la integración WSL de Docker Desktop** (Docker Desktop → Settings → Resources → WSL integration). Si no, Docker Desktop mete su propio `docker` en la distro y se repite el conflicto de la regla 1.
-- Dentro de la distro, sigue los pasos 1 a 3 del VPS con tu usuario de la distro en lugar de `aiw-runner`, cambiando las rutas `/home/aiw-runner` por tu `$HOME`. El nombre del ejecutor es `wsl-aiw`. No hace falta `svc.sh`.
+- Dentro de la distro, sigue los pasos 1 a 3 del VPS con tu usuario de la distro en lugar de `aiw-runner`, cambiando las rutas `/home/aiw-runner` por tu `$HOME`. El nombre del ejecutor es `wsl-aiw`. No hace falta `svc.sh`. Diferencias con el VPS, comprobadas el 29-9-2026:
+  - Crea la distro con `wsl --install Ubuntu-24.04 --name aiw-ci`.
+  - Añade `iptables` al lote del paso 1: la distro nueva no lo trae y el Docker rootless lo necesita. No uses `--skip-iptables`.
+  - El kernel de WSL no tiene la restricción de AppArmor, así que no hace falta el perfil del paso 2.1.
+  - `gh` no hace falta, porque el Revisor corre en `vps-aiw-revisor`.
 - Arráncalo solo cuando quieras prestar el portátil: `cd ~/actions-runner && ./run.sh`. Con `Ctrl+C` se para, y GitHub deja de mandarle jobs.
 - Antes de arrancarlo, mira la memoria libre. Si un job se queda sin memoria, falla. GitHub no lo reintenta solo en otro ejecutor: relánzalo a mano. Si antes paras `wsl-aiw`, irá a `vps-aiw`.
 
 ## Vuelta a los ejecutores de GitHub
 
 Borra la variable `AIW_RUNS_ON` o ponle el valor `["ubuntu-24.04"]`. La siguiente ejecución vuelve a los ejecutores de GitHub sin tocar ningún workflow. Hazlo antes de investigar cualquier fallo raro del ejecutor.
+
+Si el problema está solo en el Revisor, borra `AIW_RUNS_ON_REVISOR`: el Revisor vuelve a compartir ejecutor con la CI (o a GitHub, si tampoco existe `AIW_RUNS_ON`) y deja de esperar.
 
 ## Vigilancia y actualización
 
@@ -263,6 +359,7 @@ Borra la variable `AIW_RUNS_ON` o ponle el valor `["ubuntu-24.04"]`. La siguient
 1. Pon `AIW_RUNS_ON` a `["ubuntu-24.04"]` antes de retirar el último ejecutor.
 2. `sudo ./svc.sh stop && sudo ./svc.sh uninstall` desde `/home/aiw-runner/actions-runner`, y elimina el ejecutor en **Settings → Actions → Runners**.
 3. Como `aiw-runner`, ejecuta `dockerd-rootless-setuptool.sh uninstall`. Después, `sudo loginctl disable-linger aiw-runner`, `sudo userdel -r aiw-runner` y `sudo rm /etc/apparmor.d/home.aiw-runner.bin.rootlesskit`.
+4. Ejecutor del Revisor: borra `AIW_RUNS_ON_REVISOR`. Después, desde `/home/aiw-revisor/actions-runner`, `sudo ./svc.sh stop && sudo ./svc.sh uninstall`, elimina `vps-aiw-revisor` en **Settings → Actions → Runners** y ejecuta `sudo userdel -r aiw-revisor`.
 
 ## Federación OIDC con AWS
 
