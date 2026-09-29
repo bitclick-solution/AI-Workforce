@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   BANDERA_PANEL,
+  ErrorDelContador,
   configuracionPanel,
   esRancio,
   etiquetaTareas,
@@ -114,17 +115,26 @@ describe('leerContador', () => {
     }
   });
 
-  it('un 401 se cuenta como error, no como panel a cero', async () => {
+  it('un 401 se cuenta como error, no como panel a cero, y el estado viaja en el error', async () => {
     const buscar = vi.fn(async () => respuesta({ error: 'no' }, 401));
     await expect(leerContador(configuracion, buscar, COOKIE)).rejects.toThrow(/respondió 401/);
+    await expect(leerContador(configuracion, buscar, COOKIE)).rejects.toMatchObject({
+      estado: 401,
+    });
+    await expect(leerContador(configuracion, buscar, COOKIE)).rejects.toBeInstanceOf(
+      ErrorDelContador,
+    );
   });
 
   it('un 500 también', async () => {
     const buscar = vi.fn(async () => respuesta({ error: 'no' }, 500));
     await expect(leerContador(configuracion, buscar, COOKIE)).rejects.toThrow(/respondió 500/);
+    await expect(leerContador(configuracion, buscar, COOKIE)).rejects.toMatchObject({
+      estado: 500,
+    });
   });
 
-  it('si la API no responde, el mensaje no lleva su dirección interna', async () => {
+  it('si la API no responde, el mensaje no lleva su dirección interna ni un estado', async () => {
     const buscar = vi.fn(async () => {
       throw new Error('ECONNREFUSED http://api-interna:3002');
     });
@@ -132,6 +142,9 @@ describe('leerContador', () => {
       'La API del contador no responde.',
     );
     await expect(leerContador(configuracion, buscar, COOKIE)).rejects.not.toThrow(/api-interna/);
+    await expect(leerContador(configuracion, buscar, COOKIE)).rejects.toMatchObject({
+      estado: undefined,
+    });
   });
 });
 

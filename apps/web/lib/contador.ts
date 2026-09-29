@@ -81,6 +81,19 @@ export function configuracionPanel(
 
 type Buscador = (url: string, opciones: { headers: Record<string, string> }) => Promise<Response>;
 
+/**
+ * Error de `pedirJson`/`leerContador` con el estado HTTP real cuando lo hay, para
+ * que quien lo capture (el proxy de `app/api/contador`) no tenga que adivinarlo del
+ * texto del mensaje.
+ */
+export class ErrorDelContador extends Error {
+  readonly estado: number | undefined;
+  constructor(mensaje: string, estado?: number) {
+    super(mensaje);
+    this.estado = estado;
+  }
+}
+
 async function pedirJson<T>(
   configuracion: ConfiguracionPanel,
   ruta: string,
@@ -98,10 +111,13 @@ async function pedirJson<T>(
   } catch {
     // El motivo real va al registro del servidor, no al navegador: puede llevar la
     // dirección interna de la API.
-    throw new Error('La API del contador no responde.');
+    throw new ErrorDelContador('La API del contador no responde.');
   }
   if (!respuesta.ok) {
-    throw new Error(`La API del contador respondió ${respuesta.status}.`);
+    throw new ErrorDelContador(
+      `La API del contador respondió ${respuesta.status}.`,
+      respuesta.status,
+    );
   }
   return (await respuesta.json()) as T;
 }

@@ -7,7 +7,7 @@
  * Sin bandera o sin configuración completa, responde 404, igual que la vista.
  */
 import { cookiesDelAcceso } from '../../../lib/acceso';
-import { configuracionPanel, leerContador } from '../../../lib/contador';
+import { configuracionPanel, ErrorDelContador, leerContador } from '../../../lib/contador';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,8 +36,9 @@ export async function GET(peticion: Request): Promise<Response> {
     // El mensaje que se devuelve es el que ya viene saneado de `leerContador`.
     const motivo = error instanceof Error ? error.message : 'La lectura del contador falló.';
     // Sin sesión válida la API responde 401, y así le llega al navegador: no es una
-    // API caída, es que hay que volver a entrar.
-    const estado = motivo.includes('respondió 401') ? 401 : 502;
+    // API caída, es que hay que volver a entrar. El estado real viaja en el error,
+    // no en su texto (`ErrorDelContador.estado`).
+    const estado = error instanceof ErrorDelContador && error.estado === 401 ? 401 : 502;
     return new Response(JSON.stringify({ error: motivo }), { status: estado, headers: SIN_CACHE });
   }
 }
