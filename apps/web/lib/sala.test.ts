@@ -1,14 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   configuracionSala,
+  crearFuenteDeSala,
   esNotaDelModerador,
   etiquetaDeAutor,
   llamarSala,
   propuestaDelMensaje,
   salaActiva,
+  urlWebSocketCentrifugo,
   type MensajeDeLaSala,
 } from './sala';
+import type { CambioDeSala } from './sala-contrato';
 
 const TENANT = '01a0d39e-98c3-7970-814a-0a98ad132311';
 const PERSONA = '01a0d39e-98c3-7970-814a-0a98ad132312';
@@ -123,5 +126,242 @@ describe('detalles de chat', () => {
     expect(esperandoRespuesta([persona, nota])).toBe(true);
     expect(esperandoRespuesta([persona, nota, agente])).toBe(false);
     expect(esperandoRespuesta([])).toBe(false);
+  });
+});
+
+describe('sala v1: URL pública de Centrifugo', () => {
+  it('urlWebSocketCentrifugo lee del entorno', () => {
+    expect(urlWebSocketCentrifugo({})).toBeUndefined();
+    expect(urlWebSocketCentrifugo({ AIW_CENTRIFUGO_WS_URL: 'ws://x/y' })).toBe('ws://x/y');
+  });
+});
+
+class WebSocketFalso {
+  static instancias: WebSocketFalso[] = [];
+  onopen: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  onmessage: ((evento: { data: string }) => void) | null = null;
+  enviados: unknown[] = [];
+  constructor(public readonly url: string) {
+    WebSocketFalso.instancias.push(this);
+  }
+  send(datos: string): void {
+    this.enviados.push(JSON.parse(datos));
+  }
+  close(): void {
+    this.onclose?.();
+  }
+}
+
+function ultimoWebSocket(): WebSocketFalso {
+  const ws = WebSocketFalso.instancias.at(-1);
+  if (!ws) throw new Error('No se abrió ningún WebSocket.');
+  return ws;
+}
+
+function respuestaJson(cuerpo: unknown, estado = 200): Response {
+  return new Response(JSON.stringify(cuerpo), {
+    status: estado,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+describe('crearFuenteDeSala: la fuente real de la sala v1', () => {
+  const SALA_ID = '01a0d39e-98c3-7970-814a-0a98ad132313';
+
+  beforeEach(() => {
+    WebSocketFalso.instancias = [];
+    vi.stubGlobal('WebSocket', WebSocketFalso);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('salas() y miembros() piden a la API por HTTP', async () => {
+    const buscar = vi.fn(async (url: string) => {
+      if (url === '/api/sala/salas') {
+        return respuestaJson({
+          salas: [{ id: SALA_ID, nombre: 'General', ambito: 'general', sinLeer: 0, menciones: 0 }],
+        });
+      }
+      if (url === `/api/sala/${SALA_ID}/miembros`) {
+        return respuestaJson({
+          miembros: [{ id: 'p1', tipo: 'persona', nombre: 'Jesús', estado: 'en-la-sala' }],
+        });
+      }
+      throw new Error(`URL inesperada: ${url}`);
+    });
+    vi.stubGlobal('fetch', buscar);
+
+    const fuente = crearFuenteDeSala();
+    const salas = await fuente.salas();
+    expect(salas).toEqual([
+      { id: SALA_ID, nombre: 'General', ambito: 'general', sinLeer: 0, menciones: 0 },
+    ]);
+    const miembros = await fuente.miembros(SALA_ID);
+    expect(miembros).toEqual([
+      { id: 'p1', tipo: 'persona', nombre: 'Jesús', estado: 'en-la-sala' },
+    ]);
+  });
+
+  it('indicarEscritura avisa a la API sin esperar respuesta', () => {
+    const buscar = vi.fn(async () => respuestaJson({ ok: true }));
+    vi.stubGlobal('fetch', buscar);
+    crearFuenteDeSala().indicarEscritura(SALA_ID);
+    expect(buscar).toHaveBeenCalledWith(
+      `/api/sala/${SALA_ID}/escribiendo`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('suscribir() con token y wsUrl se conecta a Centrifugo y reparte mensajes y escritura', async () => {
+    const buscar = vi.fn(async (url: string) => {
+      if (url === `/api/sala/${SALA_ID}/token`) {
+        return respuestaJson({
+          token: 'tok',
+          canalToken: 'canal-tok',
+          canal: `sala:t:${SALA_ID}`,
+          wsUrl: 'ws://centrifugo.local/connection/websocket',
+        });
+      }
+      throw new Error(`URL inesperada: ${url}`);
+    });
+    vi.stubGlobal('fetch', buscar);
+
+    const cambios: CambioDeSala[] = [];
+    const cancelar = crearFuenteDeSala().suscribir(SALA_ID, (c) => cambios.push(c));
+    // La conexión se abre de forma asíncrona: se espera a que el WebSocket falso exista.
+    await vi.waitFor(() => expect(WebSocketFalso.instancias).toHaveLength(1));
+    const ws = ultimoWebSocket();
+    ws.onopen?.();
+    expect(ws.enviados).toEqual([{ id: 1, connect: { token: 'tok' } }]);
+
+    ws.onmessage?.({ data: JSON.stringify({ id: 1, connect: {} }) });
+    expect(ws.enviados[1]).toEqual({
+      id: 2,
+      subscribe: { channel: `sala:t:${SALA_ID}`, token: 'canal-tok' },
+    });
+
+    ws.onmessage?.({
+      data: JSON.stringify({
+        push: { channel: `sala:t:${SALA_ID}`, pub: { data: { tipo: 'mensaje' } } },
+      }),
+    });
+    ws.onmessage?.({
+      data: JSON.stringify({
+        push: {
+          channel: `sala:t:${SALA_ID}`,
+          pub: { data: { tipo: 'escribiendo', personaId: 'p1', hasta: '2026-01-01T00:00:00Z' } },
+        },
+      }),
+    });
+    expect(cambios).toEqual([
+      { tipo: 'mensaje', salaId: SALA_ID },
+      { tipo: 'escribiendo', salaId: SALA_ID, miembroId: 'p1', hasta: '2026-01-01T00:00:00Z' },
+    ]);
+
+    cancelar();
+    expect(ws.onclose).not.toBeNull(); // cerrar() llama a ws.close(), que dispara onclose.
+  });
+
+  it('un join de Centrifugo vuelve a pedir los miembros y reparte la presencia de esa persona', async () => {
+    const buscar = vi.fn(async (url: string) => {
+      if (url === `/api/sala/${SALA_ID}/token`) {
+        return respuestaJson({
+          token: 'tok',
+          canalToken: 'canal-tok',
+          canal: `sala:t:${SALA_ID}`,
+          wsUrl: 'ws://centrifugo.local/connection/websocket',
+        });
+      }
+      if (url === `/api/sala/${SALA_ID}/miembros`) {
+        return respuestaJson({
+          miembros: [{ id: 'p1', tipo: 'persona', nombre: 'Jesús', estado: 'en-la-sala' }],
+        });
+      }
+      throw new Error(`URL inesperada: ${url}`);
+    });
+    vi.stubGlobal('fetch', buscar);
+
+    const cambios: CambioDeSala[] = [];
+    crearFuenteDeSala().suscribir(SALA_ID, (c) => cambios.push(c));
+    await vi.waitFor(() => expect(WebSocketFalso.instancias).toHaveLength(1));
+    const ws = ultimoWebSocket();
+    ws.onmessage?.({
+      data: JSON.stringify({
+        push: { channel: `sala:t:${SALA_ID}`, join: { info: { user: 'p1' } } },
+      }),
+    });
+
+    await vi.waitFor(() =>
+      expect(cambios).toEqual([
+        {
+          tipo: 'presencia',
+          salaId: SALA_ID,
+          miembro: { id: 'p1', tipo: 'persona', nombre: 'Jesús', estado: 'en-la-sala' },
+        },
+      ]),
+    );
+  });
+
+  it('sin token de Centrifugo, o si la llamada falla, cae en consulta periódica', async () => {
+    vi.useFakeTimers();
+    const buscar = vi.fn(async () => {
+      throw new Error('La API no responde.');
+    });
+    vi.stubGlobal('fetch', buscar);
+
+    const cambios: CambioDeSala[] = [];
+    crearFuenteDeSala().suscribir(SALA_ID, (c) => cambios.push(c));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(WebSocketFalso.instancias).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(cambios).toEqual([{ tipo: 'mensaje', salaId: SALA_ID }]);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(cambios).toHaveLength(2);
+  });
+
+  it('si Centrifugo cae tras conectar, se pasa a consulta periódica', async () => {
+    vi.useFakeTimers();
+    const buscar = vi.fn(async (url: string) => {
+      if (url === `/api/sala/${SALA_ID}/token`) {
+        return respuestaJson({
+          token: 'tok',
+          canalToken: 'canal-tok',
+          canal: `sala:t:${SALA_ID}`,
+          wsUrl: 'ws://centrifugo.local/connection/websocket',
+        });
+      }
+      throw new Error(`URL inesperada: ${url}`);
+    });
+    vi.stubGlobal('fetch', buscar);
+
+    const cambios: CambioDeSala[] = [];
+    crearFuenteDeSala().suscribir(SALA_ID, (c) => cambios.push(c));
+    await vi.advanceTimersByTimeAsync(0);
+    const ws = ultimoWebSocket();
+    ws.onerror?.();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(cambios).toEqual([{ tipo: 'mensaje', salaId: SALA_ID }]);
+  });
+
+  it('cancelar la suscripción cierra Centrifugo y para la consulta periódica', async () => {
+    vi.useFakeTimers();
+    const buscar = vi.fn(async () => {
+      throw new Error('La API no responde.');
+    });
+    vi.stubGlobal('fetch', buscar);
+
+    const cambios: CambioDeSala[] = [];
+    const cancelar = crearFuenteDeSala().suscribir(SALA_ID, (c) => cambios.push(c));
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(cambios).toHaveLength(1);
+    cancelar();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(cambios).toHaveLength(1);
   });
 });

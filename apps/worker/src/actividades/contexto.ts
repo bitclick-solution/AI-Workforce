@@ -34,6 +34,11 @@ import {
   type Enrutador,
   type PuertoDeTrazas,
 } from '@aiw/models';
+import {
+  publicarEnSala,
+  type BuscadorCentrifugo,
+  type ConfiguracionCentrifugo,
+} from '@aiw/rooms/centrifugo';
 import type postgres from 'postgres';
 
 export interface OpcionesContexto {
@@ -44,6 +49,10 @@ export interface OpcionesContexto {
   enrutador?: Enrutador | undefined;
   secretos?: ResolvedorDeSecretos | undefined;
   trazas?: PuertoDeTrazas | undefined;
+  /** Sala v1: reparto por Centrifugo. Sin ella, `avisarSala` no hace nada. */
+  centrifugo?: ConfiguracionCentrifugo | undefined;
+  /** Solo para pruebas: sustituye `fetch` al llamar al API HTTP de Centrifugo. */
+  buscarCentrifugo?: BuscadorCentrifugo | undefined;
 }
 
 export interface ContextoDeActividades {
@@ -52,6 +61,15 @@ export interface ContextoDeActividades {
   enrutador: Enrutador;
   cachePrompts: CacheDePrompts;
   trazas: PuertoDeTrazas;
+  /**
+   * Publica una publicación efímera en el canal de la sala: mensajes nuevos, para
+   * que Centrifugo los reparta en vivo. Best-effort a propósito (ADR-022, «si
+   * Centrifugo cae, la sala sigue funcionando»): sin `centrifugo` configurado, o
+   * si la llamada falla, no hace nada y no lanza. El mensaje ya quedó escrito en
+   * PostgreSQL en la misma transacción que lo anota; esto es solo el aviso en
+   * vivo, nunca la verdad.
+   */
+  avisarSala: (tenantId: string, salaId: string, datos: Record<string, unknown>) => Promise<void>;
   cerrar: () => Promise<void>;
 }
 
@@ -143,12 +161,25 @@ export function crearContextoDeActividades(opciones: OpcionesContexto): Contexto
     secretos: opciones.secretos ?? resolvedorDeEntorno(),
   });
 
+  const buscarCentrifugo = opciones.buscarCentrifugo ?? (fetch as unknown as BuscadorCentrifugo);
+
   return {
     cliente: conexion.cliente,
     gateway,
     enrutador: opciones.enrutador ?? enrutadorDeDemostracion(),
     cachePrompts: crearCacheDePrompts(),
     trazas: opciones.trazas ?? new TrazasEnMemoria(),
+    async avisarSala(tenantId, salaId, datos) {
+      if (!opciones.centrifugo) return;
+      try {
+        await publicarEnSala(opciones.centrifugo, tenantId, salaId, datos, buscarCentrifugo);
+      } catch (error) {
+        console.error(
+          '[worker] Centrifugo no repartió la publicación de la sala:',
+          error instanceof Error ? error.message : error,
+        );
+      }
+    },
     cerrar: async () => {
       await gateway.cerrar();
       await conexion.cerrar();

@@ -59,6 +59,12 @@ export const salaParticipante = pgTable(
     personaId: uuid('persona_id').references(() => persona.id, { onDelete: 'restrict' }),
     puestoId: uuid('puesto_id').references(() => puesto.id, { onDelete: 'restrict' }),
     rol: rolParticipante('rol').notNull(),
+    /**
+     * Hasta cuándo ha leído esta persona la sala (sala v1). Nulo: nunca ha leído,
+     * todo lo que hay está sin leer. No aplica a un participante `puesto`: un
+     * agente no tiene «sin leer». No es zona de auditoría: se sobrescribe en sitio.
+     */
+    ultimaLecturaEn: timestamp('ultima_lectura_en', { withTimezone: true }),
     ...columnasMutables(),
   },
   (t) => [

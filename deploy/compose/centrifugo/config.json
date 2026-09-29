@@ -4,5 +4,12 @@
     "allowed_origins": ["http://localhost:3000", "http://127.0.0.1:3000"]
   },
   "http_api": {},
+  "channel": {
+    "without_namespace": {
+      "presence": true,
+      "join_leave": true
+    },
+    "private_channel_prefix": "sala:"
+  },
   "log": { "level": "info" }
 }

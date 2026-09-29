@@ -37,12 +37,22 @@ describe('bandera AIW_SALA_V1', () => {
   });
 });
 
-describe('fuente simulada', () => {
-  it('la fuente de la vista es hoy la simulada y cumple el contrato', async () => {
+describe('fuente conectada', () => {
+  // `crearFuente` (`./sala-fuente`) ya no es la simulada: la conectó el segundo PR
+  // en fusionarse a `crearFuenteDeSala()` de `./sala` (la API por HTTP y
+  // Centrifugo por WebSocket). Aquí solo se comprueba que sigue cumpliendo la
+  // forma del contrato; el comportamiento real de esa fuente lo prueba
+  // `sala.test.ts`, y el de la simulada, el resto de este fichero.
+  it('la fuente de la vista cumple el contrato', () => {
     const fuente = crearFuente();
-    expect((await fuente.salas()).length).toBeGreaterThan(0);
+    expect(typeof fuente.salas).toBe('function');
+    expect(typeof fuente.miembros).toBe('function');
+    expect(typeof fuente.suscribir).toBe('function');
+    expect(typeof fuente.indicarEscritura).toBe('function');
   });
+});
 
+describe('fuente simulada', () => {
   it('tiene la sala general y salas de equipo con sin leer y menciones', async () => {
     const salas = await crearFuenteSimulada().salas();
     expect(salas.some((sala) => sala.ambito === 'general')).toBe(true);

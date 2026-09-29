@@ -34,6 +34,9 @@ export const ACCIONES_SALA = {
   propuestaRechazada: 'propuesta.rechazada',
   propuestaCaducada: 'propuesta.caducada',
   puestoContratado: 'puesto.contratado',
+  // Sala v1: salas por equipo y presencia en vivo (ADR-022).
+  miembroAnadido: 'sala.miembro_anadido',
+  miembroQuitado: 'sala.miembro_quitado',
 } as const;
 
 const SEGUNDOS_POR_DIA = 24 * 60 * 60;
@@ -56,8 +59,15 @@ interface MensajeNuevo {
  * Inserta un mensaje si no existe. `mensaje` está particionada y su clave incluye
  * `creado_en`, así que un `on conflict` no serviría: el reintento traería otra hora.
  * Se busca por identificador dentro de la misma transacción.
+ *
+ * Sala v1: si es de verdad nuevo, avisa a Centrifugo sin esperar (`void`) y sin
+ * que un fallo suyo afecte a la transacción. La publicación es solo un aviso de
+ * «algo cambió, vuelve a leer» (`{ tipo: 'mensaje' }`), no el mensaje en sí: un
+ * aviso que llegara antes de que la transacción confirme, y que luego no
+ * confirmara, deja como mucho una relectura de balde, nunca un dato inventado.
  */
 async function insertarMensaje(
+  contexto: ContextoDeActividades,
   tx: postgres.TransactionSql,
   tenantId: string,
   mensaje: MensajeNuevo,
@@ -76,6 +86,7 @@ async function insertarMensaje(
     returning creado_en
   `;
   if (!nuevo) throw new Error('El mensaje no se insertó.');
+  void contexto.avisarSala(tenantId, mensaje.salaId, { tipo: 'mensaje' });
   return { creadoEn: nuevo.creado_en, yaEstaba: false };
 }
 
@@ -106,6 +117,146 @@ export interface DecisionRegistrada {
   yaEstaba: boolean;
 }
 
+/**
+ * Encuentra la sala del departamento o la crea. Una por departamento: se busca por
+ * `departamento_id` y no por nombre, así que dos ejecuciones a la vez no crean dos.
+ */
+async function asegurarSala(
+  tx: postgres.TransactionSql,
+  tenantId: string,
+  departamento: { id: string; nombre: string },
+): Promise<{ salaId: string; creada: boolean }> {
+  const [existente] = await tx<{ id: string }[]>`
+    select id from sala where tenant_id = ${tenantId} and departamento_id = ${departamento.id}
+  `;
+  if (existente) return { salaId: existente.id, creada: false };
+
+  const [nueva] = await tx<{ id: string }[]>`
+    insert into sala (tenant_id, departamento_id, ambito, nombre)
+    values (${tenantId}, ${departamento.id}, 'departamento', ${`Sala de ${departamento.nombre}`})
+    on conflict (tenant_id, nombre) do nothing
+    returning id
+  `;
+  if (nueva) return { salaId: nueva.id, creada: true };
+
+  // El nombre ya lo tenía otra sala (carrera, o el departamento se renombró y
+  // volvió a su nombre anterior): se busca otra vez por departamento antes de
+  // rendirse, que es la clave de verdad de esta función.
+  const [rehecha] = await tx<{ id: string }[]>`
+    select id from sala where tenant_id = ${tenantId} and departamento_id = ${departamento.id}
+  `;
+  if (!rehecha) {
+    throw errorDeDatos(`La sala de «${departamento.nombre}» no se pudo crear ni encontrar.`);
+  }
+  return { salaId: rehecha.id, creada: false };
+}
+
+/**
+ * Sincroniza los participantes de la sala de un equipo con lo que ya dice el
+ * departamento: puestos activos o en prueba, y la persona que lo supervisa.
+ *
+ * Los puestos se añaden y se quitan: es una señal limpia y completa de quién
+ * trabaja en el departamento ahora mismo. La persona supervisora solo se añade —
+ * quitar participantes humanos que alguien metió a mano no es cosa de esta
+ * sincronización— y su ausencia (departamento sin supervisor, o supervisor no
+ * activo) no es un error. Cada alta y cada baja deja su propia entrada en el libro
+ * (criterio de hecho de la rebanada).
+ */
+async function sincronizarParticipantesDeEquipo(
+  tx: postgres.TransactionSql,
+  tenantId: string,
+  salaId: string,
+  departamento: { id: string; supervisorPersonaId: string | null },
+): Promise<{ anadidos: number; quitados: number }> {
+  const puestosElegibles = await tx<{ id: string }[]>`
+    select id from puesto
+    where tenant_id = ${tenantId} and departamento_id = ${departamento.id}
+      and estado in ('activo', 'en_prueba')
+  `;
+  const supervisorActivo = departamento.supervisorPersonaId
+    ? await tx<{ id: string }[]>`
+        select id from persona
+        where tenant_id = ${tenantId} and id = ${departamento.supervisorPersonaId} and activa
+      `
+    : [];
+
+  const actuales = await tx<{ persona_id: string | null; puesto_id: string | null }[]>`
+    select persona_id, puesto_id from sala_participante
+    where tenant_id = ${tenantId} and sala_id = ${salaId}
+  `;
+  const puestosActuales = new Set(
+    actuales.map((f) => f.puesto_id).filter((id): id is string => id !== null),
+  );
+  const personasActuales = new Set(
+    actuales.map((f) => f.persona_id).filter((id): id is string => id !== null),
+  );
+
+  let anadidos = 0;
+  for (const puesto of puestosElegibles) {
+    if (puestosActuales.has(puesto.id)) continue;
+    const insertado = await tx`
+      insert into sala_participante (tenant_id, sala_id, puesto_id, rol)
+      values (${tenantId}, ${salaId}, ${puesto.id}, 'agente')
+      on conflict (tenant_id, sala_id, puesto_id) do nothing
+    `;
+    if (insertado.count === 0) continue;
+    await anotar(tx, tenantId, {
+      actorTipo: 'plataforma',
+      puestoId: puesto.id,
+      accion: ACCIONES_SALA.miembroAnadido,
+      datosReferenciados: [
+        { tipo: 'sala', id: salaId },
+        { tipo: 'puesto', id: puesto.id },
+      ],
+      resultado: 'exito',
+    });
+    anadidos += 1;
+  }
+  for (const persona of supervisorActivo) {
+    if (personasActuales.has(persona.id)) continue;
+    const insertado = await tx`
+      insert into sala_participante (tenant_id, sala_id, persona_id, rol)
+      values (${tenantId}, ${salaId}, ${persona.id}, 'humano')
+      on conflict (tenant_id, sala_id, persona_id) do nothing
+    `;
+    if (insertado.count === 0) continue;
+    await anotar(tx, tenantId, {
+      actorTipo: 'plataforma',
+      actorId: persona.id,
+      accion: ACCIONES_SALA.miembroAnadido,
+      datosReferenciados: [
+        { tipo: 'sala', id: salaId },
+        { tipo: 'persona', id: persona.id },
+      ],
+      resultado: 'exito',
+    });
+    anadidos += 1;
+  }
+
+  const idsElegibles = new Set(puestosElegibles.map((p) => p.id));
+  let quitados = 0;
+  for (const puestoId of puestosActuales) {
+    if (idsElegibles.has(puestoId)) continue;
+    const borrado = await tx`
+      delete from sala_participante
+      where tenant_id = ${tenantId} and sala_id = ${salaId} and puesto_id = ${puestoId}
+    `;
+    if (borrado.count === 0) continue;
+    await anotar(tx, tenantId, {
+      actorTipo: 'plataforma',
+      puestoId,
+      accion: ACCIONES_SALA.miembroQuitado,
+      datosReferenciados: [
+        { tipo: 'sala', id: salaId },
+        { tipo: 'puesto', id: puestoId },
+      ],
+      resultado: 'exito',
+    });
+    quitados += 1;
+  }
+  return { anadidos, quitados };
+}
+
 export function crearActividadesDeSala(contexto: ContextoDeActividades) {
   return {
     /**
@@ -134,7 +285,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
         const texto = peticion.texto.trim();
         if (texto.length === 0) throw errorDeDatos('Un mensaje vacío no se publica.');
 
-        const insertado = await insertarMensaje(tx, peticion.tenantId, {
+        const insertado = await insertarMensaje(contexto, tx, peticion.tenantId, {
           id: peticion.mensajeId,
           salaId: peticion.salaId,
           cuerpo: texto,
@@ -196,7 +347,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
         const puestos =
           decision.tipo === 'intervenir' ? decision.turnos.map((t) => t.puestoId) : [];
 
-        await insertarMensaje(tx, peticion.tenantId, {
+        await insertarMensaje(contexto, tx, peticion.tenantId, {
           id: peticion.notaId,
           salaId: peticion.salaId,
           cuerpo: decision.motivo,
@@ -326,7 +477,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
       adjuntos: AdjuntoDeSala[];
     }): Promise<{ yaEstaba: boolean }> {
       return enTenant(contexto, peticion.tenantId, async (tx) => {
-        const insertado = await insertarMensaje(tx, peticion.tenantId, {
+        const insertado = await insertarMensaje(contexto, tx, peticion.tenantId, {
           id: peticion.mensajeId,
           salaId: peticion.salaId,
           cuerpo: peticion.texto,
@@ -423,7 +574,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
 
         const autor: AdjuntoDeSala = { tipo: 'autor_plataforma', agente: 'director_ia' };
         if (respuesta.tipo === 'aclaracion') {
-          const insertado = await insertarMensaje(tx, peticion.tenantId, {
+          const insertado = await insertarMensaje(contexto, tx, peticion.tenantId, {
             id: peticion.respuestaId,
             salaId: peticion.salaId,
             cuerpo: respuesta.mensaje,
@@ -470,7 +621,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
           resultado: 'exito',
           nivelAplicado: propuesta.nivelExigido,
         });
-        await insertarMensaje(tx, peticion.tenantId, {
+        await insertarMensaje(contexto, tx, peticion.tenantId, {
           id: peticion.respuestaId,
           salaId: peticion.salaId,
           cuerpo: respuesta.mensaje,
@@ -543,7 +694,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
           aprobadaPorPersonaId: peticion.sentido === 'aprobada' ? peticion.personaId : null,
         });
         if (peticion.sentido !== 'aprobada') {
-          await insertarMensaje(tx, peticion.tenantId, {
+          await insertarMensaje(contexto, tx, peticion.tenantId, {
             id: peticion.avisoId,
             salaId: peticion.salaId,
             cuerpo:
@@ -677,7 +828,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
         });
 
         const faltan = propuesta.herramientas.porConectar.map((h) => h.nombre).join(', ');
-        await insertarMensaje(tx, peticion.tenantId, {
+        await insertarMensaje(contexto, tx, peticion.tenantId, {
           id: peticion.presentacionId,
           salaId: peticion.salaId,
           autorPuestoId: creado.id,
@@ -701,6 +852,36 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
           resultado: 'exito',
         });
         return { puestoId: creado.id, versionPuestoId: version.id, yaEstaba: false };
+      });
+    },
+
+    /**
+     * Sala v1: crea la sala del departamento si falta y sincroniza sus
+     * participantes. La llama el flujo `sincronizarSalaDeEquipo`, idempotente por
+     * departamento («la sala se crea con el equipo», criterio de hecho).
+     */
+    async asegurarSalaDeEquipo(peticion: {
+      tenantId: string;
+      departamentoId: string;
+    }): Promise<{ salaId: string; creada: boolean; anadidos: number; quitados: number }> {
+      return enTenant(contexto, peticion.tenantId, async (tx) => {
+        const [departamento] = await tx<
+          { id: string; nombre: string; supervisor_persona_id: string | null }[]
+        >`
+          select id, nombre, supervisor_persona_id from departamento
+          where tenant_id = ${peticion.tenantId} and id = ${peticion.departamentoId}
+        `;
+        if (!departamento) {
+          throw errorDeDatos(`El departamento ${peticion.departamentoId} no existe.`);
+        }
+        const { salaId, creada } = await asegurarSala(tx, peticion.tenantId, departamento);
+        const { anadidos, quitados } = await sincronizarParticipantesDeEquipo(
+          tx,
+          peticion.tenantId,
+          salaId,
+          { id: departamento.id, supervisorPersonaId: departamento.supervisor_persona_id },
+        );
+        return { salaId, creada, anadidos, quitados };
       });
     },
   };

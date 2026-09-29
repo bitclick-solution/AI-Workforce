@@ -28,6 +28,7 @@ const montado = await montarTrabajador({
   cola: configuracion.temporal.cola,
   espacio: configuracion.temporal.espacio,
   conexion,
+  ...(configuracion.centrifugo ? { centrifugo: configuracion.centrifugo } : {}),
 });
 
 console.log(

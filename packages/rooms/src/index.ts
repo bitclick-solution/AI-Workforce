@@ -18,3 +18,12 @@ export type Paquete = typeof PAQUETE;
 // Sala v0
 export * from './moderador.js';
 export * from './sala.js';
+
+// Sala v1: presencia en vivo (ADR-022)
+export * from './presencia.js';
+
+// `./centrifugo.js` no se reexporta aquí a propósito: usa `node:crypto`, y este
+// índice lo importa el paquete de flujos de Temporal (`apps/worker/src/flujos`),
+// que se empaqueta para un entorno aislado sin módulos nativos de Node. Quien
+// necesite firmar tokens o llamar al API de Centrifugo —las actividades del
+// trabajador y la API— importa `@aiw/rooms/centrifugo` directamente.
