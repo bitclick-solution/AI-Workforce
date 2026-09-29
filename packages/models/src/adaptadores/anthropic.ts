@@ -16,8 +16,26 @@
  * provisional baja a `high`. Además, `opus5` lleva `high` como suelo: hace el
  * trabajo de razonamiento y de decisión de escritura con un modelo que no es un
  * Opus, así que no baja de `high` aunque la clase de paso pida menos.
+ *
+ * Tercera excepción (encontrada el 28-9 al ejecutar la prueba de integración de
+ * Bedrock UE en `main`, PR #32): ni las herramientas `strict` ni
+ * `output_config.format` admiten restricciones numéricas (`minimum`, `maximum`,
+ * `multipleOf`), de longitud de cadena (`minLength`, `maxLength`) ni de tamaño de
+ * array (`minItems`, `maxItems`) en el JSON Schema — la API responde 400 si
+ * aparecen en cualquier nivel del esquema, y `z.number().int()` las añade aunque
+ * la definición Zod no las pida explícitamente. `transformJSONSchema`, del propio
+ * SDK de Anthropic (`@anthropic-ai/sdk/lib/transform-json-schema`, la misma
+ * función que usan sus ayudantes `zodOutputFormat` y `betaJSONSchemaOutputFormat`),
+ * las quita del esquema que viaja en la petición —a cualquier profundidad, también
+ * dentro de `anyOf`, `items` y `$defs`— y las deja como una nota en `description`;
+ * como la API deja de hacerlas cumplir, el adaptador las vuelve a comprobar él
+ * mismo contra el esquema Zod original al recibir la respuesta: la salida
+ * estructurada (ya lo hacía) y ahora también la entrada de cada llamada a
+ * herramienta (`llamadasHerramientaDe`). Detalle y cómo probarlo:
+ * `docs/runbooks/modelos-funciones-ausentes.md`.
  */
 import type Anthropic from '@anthropic-ai/sdk';
+import { transformJSONSchema } from '@anthropic-ai/sdk/lib/transform-json-schema';
 import {
   type NivelEsfuerzo,
   type PapelModelo,
@@ -29,6 +47,8 @@ import { z } from 'zod';
 import { esfuerzoParaClase } from '../esfuerzo.js';
 import { esProvisional, identificadorDeModelo } from '../identificadores.js';
 import type {
+  HerramientaDeModelo,
+  LlamadaHerramienta,
   PeticionDeModelo,
   PuertoDeModelo,
   RespuestaDeModelo,
@@ -97,6 +117,11 @@ function textoDe(mensaje: Anthropic.Message): string {
     .join('');
 }
 
+/** Esquema JSON de un `z.ZodType`, en la forma que admite `strict` (sin las palabras clave que rechaza la API). */
+function esquemaEstricto(esquema: z.ZodType): Record<string, unknown> {
+  return transformJSONSchema(z.toJSONSchema(esquema, { reused: 'ref' }));
+}
+
 function herramientasDe(peticion: PeticionDeModelo): Anthropic.Tool[] | undefined {
   if (!peticion.herramientas || peticion.herramientas.length === 0) return undefined;
   return peticion.herramientas.map((herramienta) => ({
@@ -104,8 +129,41 @@ function herramientasDe(peticion: PeticionDeModelo): Anthropic.Tool[] | undefine
     description: herramienta.descripcion,
     // Estricto (ADR-018): sin instrucción suelta para pedir el formato, esquema cerrado.
     strict: true,
-    input_schema: z.toJSONSchema(herramienta.esquemaEntrada) as Anthropic.Tool.InputSchema,
+    input_schema: esquemaEstricto(herramienta.esquemaEntrada) as Anthropic.Tool.InputSchema,
   }));
+}
+
+/**
+ * Lee las llamadas a herramienta de la respuesta y valida la entrada de cada una
+ * contra el esquema Zod original (no el que viajó, ya sin `strict` completo — ver
+ * el comentario de cabecera). Un fallo de validación o una herramienta que el
+ * modelo pide sin haberla declarado la petición son errores de transporte: los
+ * lanza, como el resto de comprobaciones de esta función (ADR-018: un fallo de
+ * validación no es un resultado a medio construir).
+ */
+function llamadasHerramientaDe(
+  mensaje: Anthropic.Message,
+  herramientas: HerramientaDeModelo[] | undefined,
+  modelo: string,
+): LlamadaHerramienta[] {
+  const bloques = mensaje.content.filter(
+    (bloque): bloque is Anthropic.ToolUseBlock => bloque.type === 'tool_use',
+  );
+  return bloques.map((bloque) => {
+    const herramienta = herramientas?.find((candidata) => candidata.nombre === bloque.name);
+    if (!herramienta) {
+      throw new Error(
+        `${modelo} pidió la herramienta "${bloque.name}", que no estaba entre las declaradas en la petición.`,
+      );
+    }
+    const validado = herramienta.esquemaEntrada.safeParse(bloque.input);
+    if (!validado.success) {
+      throw new Error(
+        `${modelo} pidió la herramienta "${bloque.name}" con una entrada que no cumple su esquema: ${validado.error.message}`,
+      );
+    }
+    return { nombre: bloque.name, entrada: validado.data };
+  });
 }
 
 /**
@@ -148,7 +206,7 @@ export function crearAdaptadorAnthropic(
         output_config: {
           ...(sinPensamientoAdaptativo ? {} : { effort: esfuerzo }),
           ...(peticion.esquemaSalida
-            ? { format: { type: 'json_schema', schema: z.toJSONSchema(peticion.esquemaSalida) } }
+            ? { format: { type: 'json_schema', schema: esquemaEstricto(peticion.esquemaSalida) } }
             : {}),
         },
         ...(sinPensamientoAdaptativo ? {} : { thinking: { type: 'adaptive' } }),
@@ -188,7 +246,16 @@ export function crearAdaptadorAnthropic(
         salida = validado.data;
       }
 
-      return { tipo: 'ok', texto, ...(salida !== undefined ? { salida } : {}), tokens, modelo };
+      const llamadasHerramientas = llamadasHerramientaDe(respuesta, peticion.herramientas, modelo);
+
+      return {
+        tipo: 'ok',
+        texto,
+        ...(salida !== undefined ? { salida } : {}),
+        ...(llamadasHerramientas.length > 0 ? { llamadasHerramientas } : {}),
+        tokens,
+        modelo,
+      };
     },
   };
 }

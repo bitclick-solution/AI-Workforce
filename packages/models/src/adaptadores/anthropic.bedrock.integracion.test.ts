@@ -122,7 +122,12 @@ describe.skipIf(!HAY_BEDROCK)(TITULO, () => {
     expect(esquema.safeParse(resultado.salida).success).toBe(true);
   }, 30_000);
 
-  it('acepta una herramienta strict y la declara en la petición, con sonnet5', async () => {
+  it('acepta una herramienta strict con un entero acotado, con sonnet5', async () => {
+    // El entero acotado (min/max) es el caso que reprodujo el 400 de la API
+    // («For 'integer' type, properties maximum, minimum are not supported»,
+    // encontrado el 28-9 al ejecutar esta prueba en `main`, PR #32): `anthropic.ts`
+    // quita esas palabras clave del esquema que viaja y valida la entrada real
+    // contra el esquema Zod original al recibirla.
     const papel: PapelModelo = 'sonnet5';
     const modelo = identificadorDeModelo(papel, 'bedrock-eu');
     const puerto = puertoDePapel(papel);
@@ -134,8 +139,10 @@ describe.skipIf(!HAY_BEDROCK)(TITULO, () => {
         herramientas: [
           {
             nombre: 'buscar_movimiento',
-            descripcion: 'Busca un movimiento bancario por importe',
-            esquemaEntrada: z.object({ importeCentimos: z.number().int() }),
+            descripcion: 'Busca un movimiento bancario por importe, en céntimos',
+            esquemaEntrada: z.object({
+              importeCentimos: z.number().int().min(1).max(100_000_00),
+            }),
           },
         ],
         maxTokens: 256,
