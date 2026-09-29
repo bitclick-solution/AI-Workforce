@@ -45,8 +45,8 @@ jobs:
     needs: comprobar
     if: needs.comprobar.outputs.hay_clave == 'true' && github.event.pull_request.draft == false
     runs-on: ${{ fromJSON(vars.AIW_RUNS_ON_REVISOR || vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
-    # Hasta 60 minutos de espera a la CI más la propia revisión.
-    timeout-minutes: 90
+    # Hasta 3 horas de espera a la CI (con cola de varios PR en un solo ejecutor) más la propia revisión.
+    timeout-minutes: 210
     steps:
       - name: Esperar a la CI de este commit
         id: ci
@@ -57,7 +57,7 @@ jobs:
           REPO: ${{ github.repository }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          limite=$((SECONDS + 3600))
+          limite=$((SECONDS + 10800))
           while :; do
             datos=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&event=pull_request&per_page=1" \
               --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion // "")"' 2>/dev/null || true)
@@ -70,7 +70,7 @@ jobs:
             fi
             if [ "$SECONDS" -ge "$limite" ]; then
               echo "conclusion=sin-terminar" >> "$GITHUB_OUTPUT"
-              echo "::warning::La CI de $SHA no ha terminado en 60 minutos: el Revisor revisa igualmente."
+              echo "::warning::La CI de $SHA no ha terminado en 3 horas: el Revisor revisa igualmente."
               exit 0
             fi
             echo "CI de $SHA: ${estado:-sin ejecución todavía}. Nueva comprobación en 30 s."

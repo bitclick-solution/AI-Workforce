@@ -242,7 +242,7 @@ Solo lo leen los workflows que ya incluyen el cambio de esta rebanada: primero e
 
 ## Ejecutor del Revisor · `vps-aiw-revisor`
 
-Con un solo ejecutor, el Revisor ocupaba `vps-aiw` mientras la CI de su commit esperaba en cola, y siempre revisaba con la CI a medias ([especificación](../specs/ejecutor-revisor.md)). Con este ejecutor, `revisor.yml` corre aparte y, antes de revisar, espera a que termine la ejecución de `ci.yml` del mismo commit (hasta 60 minutos). El resultado llega al prompt del Revisor.
+Con un solo ejecutor, el Revisor ocupaba `vps-aiw` mientras la CI de su commit esperaba en cola, y siempre revisaba con la CI a medias ([especificación](../specs/ejecutor-revisor.md)). Con este ejecutor, `revisor.yml` corre aparte y, antes de revisar, espera a que termine la ejecución de `ci.yml` del mismo commit (hasta 3 horas, porque con varios PR en cola la CI de uno puede tardar más de una hora). El resultado llega al prompt del Revisor.
 
 El Revisor no usa Docker ni publica puertos, así que este ejecutor no necesita Docker rootless y no puede chocar con los puertos de la CI. Las reglas de este host siguen valiendo: aquí tampoco se instala ningún paquete.
 
@@ -334,7 +334,11 @@ Mientras exista, el Revisor corre en `vps-aiw-revisor` y espera a la CI. Sin ell
 No lo montes hasta que `vps-aiw` haya pasado la CI completa en verde. Tampoco hace falta para desbloquear nada.
 
 - Usa una distro de WSL2 aparte solo para la CI (Ubuntu 24.04) y **desactiva para ella la integración WSL de Docker Desktop** (Docker Desktop → Settings → Resources → WSL integration). Si no, Docker Desktop mete su propio `docker` en la distro y se repite el conflicto de la regla 1.
-- Dentro de la distro, sigue los pasos 1 a 3 del VPS con tu usuario de la distro en lugar de `aiw-runner`, cambiando las rutas `/home/aiw-runner` por tu `$HOME`. El nombre del ejecutor es `wsl-aiw`. No hace falta `svc.sh`.
+- Dentro de la distro, sigue los pasos 1 a 3 del VPS con tu usuario de la distro en lugar de `aiw-runner`, cambiando las rutas `/home/aiw-runner` por tu `$HOME`. El nombre del ejecutor es `wsl-aiw`. No hace falta `svc.sh`. Diferencias con el VPS, comprobadas el 29-9-2026:
+  - Crea la distro con `wsl --install Ubuntu-24.04 --name aiw-ci`.
+  - Añade `iptables` al lote del paso 1: la distro nueva no lo trae y el Docker rootless lo necesita. No uses `--skip-iptables`.
+  - El kernel de WSL no tiene la restricción de AppArmor, así que no hace falta el perfil del paso 2.1.
+  - `gh` no hace falta, porque el Revisor corre en `vps-aiw-revisor`.
 - Arráncalo solo cuando quieras prestar el portátil: `cd ~/actions-runner && ./run.sh`. Con `Ctrl+C` se para, y GitHub deja de mandarle jobs.
 - Antes de arrancarlo, mira la memoria libre. Si un job se queda sin memoria, falla. GitHub no lo reintenta solo en otro ejecutor: relánzalo a mano. Si antes paras `wsl-aiw`, irá a `vps-aiw`.
 

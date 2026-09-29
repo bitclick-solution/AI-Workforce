@@ -23,9 +23,9 @@ No aplica.
 
 ## Criterios de hecho
 
-1. Segundo ejecutor `vps-aiw-revisor` en el VPS como servicio: usuario propio sin privilegios, sin Docker, etiquetas `self-hosted, linux, x64, aiw-revisor` (sin `aiw`, para que ningún job de la CI caiga en él) y límites de systemd bajos (`MemoryMax=2G`, `CPUQuota=100%`, prioridad baja).
+1. Segundo ejecutor `vps-aiw-revisor` en el VPS como servicio: usuario propio sin privilegios, sin Docker, etiquetas `self-hosted, linux, x64, aiw-revisor` (sin `aiw`, para que ningún job de la CI caiga en él) y límites de systemd bajos (`MemoryMax=3G`, `CPUQuota=100%`, prioridad baja).
 2. `revisor.yml` decide `runs-on` con `AIW_RUNS_ON_REVISOR`; sin ella usa `AIW_RUNS_ON` y, sin esta, `ubuntu-24.04`. Volver atrás es borrar la variable.
-3. Solo cuando existe `AIW_RUNS_ON_REVISOR`, el Revisor espera a que termine la ejecución de `ci.yml` del SHA de cabeza del PR, con un plazo de 60 minutos. Sin la variable no espera: compartiría el ejecutor con la CI y se bloquearían mutuamente hasta agotar el plazo. El resultado (`success`, `failure`, `cancelled` o `sin-terminar`) llega al prompt del Revisor, que lo cita en su veredicto; si la CI falla, revisa igualmente.
+3. Solo cuando existe `AIW_RUNS_ON_REVISOR`, el Revisor espera a que termine la ejecución de `ci.yml` del SHA de cabeza del PR, con un plazo de 3 horas: con varios PR en cola sobre un solo ejecutor de CI, una ejecución completa puede tardar más de una hora. Sin la variable no espera: compartiría el ejecutor con la CI y se bloquearían mutuamente hasta agotar el plazo. El resultado (`success`, `failure`, `cancelled` o `sin-terminar`) llega al prompt del Revisor, que lo cita en su veredicto; si la CI falla, revisa igualmente.
 4. `ci.yml` y `rutinas-nocturnas.yml` no cambian. El check requerido sigue llamándose `Revisor`.
 5. Runbook actualizado con el segundo ejecutor: instalación con comprobaciones y sin paquetes de Docker, vuelta atrás y retirada.
 6. Comprobado con un PR real: el Revisor corre en `vps-aiw-revisor`, espera a la CI de `vps-aiw` y da su veredicto con la CI completa, sin relanzarlo a mano.
