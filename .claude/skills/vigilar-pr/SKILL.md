@@ -16,7 +16,7 @@ Se aplica a toda sesión de agente que tenga un PR abierto que le pertenece o qu
 - `ci.yml`: `push` a `main`, `pull_request`, `workflow_dispatch` y `schedule` (el cron semanal de Bedrock, lunes 02:17 UTC, solo corre sobre `main`).
 - `revisor.yml`: `pull_request` (`opened`, `synchronize`, `ready_for_review`, `reopened`). Se salta en PR en borrador o sin `ANTHROPIC_API_KEY`/`CLAUDE_CODE_OAUTH_TOKEN`.
 - `rutinas-nocturnas.yml`: `schedule` (Evaluador 01:00 UTC, Cronista 02:00 UTC) y `workflow_dispatch`. Apagado hasta que exista la variable de repositorio `RUTINAS_NOCTURNAS=true`.
-- Checks requeridos por la protección de `main` (`docs/runbooks/proteccion-de-rama.md`): `Lint y formato`, `Tipos`, `Pruebas`, `Evals de humo`, `Build`, `Playwright`, `Sin secretos en el repositorio`, `Compose de desarrollo arranca` y las cinco `Imagen <app>`; `Revisor` se añade en cuanto ha corrido una vez. Un job que se salta por no tocar sus rutas (`imagenes`, `e2e`, `base-de-datos-carga`, `compose`) cuenta como superado para la protección de rama.
+- Checks requeridos por la protección de `main` (`docs/runbooks/proteccion-de-rama.md`): `Lint y formato`, `Tipos`, `Pruebas`, `Evals de humo`, `Build`, `Playwright`, `Sin secretos en el repositorio`, `Compose de desarrollo arranca` y las cinco `Imagen <app>`; `Revisor` se añade en cuanto ha corrido una vez. En `ci.yml`, `e2e` y `base-de-datos-carga` llevan la condición de ruta en el propio job: si el PR no la toca, el job termina `skipped` y cuenta como superado. `imagenes` y `compose` llevan la condición en los pasos, no en el job (a propósito, para que las cinco `Imagen <app>` sigan publicándose como check requerible): si el PR no toca sus rutas, el job igualmente corre y termina `success` con pasos vacíos, nunca `skipped`. No esperes ver `skipped` en `Imagen <app>` ni en `Compose de desarrollo arranca`.
 
 ## 2. Ejecutor propio y ejecutores de GitHub
 
@@ -53,7 +53,7 @@ Los registros completos de un job (`gh run view --log` o el equivalente de la AP
 
 ## 5. Veredicto del Revisor y comentarios
 
-El Revisor comenta como `github-actions[bot]`, firma «— Revisor (agente)» y cierra con dos líneas: `Veredicto: …` y `Tablero: …`.
+El Revisor comenta como `github-actions[bot]`, firma «— Revisor (agente)» y cierra con una línea: `Veredicto: favorable`, `Veredicto: favorable con cambios menores` o `Veredicto: bloqueado` (`.claude/agents/revisor.md`). No hay una segunda línea de tablero en el comentario: el Revisor actualiza el estado de la rebanada directamente en Notion (a **Demostrada** si es favorable y no toca zona crítica; se queda en **En revisión** si toca zona crítica; nota en **Bloqueo** si bloquea), sin dejar constancia de ese cambio en el propio comentario del PR.
 
 - **Bloqueado**: arregla cada punto bloqueante y responde a cada punto en su propio hilo.
 - **Favorable con cambios menores**: aplica cada punto o justifica por qué no, en su hilo.
