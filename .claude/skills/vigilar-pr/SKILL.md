@@ -30,8 +30,9 @@ Antes de tocar nada, decide en qué caso estás:
 
 - **Facturación**: el job ni arranca. El texto literal es `The job was not started because recent account payments have failed or your spending limit needs to be increased`, con `runner_id` en `0` y sin `runner_name` (léelo con curl, sección 5).
 - **Ejecutor ocupado o caído**: un job en cola (`status: queued`) que no avanza a `in_progress` durante varios minutos, sin ningún otro job corriendo que lo explique.
+- **Cuota de almacenamiento de artefactos agotada**: el job corre y su trabajo real pasa (por ejemplo, todos los evals en verde), pero falla en el paso `actions/upload-artifact` con `Failed to CreateArtifact: Artifact storage quota has been hit`. Revisa el registro completo del job, no solo la conclusión: si los pasos anteriores al `upload-artifact` pasaron, es esto y no un fallo real.
 
-En los dos casos: no relances nada y no empujes nada para forzarlo. Deja un solo comentario en el PR describiendo lo que ves, avisa a dirección y para. Dirección avisa cuando vuelva; hasta entonces no hay nada más que hacer en este PR.
+En los tres casos: no relances nada y no empujes nada para forzarlo. Deja un solo comentario en el PR describiendo lo que ves, avisa a dirección y para. Dirección avisa cuando vuelva; hasta entonces no hay nada más que hacer en este PR.
 
 ### Inestable
 
