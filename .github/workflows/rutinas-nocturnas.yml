@@ -1,5 +1,6 @@
 name: Rutinas nocturnas
 
+# runs-on sale de la variable de repositorio AIW_RUNS_ON, igual que en ci.yml.
 # Vía de respaldo en GitHub Actions para el Evaluador (01:00 UTC) y el Cronista (02:00 UTC).
 # La vía primaria recomendada son las Rutinas de Claude Code; nunca las dos a la vez.
 # Ver docs/runbooks/proteccion-de-rama.md. Desactivadas hasta que exista la variable de repositorio
@@ -22,7 +23,7 @@ jobs:
   comprobar:
     name: Comprobar activación y secretos
     if: vars.RUTINAS_NOCTURNAS == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     permissions:
       contents: read
     outputs:
@@ -49,7 +50,7 @@ jobs:
       needs.comprobar.outputs.hay_clave == 'true' &&
       ((github.event_name == 'schedule' && github.event.schedule == '0 1 * * *') ||
        (github.event_name == 'workflow_dispatch' && inputs.rutina == 'evaluador'))
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -89,7 +90,7 @@ jobs:
       needs.comprobar.outputs.hay_clave == 'true' &&
       ((github.event_name == 'schedule' && github.event.schedule == '0 2 * * *') ||
        (github.event_name == 'workflow_dispatch' && inputs.rutina == 'cronista'))
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     timeout-minutes: 30
     permissions:
       contents: write
