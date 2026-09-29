@@ -3,6 +3,7 @@ name: Revisor
 # Dispara al Revisor (.claude/agents/revisor.md) en cada PR listo para revisión.
 # Autenticación: ANTHROPIC_API_KEY (clave de la consola de la API) o CLAUDE_CODE_OAUTH_TOKEN
 # (token de una suscripción de Claude, `claude setup-token`). Para actualizar el tablero, NOTION_TOKEN.
+# runs-on sale de la variable de repositorio AIW_RUNS_ON, igual que en ci.yml.
 
 on:
   pull_request:
@@ -22,7 +23,7 @@ permissions:
 jobs:
   comprobar:
     name: Comprobar secretos
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     outputs:
       hay_clave: ${{ steps.clave.outputs.hay_clave }}
     steps:
@@ -39,7 +40,7 @@ jobs:
     name: Revisor
     needs: comprobar
     if: needs.comprobar.outputs.hay_clave == 'true' && github.event.pull_request.draft == false
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
