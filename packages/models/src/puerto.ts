@@ -25,6 +25,21 @@ export interface HerramientaDeModelo {
   esquemaEntrada: z.ZodType;
 }
 
+/**
+ * Llamada a una herramienta que hizo el modelo, con la entrada ya validada contra
+ * el esquema Zod original de `HerramientaDeModelo.esquemaEntrada` — el esquema que
+ * viaja en la petición (`anthropic.ts`) le ha quitado las palabras clave que la API
+ * no admite con `strict` (restricciones numéricas, de longitud de cadena o de
+ * array), así que esa parte del contrato no la hace cumplir la API: la vuelve a
+ * comprobar el adaptador al recibir la llamada.
+ */
+export interface LlamadaHerramienta {
+  /** Nombre de la herramienta, tal como se declaró en `herramientas`. */
+  nombre: string;
+  /** Entrada ya validada (`esquemaEntrada.safeParse`), no el JSON crudo del modelo. */
+  entrada: unknown;
+}
+
 export interface PeticionDeModelo<T = unknown> {
   /** Clase de paso del bucle del agente (ADR-018): decide el esfuerzo si la petición no lo fija. */
   clasePaso: ClasePaso;
@@ -55,6 +70,8 @@ export interface RespuestaDeModeloOk<T = unknown> {
   texto: string;
   /** Presente solo cuando la petición llevaba `esquemaSalida`. */
   salida?: T | undefined;
+  /** Presente solo cuando el modelo pidió alguna de las `herramientas` de la petición. */
+  llamadasHerramientas?: readonly LlamadaHerramienta[] | undefined;
   tokens: TokensDeUso;
   modelo: string;
 }
