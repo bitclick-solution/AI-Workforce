@@ -15,7 +15,8 @@
     "clean": "rm -rf dist coverage .turbo",
     "demo:sala": "tsx src/demo-sala.ts",
     "demo:aprendizaje": "tsx src/demo-aprendizaje.ts",
-    "aprendizaje": "tsx src/demo-aprendizaje-cli.ts"
+    "aprendizaje": "tsx src/demo-aprendizaje-cli.ts",
+    "comprobar:centrifugo": "tsx src/comprobar-centrifugo.ts"
   },
   "dependencies": {
     "@ai-sdk/provider": "catalog:",

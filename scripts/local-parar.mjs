@@ -9,7 +9,7 @@ import { composeArgs, pararProcesosRegistrados, raiz, tieneBandera } from './loc
 const argumentos = process.argv.slice(2);
 
 console.log('— Parando api, web y el worker de la demo');
-pararProcesosRegistrados();
+const { todosParados } = pararProcesosRegistrados();
 
 console.log('— Parando el Compose de desarrollo');
 const extra = tieneBandera(argumentos, 'volumenes') ? ['--volumes'] : [];
@@ -17,4 +17,4 @@ const resultado = spawnSync('docker', [...composeArgs, 'down', ...extra], {
   cwd: raiz,
   stdio: 'inherit',
 });
-process.exit(resultado.status ?? 1);
+process.exit(todosParados ? (resultado.status ?? 1) : 1);

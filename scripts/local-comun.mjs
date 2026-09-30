@@ -48,6 +48,39 @@ export function tokenAleatorio() {
 }
 
 /**
+ * Argumento listo para `cmd.exe`: entre comillas si tiene espacios o comillas.
+ * Con `shell: true`, Node solo une mandato y argumentos con un espacio (no cita
+ * nada por su cuenta, ni siquiera con `shell: true`); como los argumentos con los
+ * que este módulo llama a pnpm son siempre fijos (nunca los escribe quien invoca
+ * el comando), no hay inyección que temer, pero se citan igual para que una ruta
+ * con espacios no se parta en dos argumentos.
+ */
+function citarArgumentoWindows(argumento) {
+  const texto = String(argumento);
+  return /[\s"]/.test(texto) ? `"${texto.replace(/"/g, '\\"')}"` : texto;
+}
+
+/**
+ * `{ mandato, argumentos, opciones }` para lanzar `pnpm ...` igual en Windows que
+ * en Linux o macOS. Desde la corrección de seguridad de abril de 2024
+ * (CVE-2024-27980), Node se niega a lanzar un `.cmd` o un `.ps1` sin
+ * `shell: true` (falla con EINVAL); en Windows, pnpm casi nunca es un `.exe`
+ * nativo, así que hace falta. `npm_execpath` sale vacío bajo `pnpm exec` en
+ * algunas máquinas (la de Jesús, por ejemplo), así que no sirve para resolverlo.
+ * La usan por igual `lanzarProceso`, `local-arrancar.mjs` y
+ * `local-requisitos.mjs`: una sola resolución para lanzar pnpm de verdad y para
+ * comprobar que se puede lanzar, que si no podrían no estar de acuerdo.
+ */
+export function comandoPnpm(argumentos, { plataforma = process.platform } = {}) {
+  if (plataforma !== 'win32') return { mandato: 'pnpm', argumentos, opciones: {} };
+  return {
+    mandato: 'pnpm',
+    argumentos: argumentos.map(citarArgumentoWindows),
+    opciones: { shell: true },
+  };
+}
+
+/**
  * Valor de una variable de entorno con la misma prioridad que usa Docker Compose
  * para `--env-file`: el entorno del proceso (lo que fija un `env:` de la CI, por
  * ejemplo para esquivar un puerto ya ocupado en un ejecutor compartido) gana al
@@ -126,18 +159,40 @@ export function estadoServicios() {
  * terminara nunca en la CI: la tubería mantenía vivo el bucle de eventos hasta que
  * el job la cortaba por el plazo máximo.
  */
-export function lanzarProceso(nombre, mandato, argumentos, { env, cwd = raiz } = {}) {
+export function lanzarProceso(
+  nombre,
+  mandato,
+  argumentos,
+  { env, cwd = raiz, plataforma = process.platform } = {},
+) {
   asegurarCarpetaLocal();
   const rutaRegistro = join(rutaRegistros, `${nombre}.log`);
   const descriptor = openSync(rutaRegistro, 'w');
-  const flujo = spawn(mandato, argumentos, {
+  const resolucion =
+    mandato === 'pnpm'
+      ? comandoPnpm(argumentos, { plataforma })
+      : { mandato, argumentos, opciones: {} };
+  const flujo = spawn(resolucion.mandato, resolucion.argumentos, {
     cwd,
     env: { ...process.env, ...env },
     detached: true,
     stdio: ['ignore', descriptor, descriptor],
+    ...resolucion.opciones,
   });
   flujo.unref();
   return { nombre, proceso: flujo, rutaRegistro };
+}
+
+/**
+ * Entorno final de un proceso lanzado por estos guiones: el `.env` ya leído,
+ * encima lo que de verdad viene exportado del proceso que invoca (nunca al
+ * revés — fallo 6: antes `.env` pisaba el entorno del proceso), y por último lo
+ * que este mandato calcula en este arranque (`DATABASE_URL`, la cola de
+ * Temporal, los puertos ya resueltos…), que no es ajustable desde fuera porque
+ * son hechos de esta ejecución, no preferencias de quien la lanza.
+ */
+export function entornoDeProceso(env, calculado = {}) {
+  return { ...env, ...process.env, ...calculado };
 }
 
 /**
@@ -187,18 +242,56 @@ export function registrarProceso(nombre, pid, rutaRegistro) {
   guardarProcesos(procesos);
 }
 
-/** Para cada proceso registrado, su grupo entero (pnpm arrastra tsx o next). */
-export function pararProcesosRegistrados() {
+/**
+ * Para el árbol de procesos de un pid (fallo 1): en POSIX, con `SIGTERM` a su
+ * grupo entero (pnpm arrastra tsx o next); Windows no tiene grupos de procesos,
+ * así que ahí `process.kill(-pid)` no paraba nada y el error se tragaba en
+ * silencio. En Windows, `taskkill /PID <pid> /T /F` es la forma documentada de
+ * parar el árbol completo sin necesitar un grupo. `plataforma` y `ejecutar`/
+ * `matar` son inyectables para probar los dos sentidos sin Windows a mano.
+ */
+export function pararArbolDeProcesos(
+  pid,
+  { plataforma = process.platform, matar = process.kill, ejecutar = spawnSync } = {},
+) {
+  if (plataforma === 'win32') {
+    const resultado = ejecutar('taskkill', ['/PID', String(pid), '/T', '/F'], { encoding: 'utf8' });
+    if (resultado.status === 0) return { parado: true };
+    const salida = `${resultado.stdout ?? ''}${resultado.stderr ?? ''}`;
+    // Código 128: taskkill no encuentra ese PID, ya estaba parado.
+    if (resultado.status === 128 || /no se encontr|not found/i.test(salida)) {
+      return { parado: true };
+    }
+    return { parado: false, motivo: salida.trim() || `taskkill salió con ${resultado.status}` };
+  }
+  try {
+    matar(-pid, 'SIGTERM');
+    return { parado: true };
+  } catch (error) {
+    if (error.code === 'ESRCH') return { parado: true };
+    return { parado: false, motivo: error.message };
+  }
+}
+
+/** Para cada proceso registrado su árbol entero. Si alguno no para, lo dice y no borra `procesos.json`. */
+export function pararProcesosRegistrados({ plataforma = process.platform } = {}) {
   const procesos = leerProcesos();
+  let todosParados = true;
   for (const { nombre, pid } of procesos) {
-    try {
-      process.kill(-pid, 'SIGTERM');
+    const resultado = pararArbolDeProcesos(pid, { plataforma });
+    if (resultado.parado) {
       console.log(`  parado ${nombre} (pid ${pid})`);
-    } catch (error) {
-      if (error.code !== 'ESRCH') console.warn(`  no se pudo parar ${nombre}: ${error.message}`);
+    } else {
+      todosParados = false;
+      console.warn(`  no se pudo parar ${nombre} (pid ${pid}): ${resultado.motivo}`);
     }
   }
+  if (!todosParados) {
+    console.warn('  algún proceso no se pudo parar: no se borra procesos.json.');
+    return { todosParados };
+  }
   if (existsSync(rutaProcesos)) rmSync(rutaProcesos);
+  return { todosParados };
 }
 
 /** Confirmación interactiva de una sola letra; en modo no interactivo exige `--si`. */

@@ -20,8 +20,10 @@ import { spawnSync } from 'node:child_process';
 
 import {
   asegurarEnv,
+  comandoPnpm,
   completarEnv,
   composeArgs,
+  entornoDeProceso,
   esperarEnFichero,
   esperarPuerto,
   estadoServicios,
@@ -79,10 +81,12 @@ console.log('  servicios sanos.');
 const urlBase = urlBaseDeDatos(env);
 
 paso('Aplicando migraciones');
-const migracion = spawnSync('pnpm', ['--filter', '@aiw/db', 'db:migrar'], {
+const mandatoMigracion = comandoPnpm(['--filter', '@aiw/db', 'db:migrar']);
+const migracion = spawnSync(mandatoMigracion.mandato, mandatoMigracion.argumentos, {
   cwd: raiz,
   stdio: 'inherit',
   env: { ...process.env, DATABASE_URL: urlBase },
+  ...mandatoMigracion.opciones,
 });
 if (migracion.status !== 0) fallar('La migración ha fallado.');
 
@@ -94,12 +98,11 @@ const { proceso: procesoSala, rutaRegistro: registroSala } = lanzarProceso(
   'pnpm',
   ['--filter', '@aiw/worker', 'demo:sala', '--servir'],
   {
-    env: {
-      ...env,
+    env: entornoDeProceso(env, {
       DATABASE_URL: urlBase,
       AIW_PRUEBA_STACK: '1',
       DEMO_CONECTOR_SECRETO: demoConector,
-    },
+    }),
   },
 );
 let semilla;
@@ -123,6 +126,10 @@ registrarProceso('worker-sala', procesoSala.pid, registroSala);
 console.log(`  sembrado: organización ${semilla.tenantId}, cola ${semilla.cola}.`);
 
 const salaToken = env.AIW_SALA_TOKEN || tokenAleatorio();
+// Encendida por defecto en local (fallo 6); una exportación real en la terminal
+// (p. ej. `AIW_SALA_V1=0 pnpm local:arrancar`) manda sobre este valor por defecto,
+// igual que sobre cualquier otra variable de `.env` (`valorEntorno`).
+const salaV1 = valorEntorno({}, 'AIW_SALA_V1', '1');
 const contadorToken = env.AIW_CONTADOR_TOKEN;
 if (!contadorToken) fallar('Falta AIW_CONTADOR_TOKEN en .env; borra .env y vuelve a arrancar.');
 const accesoSecreto = env.AIW_ACCESO_SECRETO;
@@ -149,31 +156,27 @@ paso('Invitando a la persona propietaria de la demo (Acceso al panel)');
 // Un correo por organización sembrada: el correo de un usuario es único en toda la
 // plataforma, y cada arranque siembra una organización nueva sobre la misma base.
 const correoDemo = `demo-${semilla.tenantId.slice(-12)}@aiworkforce.local`;
-const invitacion = spawnSync(
-  'pnpm',
-  [
-    '--filter',
-    '@aiw/api',
-    'invitar-propietario',
-    '--tenant',
-    semilla.tenantId,
-    '--nombre',
-    'Persona de demo',
-    '--correo',
-    correoDemo,
-  ],
-  {
-    cwd: raiz,
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      ...env,
-      ...correoPorMailpit,
-      DATABASE_URL: urlBase,
-      AIW_WEB_URL_PUBLICA: urlPublicaWeb,
-    },
-  },
-);
+const mandatoInvitacion = comandoPnpm([
+  '--filter',
+  '@aiw/api',
+  'invitar-propietario',
+  '--tenant',
+  semilla.tenantId,
+  '--nombre',
+  'Persona de demo',
+  '--correo',
+  correoDemo,
+]);
+const invitacion = spawnSync(mandatoInvitacion.mandato, mandatoInvitacion.argumentos, {
+  cwd: raiz,
+  stdio: 'inherit',
+  env: entornoDeProceso(env, {
+    ...correoPorMailpit,
+    DATABASE_URL: urlBase,
+    AIW_WEB_URL_PUBLICA: urlPublicaWeb,
+  }),
+  ...mandatoInvitacion.opciones,
+});
 if (invitacion.status !== 0) fallar('No se pudo invitar a la persona propietaria de la demo.');
 console.log(`  invitada: ${correoDemo}.`);
 
@@ -183,10 +186,10 @@ const { proceso: procesoApi, rutaRegistro: registroApi } = lanzarProceso(
   'pnpm',
   ['--filter', '@aiw/api', 'dev'],
   {
-    env: {
-      ...env,
+    env: entornoDeProceso(env, {
       DATABASE_URL: urlBase,
       AIW_SALA_V0: '1',
+      AIW_SALA_V1: salaV1,
       AIW_SALA_TOKEN: salaToken,
       AIW_TEMPORAL_COLA: semilla.cola,
       AIW_CONTADOR_V0: '1',
@@ -196,7 +199,7 @@ const { proceso: procesoApi, rutaRegistro: registroApi } = lanzarProceso(
       AIW_ACCESO_SECRETO: accesoSecreto,
       AIW_WEB_URL_PUBLICA: urlPublicaWeb,
       ...correoPorMailpit,
-    },
+    }),
   },
 );
 registrarProceso('api', procesoApi.pid, registroApi);
@@ -206,16 +209,16 @@ const { proceso: procesoWeb, rutaRegistro: registroWeb } = lanzarProceso(
   'pnpm',
   ['--filter', '@aiw/web', 'dev'],
   {
-    env: {
-      ...env,
+    env: entornoDeProceso(env, {
       PORT: puertoWeb,
       AIW_SALA_V0: '1',
+      AIW_SALA_V1: salaV1,
       AIW_API_URL: `http://127.0.0.1:${puertoApi}`,
       AIW_SALA_TOKEN: salaToken,
       AIW_ACCESO_PANEL: '1',
       AIW_PANEL_CONTADOR: '1',
       AIW_CONTADOR_TOKEN: contadorToken,
-    },
+    }),
   },
 );
 registrarProceso('web', procesoWeb.pid, registroWeb);

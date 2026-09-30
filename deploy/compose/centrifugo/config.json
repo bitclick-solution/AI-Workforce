@@ -5,11 +5,14 @@
   },
   "http_api": {},
   "channel": {
-    "without_namespace": {
-      "presence": true,
-      "join_leave": true
-    },
-    "private_channel_prefix": "sala:"
+    "namespaces": [
+      {
+        "name": "sala",
+        "presence": true,
+        "join_leave": true,
+        "force_push_join_leave": true
+      }
+    ]
   },
   "log": { "level": "info" }
 }

@@ -26,6 +26,15 @@ export const ACCIONES_ACCESO = {
 
 export type AccionAcceso = (typeof ACCIONES_ACCESO)[keyof typeof ACCIONES_ACCESO];
 
+/**
+ * Mismo nombre de acción que `ACCIONES_SALA.miembroAnadido` en
+ * `apps/worker/src/actividades/sala.ts`: las fronteras de `CLAUDE.md` prohíben
+ * que una app importe de otra, así que se repite el literal a propósito. Una
+ * consulta de auditoría que filtre por `accion = 'sala.miembro_anadido'` ve los
+ * dos orígenes igual sin que ninguno de los dos módulos vea al otro.
+ */
+export const ACCION_SALA_MIEMBRO_ANADIDO = 'sala.miembro_anadido';
+
 /** Cómo se abrió la sesión. Va en `herramienta`: es el mecanismo, no el dato. */
 export const METODOS_ACCESO = {
   enlace: 'better-auth:magic-link',
