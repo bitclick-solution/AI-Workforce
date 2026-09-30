@@ -36,10 +36,11 @@ Motivo de fondo, además del runtime: el MCP dinámico expone el ERP entero con 
 | `validate_write`           | `tools_write.py`        | El mismo `report` de `preview_write` con `approval_status: { stored, expires_in_seconds, source }` añadido; el identificador de aprobación sigue en `approval.token`, no en un `approval_id` suelto. |
 | `execute_approved_write`   | `tools_write.py` (`_execute_approved_write_gated`) | `{ success, tool, model, operation, result, instance }`. El identificador de lo creado va en `result`. |
 
-Dos consecuencias en el adaptador, las dos cubiertas por prueba:
+Tres consecuencias en el adaptador, las tres cubiertas por prueba:
 
 - `leerRegistros` (`src/mapeo.ts`) acepta `result` como envolvente de lista, además de `records`, `results`, `data` y `rows`: sin ella, `search_records` contra el servidor real fallaba con «no trae ninguna lista de registros» aunque la grabación de prueba (que usaba `records`, una forma supuesta) pasara.
 - `leerIdentificador` (`src/mapeo.ts`) prueba primero la envolvente (`result`, `data`, `record`, `records`, `ids`) y solo si no trae nada usable cae a una clave suelta (`message_id`, `activity_id`, `id`, `res_id`, `record_id`): `record_id` en la respuesta de `chatter_post` es la factura, no el mensaje creado, y con la prioridad al revés `crear_nota_seguimiento` devolvía el identificador equivocado.
+- `leerCarga` (`src/cliente.ts`) trata `{ success: false, error }` como un fallo aunque el protocolo MCP no marque `isError`: las herramientas del MCP dinámico pueden devolver así un rechazo de Odoo (permiso, registro inexistente…) dentro de una respuesta «correcta» del protocolo; sin esto, el motivo real del ERP se perdía detrás de «no trae ninguna lista de registros» o «la escritura no devuelve identificador».
 
 `src/grabaciones/odoo-pruebas.json` lleva una grabación de `search_records` con esta forma real (`argumentos: { limit: 3 }`, envolvente `result`) además de la forma con `records`, y las de `chatter_post` / `execute_approved_write` ya usan la forma real. Todas con datos inventados.
 

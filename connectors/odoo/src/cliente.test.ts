@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { leerCarga } from './cliente.js';
+import { ErrorConector } from './errores.js';
 import { leerRegistros } from './mapeo.js';
 
 /** Datos inventados: ninguna factura, cliente ni empresa real. */
@@ -34,5 +35,27 @@ describe('leerCarga sobre las dos formas de FastMCP', () => {
     const carga = leerCarga(resultado, 'search_records');
     expect(carga).toEqual(CARGA_FASTMCP);
     expect(leerRegistros(carga)).toEqual([REGISTRO]);
+  });
+});
+
+describe('leerCarga con un fallo «blando» (success: false, isError sin marcar)', () => {
+  it('lo traduce a ErrorConector con el motivo y el detalle del ERP', () => {
+    const resultado = {
+      structuredContent: { success: false, error: 'Access denied for model account.move' },
+    };
+    try {
+      leerCarga(resultado, 'search_records');
+      expect.unreachable('debía fallar');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ErrorConector);
+      expect((error as ErrorConector).motivo).toBe('no_autorizado');
+      expect((error as ErrorConector).message).toContain('Access denied for model account.move');
+    }
+  });
+
+  it('una respuesta de éxito normal no se confunde con un fallo blando', () => {
+    expect(leerCarga({ structuredContent: CARGA_FASTMCP }, 'search_records')).toEqual(
+      CARGA_FASTMCP,
+    );
   });
 });
