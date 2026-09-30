@@ -111,6 +111,13 @@ export type PasoResuelto =
        * cobrar no se hace, porque reintentarla la pagaría otra vez.
        */
       tarifasEsperadas: TarifaEsperada[];
+      /**
+       * Lo mismo para el proveedor de respaldo, si lo hay: el paso puede acabar
+       * sirviéndolo, y una respuesta que no se puede cobrar no se pide. Quien
+       * resuelve comprueba estas tarifas y, si faltan, vuelve a resolver con
+       * `sinRespaldoDeProveedor`.
+       */
+      tarifasDelRespaldo: TarifaEsperada[];
     };
 
 export class Enrutador {
@@ -151,7 +158,10 @@ export class Enrutador {
    * casos, un proveedor que no está registrado falla con la lista de lo que sí hay:
    * un enrutado que se cae en silencio a otro modelo cobra distinto sin avisar.
    */
-  resolverPaso(enrutado: unknown): PasoResuelto {
+  resolverPaso(
+    enrutado: unknown,
+    opciones: { sinRespaldoDeProveedor?: boolean } = {},
+  ): PasoResuelto {
     const analizado = enrutadoModelo.safeParse(enrutado ?? {});
     if (!analizado.success) {
       throw new Error(
@@ -163,7 +173,11 @@ export class Enrutador {
     if (configuracion.proveedor !== undefined && configuracion.modelo !== undefined) {
       return this.#resolverExplicito(configuracion.proveedor, configuracion.modelo, configuracion);
     }
-    return this.#resolverPorPapel(configuracion.papel as PapelModelo, configuracion);
+    return this.#resolverPorPapel(
+      configuracion.papel as PapelModelo,
+      configuracion,
+      opciones.sinRespaldoDeProveedor === true,
+    );
   }
 
   /** Resuelve un enrutado que pasa por el AI SDK (el proveedor de prueba). Falla si el puesto va a un proveedor real. */
@@ -200,6 +214,7 @@ export class Enrutador {
   #resolverPorPapel(
     papel: PapelModelo,
     configuracion: z.infer<typeof enrutadoModelo>,
+    sinRespaldoDeProveedor: boolean,
   ): PasoResuelto {
     const eleccion = this.#eleccion;
     if (!eleccion) {
@@ -229,7 +244,9 @@ export class Enrutador {
     if (!principal) throw new ProveedorNoRegistrado(eleccion.principal, this.proveedores);
 
     const nombreRespaldo =
-      eleccion.respaldo !== undefined && eleccion.respaldo !== eleccion.principal
+      !sinRespaldoDeProveedor &&
+      eleccion.respaldo !== undefined &&
+      eleccion.respaldo !== eleccion.principal
         ? eleccion.respaldo
         : undefined;
     const respaldo = nombreRespaldo === undefined ? undefined : this.#puertos.get(nombreRespaldo);
@@ -242,15 +259,19 @@ export class Enrutador {
         esperado !== undefined && todos.indexOf(esperado) === indice,
     );
 
+    const tarifasEn = (plataforma: PlataformaModelo): TarifaEsperada[] =>
+      papelesEsperados.map((esperado) => ({
+        proveedor: PROVEEDOR_DE_TARIFA,
+        modelo: modeloDeTarifa(esperado, plataforma),
+        plataforma,
+      }));
+
     return {
       via: 'puerto',
       proveedor: eleccion.principal,
       papel,
-      tarifasEsperadas: papelesEsperados.map((esperado) => ({
-        proveedor: PROVEEDOR_DE_TARIFA,
-        modelo: modeloDeTarifa(esperado, principal.plataforma),
-        plataforma: principal.plataforma,
-      })),
+      tarifasEsperadas: tarifasEn(principal.plataforma),
+      tarifasDelRespaldo: respaldo === undefined ? [] : tarifasEn(respaldo.plataforma),
       puerto: crearPuertoEnrutado({
         papel,
         papelRespaldo: configuracion.papelRespaldo,

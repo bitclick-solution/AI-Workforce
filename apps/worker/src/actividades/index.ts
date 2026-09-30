@@ -121,11 +121,12 @@ function plataformaDeModelo(plataforma: string): PlataformaModelo {
  * Comprueba que el tenant tiene las tarifas con las que se va a cobrar. Falla sin
  * reintento: no se arregla esperando, se arregla dando de alta la tarifa.
  */
-async function exigirTarifas(
+async function tarifasQueFaltan(
   contexto: ContextoDeActividades,
   tenantId: string,
   esperadas: readonly TarifaEsperada[],
-): Promise<void> {
+): Promise<TarifaEsperada[]> {
+  const faltan: TarifaEsperada[] = [];
   for (const esperada of esperadas) {
     const tarifa = await enTenant(contexto, tenantId, (tx) =>
       tarifaVigente(
@@ -137,16 +138,26 @@ async function exigirTarifas(
         esperada.plataforma,
       ),
     );
-    if (!tarifa) {
-      throw ApplicationFailure.create({
-        message:
-          `Sin tarifa vigente para ${esperada.proveedor}/${esperada.modelo} en ${esperada.plataforma}: ` +
-          'da de alta las tarifas del tenant (registrarTarifa; `pnpm --filter @aiw/worker bitclick:sembrar` ' +
-          'carga las de Bitclick) antes de dar el paso.',
-        type: 'SinTarifa',
-        nonRetryable: true,
-      });
-    }
+    if (!tarifa) faltan.push(esperada);
+  }
+  return faltan;
+}
+
+async function exigirTarifas(
+  contexto: ContextoDeActividades,
+  tenantId: string,
+  esperadas: readonly TarifaEsperada[],
+): Promise<void> {
+  const [falta] = await tarifasQueFaltan(contexto, tenantId, esperadas);
+  if (falta) {
+    throw ApplicationFailure.create({
+      message:
+        `Sin tarifa vigente para ${falta.proveedor}/${falta.modelo} en ${falta.plataforma}: ` +
+        'da de alta las tarifas del tenant (registrarTarifa; `pnpm --filter @aiw/worker bitclick:sembrar` ' +
+        'carga las de Bitclick) antes de dar el paso.',
+      type: 'SinTarifa',
+      nonRetryable: true,
+    });
   }
 }
 
@@ -576,7 +587,7 @@ export function crearActividades(contexto: ContextoDeActividades) {
         where tenant_id = ${peticion.tenantId} and id = ${peticion.puestoId}
       `,
       );
-      const resuelto = contexto.enrutador.resolverPaso(puesto?.enrutado_modelo ?? {});
+      let resuelto = contexto.enrutador.resolverPaso(puesto?.enrutado_modelo ?? {});
       const atributos = {
         tenantId: peticion.tenantId,
         puestoId: peticion.puestoId,
@@ -605,6 +616,26 @@ export function crearActividades(contexto: ContextoDeActividades) {
         // Sin tarifa no se llama: reintentar una llamada que no se puede cobrar la
         // pagaría otra vez y no dejaría rastro en el contador.
         await exigirTarifas(contexto, peticion.tenantId, resuelto.tarifasEsperadas);
+        // El paso puede acabar sirviéndolo el proveedor de respaldo, y esa respuesta
+        // también hay que poder cobrarla. Sin sus tarifas no se le pide nada: el paso
+        // sigue sin respaldo de proveedor en vez de pagar una llamada que no se anota.
+        const faltanDelRespaldo = await tarifasQueFaltan(
+          contexto,
+          peticion.tenantId,
+          resuelto.tarifasDelRespaldo,
+        );
+        if (faltanDelRespaldo.length > 0) {
+          console.warn(
+            '[worker] Sin respaldo de proveedor en este paso: faltan tarifas de ' +
+              faltanDelRespaldo.map((t) => `${t.modelo} en ${t.plataforma}`).join(', ') +
+              '.',
+          );
+          resuelto = contexto.enrutador.resolverPaso(puesto?.enrutado_modelo ?? {}, {
+            sinRespaldoDeProveedor: true,
+          });
+          if (resuelto.via !== 'puerto')
+            throw new Error('El enrutado cambió de vía a mitad de paso.');
+        }
         const dado = await darPasoConPuerto({
           puerto: resuelto.puerto,
           clasePaso: peticion.herramientas.some((herramienta) => herramienta.tipo === 'escritura')

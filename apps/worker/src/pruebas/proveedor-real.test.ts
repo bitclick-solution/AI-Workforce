@@ -55,7 +55,12 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('paso de modelo · proveedor real', () => {
 
   async function montar(
     bedrock: ServidorSimulado,
-    opciones: { vertex?: ServidorSimulado; conTarifas?: boolean; papel?: object } = {},
+    opciones: {
+      vertex?: ServidorSimulado;
+      conTarifas?: boolean;
+      soloPlataforma?: string;
+      papel?: object;
+    } = {},
   ) {
     const enrutador = enrutadorDesdeEntorno(
       { AIW_PROVEEDOR_MODELOS: 'bedrock-ue', AIW_PROVEEDOR_MODELOS_RESPALDO: 'vertex-ue' },
@@ -83,7 +88,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('paso de modelo · proveedor real', () => {
     if (opciones.conTarifas !== false) {
       const catalogo: unknown = JSON.parse(readFileSync(RUTA_CATALOGO_EJEMPLO, 'utf8'));
       for (const tarifa of tarifasDelCatalogo(catalogo).filter(
-        (t) => t.proveedor === 'anthropic',
+        (t) =>
+          t.proveedor === 'anthropic' &&
+          (opciones.soloPlataforma === undefined || t.plataforma === opciones.soloPlataforma),
       )) {
         await conTenant(montaje.cliente, tenantId, (tx) => registrarTarifa(tx, tenantId, tarifa));
       }
@@ -206,6 +213,19 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('paso de modelo · proveedor real', () => {
     expect(await usos(montaje)).toMatchObject([
       { proveedor: 'anthropic', modelo: 'claude-sonnet-5', plataforma: 'vertex-eu' },
     ]);
+  });
+
+  it('si faltan las tarifas del proveedor de respaldo, el paso sigue sin él y no paga una llamada que no puede anotar', async () => {
+    const bedrock = await servidor(respuestaDeErrorHttp(403, 'sin acceso al modelo'));
+    const vertex = await servidor(respuestaDeTexto('no debería llamarse'));
+    const montaje = await montar(bedrock, { vertex, soloPlataforma: 'bedrock-eu' });
+
+    await expect(montaje.actividades.pasoModelo(peticion(montaje))).rejects.toThrow(
+      /sin acceso al modelo/,
+    );
+
+    expect(vertex.peticiones).toHaveLength(0);
+    expect(await usos(montaje)).toHaveLength(0);
   });
 
   it('ante un rechazo prueba el papel de respaldo del puesto y cobra los dos intentos', async () => {

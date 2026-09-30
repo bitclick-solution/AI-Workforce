@@ -72,6 +72,25 @@ describe('enrutado del puesto', () => {
     expect(enrutador.proveedores).toEqual(['bedrock-ue']);
   });
 
+  it('expone las tarifas del proveedor de respaldo y puede resolver sin él', () => {
+    const enrutador = new Enrutador()
+      .registrarPuerto('bedrock-ue', 'bedrock-eu', (papel) => puertoFalso(papel))
+      .registrarPuerto('vertex-ue', 'vertex-eu', (papel) => puertoFalso(papel, 'vertex-eu'))
+      .elegir({ principal: 'bedrock-ue', respaldo: 'vertex-ue' });
+    const enrutado = { papel: 'opus5', papelRespaldo: 'sonnet5' };
+
+    const con = enrutador.resolverPaso(enrutado);
+    if (con.via !== 'puerto') throw new Error('debía ir por el puerto');
+    expect(con.tarifasDelRespaldo).toEqual([
+      { proveedor: 'anthropic', modelo: 'claude-opus-5-5', plataforma: 'vertex-eu' },
+      { proveedor: 'anthropic', modelo: 'claude-sonnet-5', plataforma: 'vertex-eu' },
+    ]);
+
+    const sin = enrutador.resolverPaso(enrutado, { sinRespaldoDeProveedor: true });
+    if (sin.via !== 'puerto') throw new Error('debía ir por el puerto');
+    expect(sin.tarifasDelRespaldo).toEqual([]);
+  });
+
   it('un puesto sembrado con prueba falla con la lista de lo registrado si el proceso eligió Bedrock', () => {
     const enrutador = new Enrutador()
       .registrarPuerto('bedrock-ue', 'bedrock-eu', (papel) => puertoFalso(papel))

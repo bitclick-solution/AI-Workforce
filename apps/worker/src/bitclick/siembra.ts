@@ -19,6 +19,7 @@
 import { readFileSync } from 'node:fs';
 
 import { conTenant, uuidV7 } from '@aiw/db';
+import type { PlataformaModelo } from '@aiw/domain';
 import {
   RUTA_CATALOGO_EJEMPLO,
   registrarTarifa,
@@ -78,7 +79,10 @@ export interface ResultadoSiembra extends EstadoBitclick {
 }
 
 /** Plataformas de la UE en las que Bitclick puede usar los modelos de Anthropic (ADR-017, ADR-023). */
-const PLATAFORMAS_DE_BITCLICK = ['bedrock-eu', 'vertex-eu'];
+const PLATAFORMAS_DE_BITCLICK = [
+  'bedrock-eu',
+  'vertex-eu',
+] as const satisfies readonly PlataformaModelo[];
 
 /**
  * Da de alta en el tenant las tarifas de Anthropic del catálogo de desarrollo del
@@ -95,7 +99,8 @@ export async function cargarTarifasDeBitclick(
   const catalogo: unknown = JSON.parse(readFileSync(RUTA_CATALOGO_EJEMPLO, 'utf8'));
   const tarifas = tarifasDelCatalogo(catalogo).filter(
     (tarifa) =>
-      tarifa.proveedor === 'anthropic' && PLATAFORMAS_DE_BITCLICK.includes(tarifa.plataforma ?? ''),
+      tarifa.proveedor === 'anthropic' &&
+      (PLATAFORMAS_DE_BITCLICK as readonly string[]).includes(tarifa.plataforma ?? ''),
   );
   let cargadas = 0;
   for (const tarifa of tarifas) {
