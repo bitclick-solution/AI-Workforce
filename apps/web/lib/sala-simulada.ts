@@ -1,19 +1,27 @@
 /**
  * Fuente simulada de Sala v1: implementa el contrato de `sala-contrato.ts` con
- * datos sintéticos, sin red ni entorno. Sirve a la interfaz hasta que llegue la
- * fuente real del Constructor (`crearFuenteDeSala()` en `sala.ts`).
+ * datos sintéticos, sin red ni entorno. Sirve a la interfaz para pruebas y tras
+ * `?fuenteSimulada=1`; en producción la sirve `crearFuenteDeSala()` en `sala.ts`.
  *
  * Todos los nombres son inventados. Cubre los siete estados del ADR-022, incluidos
  * los tres que solo tienen los agentes, para que la interfaz los pinte todos.
  *
- * La conversación no está en el contrato: se expone aparte, con un tipo de
- * presentación, hasta que se conecten los mensajes con `salaId` del Constructor.
+ * Desde «Sala v1 · conversación real», la conversación también sigue el
+ * contrato (`mensajes`, `enviarMensaje`, `decidirPropuesta`): la fuente guarda
+ * su propio estado de la propuesta de ejemplo y de lo que se envía, para que
+ * confirmar o escribir en la sala simulada se comporte igual que con la API.
+ * `conversacionSimulada` se mantiene como presentación de ejemplo (sin pasar
+ * por la traducción) para quien ya la usaba.
  */
 import type {
   CambioDeSala,
+  ConversacionDeSala,
+  EfectosDeContratacion,
   EstadoDePresencia,
   FuenteDeSala,
+  MensajeDeSala,
   MiembroDeSala,
+  PropuestaDeSala,
   ResumenDeSala,
 } from './sala-contrato';
 
@@ -137,6 +145,124 @@ const MIEMBROS_POR_SALA: Record<string, string[]> = {
   marketing: [ID_DE_QUIEN_MIRA, 'agente-moderador'],
 };
 
+/* ─────── Conversación real (contrato): mensajes, adjuntos y propuestas ─────── */
+//
+// Misma historia que la «Conversación de ejemplo» de más abajo, pero en la
+// forma del contrato (`MensajeDeSala`, `PropuestaDeSala`): es lo que devuelven
+// `mensajes()`, `enviarMensaje()` y `decidirPropuesta()`, y lo que traduce
+// `apps/web/app/panel/sala/_v1/traduccion.ts` a las formas de la vista. Vive
+// aparte de `conversacionSimulada` (más abajo) porque esa función ya tenía su
+// propia prueba con su propia forma; no se fusionan para no arriesgar esa
+// cobertura por una rebanada que solo pide conectar la conversación real.
+
+const PROPUESTA_PREVISION_ID = 'propuesta-prevision-tesoreria';
+
+function propuestaPrevisionDeTesoreria(estado: string): PropuestaDeSala {
+  return {
+    id: PROPUESTA_PREVISION_ID,
+    resumen: 'Contratar Previsión de tesorería',
+    estado,
+    nivelExigido: 'n1',
+    costeEstimadoEuros: 50,
+    efectos: {
+      puesto: { nombre: 'Previsión de tesorería' },
+      herramientas: {
+        disponibles: [
+          { nombre: 'erp.saldos', descripcion: 'Lee saldos y vencimientos del ERP' },
+          { nombre: 'banco.movimientos', descripcion: 'Lee movimientos bancarios' },
+        ],
+      },
+      coste: { tareasMes: 20, eurosMesCliente: 50, eurosMesModelo: 4 },
+      reversion: { descripcion: 'se deshace despidiéndolo desde Equipo' },
+    } satisfies EfectosDeContratacion,
+  };
+}
+
+function mensajesDeFinanzas(): MensajeDeSala[] {
+  const creadoEn = (hora: string) => `2026-09-28T${hora}:00.000Z`;
+  return [
+    {
+      id: 'm1',
+      cuerpo: '¿Cómo vamos de cobros este mes?',
+      autor: { tipo: 'persona', nombre: 'Lucía Ferrán' },
+      adjuntos: [],
+      creadoEn: creadoEn('09:02'),
+    },
+    {
+      id: 'm2',
+      cuerpo: 'El moderador le pasa la palabra a Cobros.',
+      autor: { tipo: 'plataforma', nombre: 'Moderador' },
+      adjuntos: [{ tipo: 'moderacion' }],
+      creadoEn: creadoEn('09:02'),
+    },
+    {
+      id: 'm3',
+      cuerpo:
+        'Tenemos 14 facturas vencidas por 23.480 €. Nueve son de menos de 30 días: si te parece, hoy les mando el recordatorio.',
+      autor: { tipo: 'puesto', nombre: 'Cobros' },
+      adjuntos: [
+        {
+          tipo: 'aprobacion',
+          titulo: 'Recordatorio a 9 clientes',
+          resumen:
+            'Comunicar con terceros · N1 · 9 tareas · unos 0,40 € · salen hoy en horario laboral',
+          porque:
+            'Son facturas de menos de 30 días y es el primer recordatorio: la política de cobros pide avisar con tono amable antes de escalar.',
+        },
+      ],
+      creadoEn: creadoEn('09:03'),
+    },
+    {
+      id: 'm4',
+      cuerpo: 'Ojo con Talleres Brisa: prometió pagar el viernes.',
+      autor: { tipo: 'persona', nombre: 'Tomás Rivel' },
+      adjuntos: [],
+      creadoEn: creadoEn('09:10'),
+    },
+    {
+      id: 'm5',
+      cuerpo: 'Anotado. A Talleres Brisa no le escribo hasta el lunes.',
+      autor: { tipo: 'puesto', nombre: 'Cobros' },
+      adjuntos: [],
+      creadoEn: creadoEn('09:11'),
+    },
+    {
+      id: 'm6',
+      cuerpo: '@Director de IA quiero a alguien que lleve la previsión de tesorería.',
+      autor: { tipo: 'persona', nombre: 'Lucía Ferrán' },
+      adjuntos: [],
+      creadoEn: creadoEn('09:30'),
+    },
+    {
+      id: 'm7',
+      cuerpo: 'Te propongo este puesto. No hace nada hasta que lo confirmes.',
+      autor: { tipo: 'plataforma', nombre: 'Director de IA' },
+      adjuntos: [{ tipo: 'propuesta_operacion', propuestaId: PROPUESTA_PREVISION_ID }],
+      creadoEn: creadoEn('09:31'),
+    },
+  ];
+}
+
+function mensajesDeGeneral(): MensajeDeSala[] {
+  const creadoEn = (hora: string) => `2026-09-28T${hora}:00.000Z`;
+  return [
+    {
+      id: 'g1',
+      cuerpo: 'Buenos días. Hoy cerramos el mes: avisad si algo se atasca.',
+      autor: { tipo: 'persona', nombre: 'Lucía Ferrán' },
+      adjuntos: [],
+      creadoEn: creadoEn('08:45'),
+    },
+    {
+      id: 'g2',
+      cuerpo: 'Entendido. Os aviso aquí de cualquier aprobación pendiente.',
+      autor: { tipo: 'plataforma', nombre: 'Director de IA' },
+      adjuntos: [],
+      creadoEn: creadoEn('08:46'),
+    },
+  ];
+}
+
 export interface OpcionesDeSimulacion {
   /** Reloj inyectable para las pruebas. */
   ahora?: () => number;
@@ -171,6 +297,11 @@ export function crearFuenteSimulada(opciones: OpcionesDeSimulacion = {}): Fuente
   const todos = new Map([...PERSONAS, ...AGENTES].map((m) => [m.id, { ...m }]));
   const oyentes = new Map<string, Set<(cambio: CambioDeSala) => void>>();
   const escrituras: string[] = [];
+  // Conversación real (contrato): lo que se envía y el estado de la propuesta de
+  // ejemplo viven aquí, por instancia, para que cada prueba y cada pestaña de
+  // `?fuenteSimulada=1` tengan su propia sala, igual que `todos` para la presencia.
+  const enviados = new Map<string, MensajeDeSala[]>();
+  let estadoPropuestaPrevision = 'pendiente';
 
   const emitir = (salaId: string, cambio: CambioDeSala) => {
     for (const oyente of oyentes.get(salaId) ?? []) oyente(cambio);
@@ -238,6 +369,42 @@ export function crearFuenteSimulada(opciones: OpcionesDeSimulacion = {}): Fuente
       base.estado = estado;
       base.hace = 0;
       emitir(salaId, { tipo: 'presencia', salaId, miembro: aMiembro(base, ahora()) });
+    },
+
+    async mensajes(salaId): Promise<ConversacionDeSala> {
+      await comprobar();
+      const base =
+        salaId === 'finanzas'
+          ? mensajesDeFinanzas()
+          : salaId === 'general'
+            ? mensajesDeGeneral()
+            : [];
+      const propuestas: PropuestaDeSala[] =
+        salaId === 'finanzas' ? [propuestaPrevisionDeTesoreria(estadoPropuestaPrevision)] : [];
+      return { mensajes: [...base, ...(enviados.get(salaId) ?? [])], propuestas };
+    },
+
+    async enviarMensaje(salaId, texto) {
+      await comprobar();
+      const lista = enviados.get(salaId) ?? [];
+      const nuevo: MensajeDeSala = {
+        id: `local-${lista.length + 1}-${ahora()}`,
+        cuerpo: texto,
+        autor: { tipo: 'persona', nombre: 'Lucía Ferrán' },
+        adjuntos: [],
+        creadoEn: new Date(ahora()).toISOString(),
+      };
+      enviados.set(salaId, [...lista, nuevo]);
+      emitir(salaId, { tipo: 'mensaje', salaId });
+    },
+
+    async decidirPropuesta(propuestaId, sentido) {
+      await comprobar();
+      if (propuestaId !== PROPUESTA_PREVISION_ID || estadoPropuestaPrevision !== 'pendiente') {
+        return;
+      }
+      estadoPropuestaPrevision = sentido === 'aprobada' ? 'ejecutada' : 'rechazada';
+      emitir('finanzas', { tipo: 'mensaje', salaId: 'finanzas' });
     },
   };
 }
