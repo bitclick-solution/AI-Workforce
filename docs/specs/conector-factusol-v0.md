@@ -2,7 +2,7 @@ VIGENTE
 
 # Especificación · Conector Factusol v0: facturas vencidas y nota de seguimiento sobre Factusol MCP
 
-- Rebanada: [Notion](<pendiente de crear — ver nota de la sesión del Planificador, 2026-09-30>) · Ciclo 2 · Tipo Conector · Paquetes `connectors/factusol` · P0
+- Rebanada: [Notion](https://app.notion.com/p/3eb53066189881349709d81c2679316e) · Ciclo 2 · Tipo Conector · Paquetes `connectors/factusol` · P0
 - Rama: `rebanada/conector-factusol-v0`
 - Plan de referencia: frontera «plano de control agnóstico del ERP» y «registro de herramientas como interfaz con descubrimiento en runtime» del [ADR-001](../adr/ADR-001.md); [ADR-002](../adr/ADR-002.md) («Factusol MCP se conserva íntegro como conector en Python»; «Python solo en servicios aislados»); [ADR-005](../adr/ADR-005.md) (niveles por clase de acción). Patrón de referencia, no plan: [Conector Odoo v0](conector-odoo-v0.md), la otra mitad del mismo par multi-ERP, y [`connectors/factusol/README.md`](../../connectors/factusol/README.md), que ya fija que Factusol MCP no se reescribe y se consume como imagen a través del gateway MCP.
 - Zona crítica: no. El conector no toca `packages/mcp-gateway`, `packages/domain`, `packages/ledger`, `.github/` ni ninguna migración. El cifrado por tenant y la `referencia_secreto` son del gateway y quedan fuera de esta rebanada, igual que en el conector de Odoo.
