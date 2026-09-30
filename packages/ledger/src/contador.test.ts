@@ -173,6 +173,58 @@ describe('validaciones antes de tocar la base', () => {
 describe('catálogo de tarifas', () => {
   const catalogo: unknown = JSON.parse(readFileSync(RUTA_CATALOGO_EJEMPLO, 'utf8'));
 
+  it('Opus 5 tiene los precios de la consola del 2026-09-30, en una fila nueva y sin reescribir la anterior', () => {
+    const opus5 = (plataforma: string) =>
+      tarifasDelCatalogo(catalogo)
+        .filter((t) => t.modelo === 'claude-opus-5' && t.plataforma === plataforma)
+        .sort((a, b) => a.vigenteDesde.getTime() - b.vigenteDesde.getTime());
+
+    const bedrock = opus5('bedrock-eu');
+    expect(bedrock).toHaveLength(2);
+    expect(bedrock[0]?.precioOrigenPorMillonEntrada).toBe(5.5); // la del 2026-09-25 sigue ahí
+    expect(bedrock[1]).toMatchObject({
+      precioOrigenPorMillonEntrada: 5,
+      precioOrigenPorMillonSalida: 25,
+      precioOrigenPorMillonEntradaCache: 0.5,
+      eurosPorMillonEntrada: 4.6,
+      eurosPorMillonSalida: 23,
+      eurosPorMillonEntradaCache: 0.46,
+      eurosPorMillonEntradaCacheEscritura5m: 5.75,
+      eurosPorMillonEntradaCacheEscritura1h: 9.2,
+    });
+
+    const vertex = opus5('vertex-eu');
+    expect(vertex).toHaveLength(2);
+    expect(vertex[1]).toMatchObject({
+      precioOrigenPorMillonEntrada: 5.4,
+      precioOrigenPorMillonSalida: 25.4,
+      precioOrigenPorMillonEntradaCache: 0.9,
+      eurosPorMillonEntrada: 4.968,
+      eurosPorMillonSalida: 23.368,
+      eurosPorMillonEntradaCache: 0.828,
+      eurosPorMillonEntradaCacheEscritura5m: 6.118,
+      eurosPorMillonEntradaCacheEscritura1h: 9.568,
+    });
+  });
+
+  it('en las filas de Opus 5 en USD, los euros son el precio de origen por el tipo de cambio', () => {
+    const filas = tarifasDelCatalogo(catalogo).filter(
+      (t) => t.modelo === 'claude-opus-5' && t.monedaOrigen === 'usd',
+    );
+    expect(filas.length).toBeGreaterThanOrEqual(3);
+    for (const fila of filas) {
+      const cambio = fila.tipoCambioAEuros ?? 1;
+      expect(fila.eurosPorMillonEntrada).toBeCloseTo(
+        (fila.precioOrigenPorMillonEntrada ?? 0) * cambio,
+        3,
+      );
+      expect(fila.eurosPorMillonSalida).toBeCloseTo(
+        (fila.precioOrigenPorMillonSalida ?? 0) * cambio,
+        3,
+      );
+    }
+  });
+
   it('el catálogo de desarrollo valida y trae tarifas de más de un proveedor', () => {
     const tarifas = tarifasDelCatalogo(catalogo);
     expect(tarifas.length).toBeGreaterThan(2);
@@ -186,7 +238,10 @@ describe('catálogo de tarifas', () => {
 
   it('las filas reales de Bedrock UE llevan región, moneda de origen y tipo de cambio (decisión de Jesús, 2026-09-25)', () => {
     const tarifas = tarifasDelCatalogo(catalogo);
-    const bedrock = tarifas.filter((t) => t.plataforma === 'bedrock-eu');
+    // Solo las del 2026-09-25: las filas de inferencia entre regiones (2026-09-30) no tienen región única.
+    const bedrock = tarifas.filter(
+      (t) => t.plataforma === 'bedrock-eu' && t.vigenteDesde < new Date('2026-09-30T00:00:00.000Z'),
+    );
     expect(bedrock.length).toBeGreaterThanOrEqual(6);
     for (const tarifa of bedrock) {
       expect(tarifa.region).toBe('eu-central-1');

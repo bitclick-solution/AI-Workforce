@@ -155,6 +155,8 @@ Ya están en `packages/ledger/src/datos/tarifas-ejemplo.json`, con:
   sección anterior. La fila de `claude-opus-4-6` queda cargada igual —su cuota
   está denegada, no retirada de la lista de preferencia— por si se reconsidera.
 
+> **Actualización del 2026-09-30:** Jesús confirma los precios de Opus 5 de la consola —AWS 5,00/25,00 USD; Google Cloud, 0,40 USD más en cada columna— y entran como filas nuevas, con `vigenteDesde` del 30-9, sin tocar las del 25-9. Ver `docs/specs/tarifas-opus-5.md`.
+
 ## Criterios de hecho
 
 1. `@aiw/models` implementa el puerto `PuertoDeModelo`; el adaptador de Anthropic
