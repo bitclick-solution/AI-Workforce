@@ -192,6 +192,42 @@
       "multiplicadorListaOficial": 1,
       "vigenteDesde": "2026-09-01T00:00:00.000Z",
       "fuente": "autoalojado: el coste va en la factura de infraestructura, no por token"
+    },
+    {
+      "proveedor": "anthropic",
+      "modelo": "claude-opus-5",
+      "eurosPorMillonEntrada": 4.6,
+      "eurosPorMillonSalida": 23.0,
+      "eurosPorMillonEntradaCache": 0.46,
+      "eurosPorMillonEntradaCacheEscritura5m": 5.75,
+      "eurosPorMillonEntradaCacheEscritura1h": 9.2,
+      "plataforma": "bedrock-eu",
+      "monedaOrigen": "usd",
+      "tipoCambioAEuros": 0.92,
+      "precioOrigenPorMillonEntrada": 5.0,
+      "precioOrigenPorMillonSalida": 25.0,
+      "precioOrigenPorMillonEntradaCache": 0.5,
+      "multiplicadorListaOficial": 1,
+      "vigenteDesde": "2026-09-30T00:00:00.000Z",
+      "fuente": "Tabla de precios de AWS para Claude Opus 5 (perfil de inferencia UE), confirmada por Jesús el 2026-09-30, en USD y convertida con el tipo de referencia 0,92 EUR/USD. Sustituye a la fila del 2026-09-25 (5,50 USD). Sin cuota concedida todavía."
+    },
+    {
+      "proveedor": "anthropic",
+      "modelo": "claude-opus-5",
+      "eurosPorMillonEntrada": 4.968,
+      "eurosPorMillonSalida": 23.368,
+      "eurosPorMillonEntradaCache": 0.828,
+      "eurosPorMillonEntradaCacheEscritura5m": 6.118,
+      "eurosPorMillonEntradaCacheEscritura1h": 9.568,
+      "plataforma": "vertex-eu",
+      "monedaOrigen": "usd",
+      "tipoCambioAEuros": 0.92,
+      "precioOrigenPorMillonEntrada": 5.4,
+      "precioOrigenPorMillonSalida": 25.4,
+      "precioOrigenPorMillonEntradaCache": 0.9,
+      "multiplicadorListaOficial": 1,
+      "vigenteDesde": "2026-09-30T00:00:00.000Z",
+      "fuente": "Precio de Google Cloud para Claude Opus 5 confirmado por Jesús el 2026-09-30: el de AWS más 0,40 USD en cada columna, en USD y convertido con el tipo de referencia 0,92 EUR/USD. Sustituye a la referencia de lista pública del 2026-09-01. Sin cuota concedida todavía."
     }
   ]
 }
