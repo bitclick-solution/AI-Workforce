@@ -319,6 +319,113 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('bucle del agente · contra la base y el lib
     expect(verificacion.valida).toBe(true);
   });
 
+  it('con habilidades congeladas, el contexto lleva el índice y cargar_habilidad carga sin subir el contador', async () => {
+    const montaje = await montarParaPruebas({ nombre: `Bucle habilidades ${Date.now()}` });
+    montajes.push(montaje);
+    const tenantId = montaje.semilla.tenantId;
+    const { puestoId } = montaje.semilla.cobros;
+
+    const habilidad = {
+      habilidadId: '00000000-0000-7000-8000-000000000001',
+      nombre: 'prueba.antiguedad-de-cobros',
+      version: 1,
+      casosQueAplican: ['agrupar facturas vencidas por tramo de antigüedad'],
+      pasos: ['Agrupa las facturas vencidas por tramo.'],
+      comprobaciones: ['La suma de los tramos coincide con el total vencido.'],
+      herramientas: [] as string[],
+    };
+
+    // Versión nueva con la habilidad congelada, copiando el resto de la versión
+    // activa: activar una habilidad crea una versión, nunca edita la existente.
+    const [version] = await conTenant(
+      montaje.cliente,
+      tenantId,
+      (tx) => tx<{ id: string }[]>`
+        insert into version_puesto (
+          tenant_id, puesto_id, numero, prompt, politica, habilidades_congeladas,
+          memoria_congelada, lecciones_origen, resultados_eval
+        )
+        select tenant_id, puesto_id, numero + 1, prompt, politica,
+          ${JSON.stringify([habilidad])}::text::jsonb,
+          memoria_congelada, lecciones_origen, resultados_eval
+        from version_puesto
+        where tenant_id = ${tenantId} and id = ${montaje.semilla.cobros.versionPuestoId}
+        returning id
+      `,
+    );
+    const versionPuestoId = version?.id;
+    if (!versionPuestoId) throw new Error('La versión con la habilidad no se insertó.');
+
+    await conTenant(
+      montaje.cliente,
+      tenantId,
+      (tx) => tx`
+        update tarea set version_puesto_id = ${versionPuestoId}
+        where tenant_id = ${tenantId} and id = ${montaje.tareaId}
+      `,
+    );
+
+    const contexto = await montaje.actividades.leerContexto({
+      tenantId,
+      puestoId,
+      versionPuestoId,
+      tareaId: montaje.tareaId,
+    });
+    expect(contexto.sistema).toContain('Habilidades que puedes cargar');
+    expect(contexto.sistema).toContain('prueba.antiguedad-de-cobros');
+    expect(contexto.sistema).not.toContain('Agrupa las facturas vencidas por tramo.');
+    expect(contexto.herramientas.map((h) => h.nombre)).toContain('cargar_habilidad');
+
+    const [antes] = await conTenant(
+      montaje.cliente,
+      tenantId,
+      (tx) => tx<{ acciones: string; pasos: string; tareas: string }[]>`
+        select acciones, pasos, tareas from contador_consumo where tenant_id = ${tenantId}
+      `,
+    );
+
+    const cargada = await montaje.actividades.cargarHabilidad({
+      tenantId,
+      puestoId,
+      versionPuestoId,
+      tareaId: montaje.tareaId,
+      nombre: 'prueba.antiguedad-de-cobros',
+      numeroPaso: 1001,
+      guardiasSalida: [],
+    });
+    expect(cargada.encontrada).toBe(true);
+    expect(cargada.pasos).toEqual(habilidad.pasos);
+    expect(cargada.comprobaciones).toEqual(habilidad.comprobaciones);
+
+    const sinEncontrar = await montaje.actividades.cargarHabilidad({
+      tenantId,
+      puestoId,
+      versionPuestoId,
+      tareaId: montaje.tareaId,
+      nombre: 'no-existe',
+      numeroPaso: 1002,
+      guardiasSalida: [],
+    });
+    expect(sinEncontrar.encontrada).toBe(false);
+
+    const cadena = await conTenant(montaje.cliente, tenantId, (tx) => leerCadena(tx, tenantId));
+    expect(cadena.some((entrada) => entrada.accion === 'habilidad.cargada')).toBe(true);
+    expect(cadena.some((entrada) => entrada.accion === 'habilidad.rechazada')).toBe(true);
+
+    const [despues] = await conTenant(
+      montaje.cliente,
+      tenantId,
+      (tx) => tx<{ acciones: string; pasos: string; tareas: string }[]>`
+        select acciones, pasos, tareas from contador_consumo where tenant_id = ${tenantId}
+      `,
+    );
+    // Las dos llamadas a cargar_habilidad suman acciones (toda acción suma al
+    // contador), pero ninguna suma a `pasos` ni a `tareas` (decisión 3).
+    expect(Number(despues?.acciones)).toBe(Number(antes?.acciones) + 2);
+    expect(Number(despues?.pasos)).toBe(Number(antes?.pasos ?? 0));
+    expect(Number(despues?.tareas)).toBe(Number(antes?.tareas));
+  });
+
   it('el fallo del conector se propaga con el motivo para que Temporal reintente', async () => {
     // Un solo fallo y ningún reintento en esta prueba: se comprueba que el error
     // sube con el nombre de la herramienta, que es lo que la actividad necesita para

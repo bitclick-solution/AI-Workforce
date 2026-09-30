@@ -38,7 +38,7 @@ import {
   vencerAprobaciones,
   anotar,
 } from '@aiw/ledger';
-import { leerEdicion, lineasDeMemoria } from '@aiw/learning';
+import { buscarHabilidadCongelada, leerEdicion, lineasDeHabilidades, lineasDeMemoria } from '@aiw/learning';
 import {
   componerPrompt,
   PROVEEDOR_DE_TARIFA,
@@ -58,6 +58,7 @@ import type postgres from 'postgres';
 import { HerramientaFallo } from '@aiw/mcp-gateway';
 import { ApplicationFailure } from '@temporalio/activity';
 
+import { NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD } from '../bucle/bucle.js';
 import { crearGuardias, revisarArgumentos, revisarTodo } from '../bucle/guardias.js';
 import type {
   AprobacionCreada,
@@ -66,11 +67,13 @@ import type {
   DelegacionAbierta,
   PeticionAbrirDelegacion,
   PeticionAnotarPaso,
+  PeticionCargarHabilidad,
   PeticionDeAprobacion,
   PeticionPasoHerramienta,
   PeticionPasoModelo,
   PeticionProyectarEstado,
   PeticionSenalDeAprendizaje,
+  SalidaCargaHabilidad,
   SalidaPasoHerramienta,
   SalidaPasoModelo,
 } from '../bucle/tipos.js';
@@ -515,11 +518,13 @@ export function crearActividades(contexto: ContextoDeActividades) {
             prompt: string;
             politica: unknown;
             memoria_congelada: unknown;
+            habilidades_congeladas: unknown;
             brand_voice: unknown;
             presupuesto_euros: string;
           }[]
         >`
-          select v.prompt, v.politica, v.memoria_congelada, o.brand_voice, t.presupuesto_euros
+          select v.prompt, v.politica, v.memoria_congelada, v.habilidades_congeladas,
+            o.brand_voice, t.presupuesto_euros
           from version_puesto v
           join tarea t on t.tenant_id = v.tenant_id and t.id = ${peticion.tareaId}
           join organizacion o on o.id = v.tenant_id
@@ -548,15 +553,40 @@ export function crearActividades(contexto: ContextoDeActividades) {
         // y una lección promocionada llega a la tarea siguiente porque esa tarea
         // arranca con otra versión, no porque se invalide nada.
         const memoria = lineasDeMemoria(fila.memoria_congelada);
+        // Habilidades congeladas: solo el índice (nombre y casos que aplican) entra
+        // en el prompt. El cuerpo lo carga `cargar_habilidad`, nunca `leerContexto`
+        // (docs/specs/habilidades-en-el-bucle-y-catalogo-finanzas.md, decisión 1).
+        const habilidades = lineasDeHabilidades(fila.habilidades_congeladas);
         const sistema = contexto.cachePrompts.obtener(peticion.versionPuestoId, () =>
-          componerPrompt({ prompt: fila.prompt, brandVoice: voz, memoria }),
+          componerPrompt({ prompt: fila.prompt, brandVoice: voz, memoria, habilidades }),
         );
         const limite = Number(fila.presupuesto_euros);
+
+        const herramientas = catalogo.herramientas.map((herramienta) => ({ ...herramienta }));
+        if (habilidades.length > 0) {
+          // Herramienta sintética: no viene de ningún conector ni pasa por el
+          // gateway. Solo aparece cuando hay algo que cargar, así que sin
+          // habilidades el catálogo es exactamente el de antes de esta rebanada.
+          herramientas.push({
+            nombre: NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD,
+            descripcion:
+              'Carga los pasos y las comprobaciones de una habilidad de esta versión, por su ' +
+              'nombre exacto. Úsala cuando el encargo encaje en uno de sus casos que aplican.',
+            tipo: 'lectura',
+            claseAccion: 'lectura',
+            esquemaEntrada: {
+              type: 'object',
+              properties: { nombre: { type: 'string' } },
+              required: ['nombre'],
+            },
+            conector: 'interno',
+          });
+        }
 
         return {
           estadoPuesto: catalogo.estadoPuesto,
           sistema,
-          herramientas: catalogo.herramientas.map((herramienta) => ({ ...herramienta })),
+          herramientas,
           nivelesPorClase: { ...catalogo.nivelesPorClase },
           clasesProhibidas: [...politica.clasesProhibidas],
           guardiasEntrada: [...politica.guardiasEntrada],
@@ -1028,6 +1058,91 @@ export function crearActividades(contexto: ContextoDeActividades) {
           ...(peticion.nivelAplicado ? { nivelAplicado: peticion.nivelAplicado } : {}),
           ...(peticion.duracionMs === undefined ? {} : { duracionMs: peticion.duracionMs }),
         });
+      });
+    },
+
+    /**
+     * Paso interno `cargar_habilidad`: busca el cuerpo por nombre en lo que la
+     * versión ya tenía congelado, sin salir del proceso ni pasar por el gateway.
+     *
+     * Pasa por los mismos ganchos que cualquier paso —fila de `paso`, entrada de
+     * auditoría— pero no suma al contador de tareas ni de pasos: `anotar` se llama
+     * sin `incrementos`, igual que `anotarPaso` (decisión 3 de la especificación).
+     * Un nombre que no está en la versión no carga nada y queda como `rechazado`.
+     */
+    async cargarHabilidad(peticion: PeticionCargarHabilidad): Promise<SalidaCargaHabilidad> {
+      return enTenant(contexto, peticion.tenantId, async (tx) => {
+        const [fila] = await tx<{ habilidades_congeladas: unknown }[]>`
+          select habilidades_congeladas from version_puesto
+          where tenant_id = ${peticion.tenantId} and id = ${peticion.versionPuestoId}
+        `;
+        const habilidad = fila
+          ? buscarHabilidadCongelada(fila.habilidades_congeladas, peticion.nombre)
+          : undefined;
+
+        if (!habilidad) {
+          const motivo = `La habilidad «${peticion.nombre}» no está en esta versión del puesto.`;
+          const { pasoId } = await escribirPaso(tx, {
+            tenantId: peticion.tenantId,
+            tareaId: peticion.tareaId,
+            versionPuestoId: peticion.versionPuestoId,
+            numero: peticion.numeroPaso,
+            tipo: 'habilidad_no_encontrada',
+            herramienta: NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD,
+            entrada: { nombre: peticion.nombre },
+            salida: { motivo },
+            resultado: 'rechazado',
+          });
+          await anotar(tx, peticion.tenantId, {
+            actorTipo: 'agente',
+            puestoId: peticion.puestoId,
+            versionPuestoId: peticion.versionPuestoId,
+            tareaId: peticion.tareaId,
+            pasoId,
+            accion: 'habilidad.rechazada',
+            herramienta: NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD,
+            datosReferenciados: [{ tipo: 'habilidad_nombre', id: peticion.nombre }],
+            resultado: 'rechazado',
+          });
+          return { encontrada: false, pasos: [], comprobaciones: [], motivo };
+        }
+
+        const guardias = crearGuardias(peticion.guardiasSalida);
+        const pasos = habilidad.pasos.map((paso) => revisarTodo(guardias, paso).texto);
+        const comprobaciones = habilidad.comprobaciones.map(
+          (comprobacion) => revisarTodo(guardias, comprobacion).texto,
+        );
+
+        const { pasoId } = await escribirPaso(tx, {
+          tenantId: peticion.tenantId,
+          tareaId: peticion.tareaId,
+          versionPuestoId: peticion.versionPuestoId,
+          numero: peticion.numeroPaso,
+          tipo: 'habilidad_cargada',
+          herramienta: NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD,
+          entrada: { nombre: peticion.nombre },
+          salida: { habilidadId: habilidad.habilidadId, version: habilidad.version },
+          resultado: 'exito',
+        });
+        // La habilidad cargada y su versión quedan en la entrada de auditoría
+        // (decisión 3): es lo que permite reconstruir qué vio el agente sin que el
+        // cuerpo entero tenga que vivir en la fila del paso.
+        await anotar(tx, peticion.tenantId, {
+          actorTipo: 'agente',
+          puestoId: peticion.puestoId,
+          versionPuestoId: peticion.versionPuestoId,
+          tareaId: peticion.tareaId,
+          pasoId,
+          accion: 'habilidad.cargada',
+          herramienta: NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD,
+          datosReferenciados: [
+            { tipo: 'habilidad', id: habilidad.habilidadId },
+            { tipo: 'habilidad_version', id: String(habilidad.version) },
+          ],
+          resultado: 'exito',
+        });
+
+        return { encontrada: true, pasos, comprobaciones, motivo: 'Habilidad cargada.' };
       });
     },
 

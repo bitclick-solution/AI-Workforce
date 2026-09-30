@@ -146,6 +146,25 @@ export interface DecisionRecibida {
   argumentosEditados?: Record<string, unknown> | undefined;
 }
 
+/**
+ * Petición del paso interno `cargar_habilidad`: pide el cuerpo de una habilidad
+ * congelada en la versión, por su nombre. No pasa por el gateway porque no sale
+ * del proceso (docs/specs/habilidades-en-el-bucle-y-catalogo-finanzas.md, decisión 2).
+ */
+export interface PeticionCargarHabilidad extends IdentidadDeEjecucion {
+  nombre: string;
+  numeroPaso: number;
+  guardiasSalida: string[];
+}
+
+/** Lo que devuelve `cargar_habilidad`. Sin la habilidad, no carga nada. */
+export interface SalidaCargaHabilidad {
+  encontrada: boolean;
+  pasos: string[];
+  comprobaciones: string[];
+  motivo: string;
+}
+
 export interface PeticionAnotarPaso extends IdentidadDeEjecucion {
   numeroPaso: number;
   tipo: string;
