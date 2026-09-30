@@ -189,9 +189,24 @@ Ya están en `packages/ledger/src/datos/tarifas-ejemplo.json`, con:
    nunca en cada PR ni en ningún PR (la confianza de OIDC de `aiw-ci-bedrock` lo
    impide). El rol y las variables de repositorio ya existen (`AWS_ROLE_ARN`,
    `AIW_BEDROCK_REGION_UE`): la prueba corre sola en el siguiente disparo del job.
-   **Pendiente con el proveedor real**: AWS denegó la cuota de Sonnet 5 y la de
-   Opus 4.6; Opus 5.5 está pedida, Opus 5 sigue pendiente. Mientras tanto, ya
-   ejercita algo real hoy mismo: el sustituto provisional Sonnet 4.6.
+   **Cerrado contra el proveedor real** (rebanada «Casos dorados de Cobros y
+   Conciliación contra Bedrock UE en el job semanal»): los mismos dos casos
+   dorados corren también contra Bedrock UE real por el camino clásico
+   (`clienteBedrockDesdeEntorno`), además de contra Vertex UE real
+   (`clienteVertexDesdeEntorno`), con un cuerpo común a los dos proveedores
+   (`packages/evals/smoke/casos-dorados-proveedor-real.compartido.ts`) para no
+   duplicar el caso: la decisión coincide con la esperada y el motivo de Cobros es
+   una frase no vacía que cumple el esquema estricto, sin comparar el texto;
+   Conciliación, al ser enteramente categórica, sigue comparando por igualdad
+   exacta con `evaluarCasoDoradoEstructurado`. Se saltan solos sin
+   `AIW_BEDROCK_REGION_UE` y credenciales de AWS (misma condición que
+   `anthropic.bedrock.integracion.test.ts`) o sin `AIW_VERTEX_REGION_UE`/
+   `AIW_VERTEX_PROJECT_ID`; nunca corren en un PR ni en `pnpm test` ni en
+   `pnpm evals:smoke`. El job «Bedrock UE · integración» de `ci.yml` los ejecuta
+   (`smoke/cobros-modelos-v1.bedrock.integracion.test.ts`,
+   `conciliacion-modelos-v1.bedrock.integracion.test.ts`) detrás de las 5 pruebas
+   del adaptador. Sustituto provisional mientras dure la sustitución del ADR-023:
+   Sonnet 4.6 en el papel `opus5`.
 7. Runbook de funciones ausentes en Bedrock o en Vertex, con su sustituto y los
    pasos de activación — cumplido (`docs/runbooks/modelos-funciones-ausentes.md`).
 

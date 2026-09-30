@@ -85,7 +85,9 @@ jobs:
         env:
           AIW_BEDROCK_REGION_UE: ${{ vars.AIW_BEDROCK_REGION_UE }}
           AIW_BEDROCK_IDENTIFICADOR_MODELO: ${{ vars.AIW_BEDROCK_IDENTIFICADOR_MODELO }}
-        run: pnpm --filter @aiw/models test:integracion:bedrock
+        run: |
+          pnpm --filter @aiw/models test:integracion:bedrock
+          pnpm --filter @aiw/evals exec vitest run smoke/cobros-modelos-v1.bedrock.integracion.test.ts smoke/conciliacion-modelos-v1.bedrock.integracion.test.ts
       - name: Sin AWS_ROLE_ARN todavía
         if: vars.AWS_ROLE_ARN == ''
         run: |

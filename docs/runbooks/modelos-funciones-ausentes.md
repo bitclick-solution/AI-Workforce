@@ -149,15 +149,15 @@ endpoint de Mensajes, o al revés.
    tenant real con `registrarTarifa`. El tipo de cambio EUR/USD de ese catálogo
    (0,92) es una referencia de desarrollo — sustitúyelo por el tipo de cambio
    versionado real antes de facturar con él.
-7. En cuanto la prueba de integración
-   (`packages/models/src/adaptadores/anthropic.bedrock.integracion.test.ts`) pase
-   en la CI, repite los casos dorados de Cobros y de Conciliación
-   (`packages/evals/smoke/cobros-modelos-v1.eval.ts`,
-   `conciliacion-modelos-v1.eval.ts` — nombrados así para no chocar con los casos
-   dorados del guion del proveedor de prueba que ya viven en `cobros.eval.ts` y
-   `conciliacion.eval.ts`, de la rebanada «Prueba técnica del stack») apuntando al
-   cliente real en vez del simulado, para cerrar el criterio de hecho pendiente de
-   esta rebanada.
+7. Los casos dorados de Cobros y de Conciliación ya corren contra este cliente
+   real (`smoke/cobros-modelos-v1.bedrock.integracion.test.ts`,
+   `conciliacion-modelos-v1.bedrock.integracion.test.ts` — cuerpo común con los
+   de Vertex en `casos-dorados-proveedor-real.compartido.ts`, para no
+   duplicarlos): mismo salto sin credenciales que la prueba de integración de
+   arriba, y los ejecuta el job **Bedrock UE · integración** de `ci.yml` detrás
+   de sus 5 pruebas. Con eso queda cerrado el criterio de hecho pendiente de
+   «Modelos v1» («pasa con el proveedor real»); no hace falta repetir nada aquí
+   salvo que la matriz provisional cambie de modelo.
 
 ### Cómo volver al endpoint de Mensajes cuando AWS conceda Sonnet 5 y Opus 5
 
