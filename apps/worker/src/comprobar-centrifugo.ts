@@ -1,7 +1,7 @@
 /**
- * Comprobación barata de la CI (criterio 6 de «demo local en Windows»): abre una
- * conexión de verdad al Centrifugo del Compose, se suscribe a un canal `sala:`
- * real y comprueba con la API HTTP que la propia conexión sale en la presencia.
+ * Comprobación barata de la CI (criterio 6 de «demo local en Windows»): abre dos
+ * conexiones de verdad al Centrifugo del Compose, las suscribe a un canal
+ * `sala:` real y comprueba con la API HTTP quién sale en la presencia.
  *
  * No depende de PostgreSQL ni de Temporal: firma sus propios tokens con las
  * mismas funciones que usa la API de verdad (`tokenDeConexion`, `tokenDeCanal`)
@@ -10,6 +10,12 @@
  * Compose — justo lo que las pruebas unitarias, que simulan Centrifugo, no
  * pueden ver (fallo 5: la CI no lo vio porque las pruebas actuales simulan
  * Centrifugo).
+ *
+ * También comprueba, contra ese mismo Centrifugo real, la presencia oculta del
+ * PR #49 (ADR-026): una conexión cuyo token de canal lleva el `override` de
+ * `ocultarPresencia` no debe salir en la presencia del canal, aunque esté
+ * conectada. El propio #49 solo lo probó con Centrifugo simulado (pedido de la
+ * sesión de dirección tras el cambio de orden de fusión con este PR).
  *
  *   pnpm --filter @aiw/worker comprobar:centrifugo
  */
@@ -31,28 +37,20 @@ function fallar(mensaje: string): never {
 
 const urlApi = process.env['AIW_CENTRIFUGO_URL'] ?? 'http://127.0.0.1:8000';
 const urlWs = process.env['AIW_CENTRIFUGO_WS_URL'] ?? 'ws://127.0.0.1:8000/connection/websocket';
-const secretoHmac = process.env['CENTRIFUGO_TOKEN_HMAC_SECRET_KEY'];
-const claveApi = process.env['CENTRIFUGO_API_KEY'];
-if (!secretoHmac || !claveApi) {
+const secretoHmacEntorno = process.env['CENTRIFUGO_TOKEN_HMAC_SECRET_KEY'];
+const claveApiEntorno = process.env['CENTRIFUGO_API_KEY'];
+if (!secretoHmacEntorno || !claveApiEntorno) {
   fallar('faltan CENTRIFUGO_TOKEN_HMAC_SECRET_KEY o CENTRIFUGO_API_KEY en el entorno.');
 }
+// Constantes aparte (no los `let` del entorno): dentro de conectarYSuscribir, una
+// función declarada, TS no arrastra el estrechamiento de tipo de este `if` sobre
+// una variable capturada por clausura.
+const secretoHmac: string = secretoHmacEntorno;
+const claveApi: string = claveApiEntorno;
 
 const tenantId = randomUUID();
 const salaId = randomUUID();
-const personaId = randomUUID();
 const canal = canalDeSala(tenantId, salaId);
-
-const tokenConexion = tokenDeConexion(secretoHmac, {
-  personaId,
-  tenantId,
-  ttlSegundos: SEGUNDOS_TOKEN_CENTRIFUGO,
-});
-const tokenCanal = tokenDeCanal(secretoHmac, {
-  personaId,
-  tenantId,
-  salaId,
-  ttlSegundos: SEGUNDOS_TOKEN_CENTRIFUGO,
-});
 
 interface MensajeCentrifugo {
   id?: number;
@@ -61,8 +59,24 @@ interface MensajeCentrifugo {
   error?: { code: number; message: string };
 }
 
-/** Se conecta y se suscribe a `canal`; resuelve cuando Centrifugo acepta la suscripción. */
-function suscribir(): Promise<void> {
+/**
+ * Conecta y se suscribe a `canal`; resuelve con el socket ya suscrito (sin
+ * cerrarlo: hace falta seguir conectado mientras se consulta la presencia por
+ * HTTP) cuando Centrifugo acepta la suscripción.
+ */
+function conectarYSuscribir(personaId: string, ocultarPresencia: boolean): Promise<WebSocket> {
+  const tokenConexion = tokenDeConexion(secretoHmac, {
+    personaId,
+    tenantId,
+    ttlSegundos: SEGUNDOS_TOKEN_CENTRIFUGO,
+  });
+  const tokenCanal = tokenDeCanal(secretoHmac, {
+    personaId,
+    tenantId,
+    salaId,
+    ttlSegundos: SEGUNDOS_TOKEN_CENTRIFUGO,
+    ocultarPresencia,
+  });
   return new Promise((resolver, rechazar) => {
     const limite = setTimeout(() => {
       socket.close();
@@ -80,7 +94,9 @@ function suscribir(): Promise<void> {
       if (mensaje.error) {
         clearTimeout(limite);
         socket.close();
-        rechazar(new Error(`Centrifugo rechazó la petición: ${mensaje.error.code} ${mensaje.error.message}`));
+        rechazar(
+          new Error(`Centrifugo rechazó la petición: ${mensaje.error.code} ${mensaje.error.message}`),
+        );
         return;
       }
       if (mensaje.connect) {
@@ -89,8 +105,7 @@ function suscribir(): Promise<void> {
       }
       if (mensaje.subscribe) {
         clearTimeout(limite);
-        socket.close();
-        resolver();
+        resolver(socket);
       }
     });
     socket.addEventListener('error', () => {
@@ -100,22 +115,40 @@ function suscribir(): Promise<void> {
   });
 }
 
+const personaVisible = randomUUID();
+const personaOculta = randomUUID();
+
 decir(`canal ${canal}`);
+let socketVisible: WebSocket;
+let socketOculta: WebSocket;
 try {
-  await suscribir();
+  socketVisible = await conectarYSuscribir(personaVisible, false);
+  socketOculta = await conectarYSuscribir(personaOculta, true);
 } catch (error) {
   fallar(error instanceof Error ? error.message : 'la suscripción falló.');
 }
-decir('suscripción aceptada por Centrifugo.');
+decir('las dos conexiones de prueba están suscritas.');
 
-const presencia = await presenciaDeSala(
-  { urlApi, claveApi, secretoHmac },
-  tenantId,
-  salaId,
-  fetch as unknown as Parameters<typeof presenciaDeSala>[3],
-);
-if (!presencia.some((p) => p.personaId === personaId)) {
-  fallar('la presencia del canal no incluye a la conexión de prueba.');
+try {
+  const presencia = await presenciaDeSala(
+    { urlApi, claveApi, secretoHmac },
+    tenantId,
+    salaId,
+    fetch as unknown as Parameters<typeof presenciaDeSala>[3],
+  );
+  const personas = presencia.map((p) => p.personaId);
+  if (!personas.includes(personaVisible)) {
+    fallar('la presencia del canal no incluye a la conexión visible de prueba.');
+  }
+  if (personas.includes(personaOculta)) {
+    fallar(
+      'la presencia oculta (ADR-026, override del token de canal) no se respetó: ' +
+        'la conexión oculta de prueba sale en la presencia del canal.',
+    );
+  }
+  decir(`presencia: ${presencia.length} conexión(es); la visible sale, la oculta no.`);
+} finally {
+  socketVisible.close();
+  socketOculta.close();
 }
-decir(`presencia: ${presencia.length} conexión(es), la de prueba incluida.`);
 process.exit(0);
