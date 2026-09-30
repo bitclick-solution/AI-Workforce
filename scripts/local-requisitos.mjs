@@ -42,6 +42,19 @@ function pnpmDisponible({ plataforma = process.platform } = {}) {
   return { ok: resultado.status === 0 && !resultado.error, salida: resultado.stdout?.trim() };
 }
 
+/**
+ * Ruta del `pnpm` que de verdad se lanza (`where`/`which`), o undefined si no
+ * se puede resolver. Solo para informar en éxito (criterio menor del
+ * seguimiento tras el #50: en éxito, la comprobación no decía qué pnpm había
+ * encontrado, y en una máquina con más de uno instalado eso importa).
+ */
+function pnpmRuta({ plataforma = process.platform } = {}) {
+  const mandato = plataforma === 'win32' ? 'where' : 'which';
+  const resultado = spawnSync(mandato, ['pnpm'], { encoding: 'utf8' });
+  if (resultado.status !== 0 || resultado.error) return undefined;
+  return resultado.stdout?.trim().split(/\r?\n/)[0];
+}
+
 /** El `packageManager` de la raíz (`pnpm@10.33.0`), o undefined si no se puede leer. */
 function packageManagerDeclarado() {
   try {
@@ -95,6 +108,7 @@ export function evaluarVersionPnpm(version, declarado) {
 export async function comprobarRequisitos(env, { puertoApi = '3002', puertoWeb = '3000' } = {}) {
   const errores = [];
   const avisos = [];
+  let pnpmInfo;
 
   const docker = comandoDisponible('docker', ['--version']);
   if (!docker.ok) {
@@ -130,6 +144,7 @@ export async function comprobarRequisitos(env, { puertoApi = '3002', puertoWeb =
     const { error, aviso } = evaluarVersionPnpm(pnpm.salida, packageManagerDeclarado());
     if (error) errores.push(error);
     if (aviso) avisos.push(aviso);
+    if (!error) pnpmInfo = { version: pnpm.salida, ruta: pnpmRuta() };
   }
 
   const servicios = estadoServicios();
@@ -186,5 +201,5 @@ export async function comprobarRequisitos(env, { puertoApi = '3002', puertoWeb =
     );
   }
 
-  return { errores, avisos };
+  return { errores, avisos, pnpmInfo };
 }

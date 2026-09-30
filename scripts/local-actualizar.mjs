@@ -4,7 +4,14 @@
 // local:arrancar` para que corran con el código nuevo.
 import { spawnSync } from 'node:child_process';
 
-import { leerEnv, raiz, rutaEnv, urlBaseDeDatos } from './local-comun.mjs';
+import {
+  leerEnv,
+  puertoOcupado,
+  raiz,
+  rutaEnv,
+  urlBaseDeDatos,
+  valorEntorno,
+} from './local-comun.mjs';
 
 function ejecutar(mandato, argumentos, opciones = {}) {
   return spawnSync(mandato, argumentos, { cwd: raiz, stdio: 'inherit', ...opciones });
@@ -40,11 +47,31 @@ if (ejecutar('git', ['pull', 'origin', 'main', '--ff-only']).status !== 0) {
 }
 
 console.log('— Instalando dependencias');
-if (ejecutar('pnpm', ['install']).status !== 0) salir('`pnpm install` ha fallado.');
+// `CI: 'true'`: sin él, `pnpm install` pregunta por una consola interactiva si
+// hace falta purgar `node_modules` y, sin TTY (una terminal que no es
+// interactiva, o algunos lanzadores de Windows), aborta con
+// `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` en vez de seguir — visto de
+// verdad en la máquina de Jesús tras el #50. `pnpm` ya se salta esa pregunta
+// en CI; forzarlo aquí es lo mismo sin depender de que la terminal lo sea.
+if (ejecutar('pnpm', ['install'], { env: { ...process.env, CI: 'true' } }).status !== 0) {
+  salir('`pnpm install` ha fallado.');
+}
 
 console.log('— Migrando la base');
+const env = leerEnv(rutaEnv);
+// Comprobación explícita en vez de dejar que la migración falle con un
+// `ECONNREFUSED` críptico: si acabas de `pnpm local:parar`, el Compose (y
+// Postgres con él) ya no está arriba, y `db:migrar` no lo arranca por su
+// cuenta — visto de verdad tras el #50, con el mensaje de error del cliente
+// de postgres sin decir qué hacer.
+const puertoPostgres = valorEntorno(env, 'POSTGRES_PORT', '5432');
+if (!(await puertoOcupado(puertoPostgres))) {
+  salir(
+    `Postgres no responde en el puerto ${puertoPostgres}: el Compose no está arriba. ` +
+      'Arráncalo con `pnpm local:arrancar` (o `pnpm dev:up` si solo quieres la infraestructura) y repite `pnpm local:actualizar`.',
+  );
+}
 try {
-  const env = leerEnv(rutaEnv);
   const migracion = ejecutar('pnpm', ['--filter', '@aiw/db', 'db:migrar'], {
     env: { ...process.env, DATABASE_URL: urlBaseDeDatos(env) },
   });
