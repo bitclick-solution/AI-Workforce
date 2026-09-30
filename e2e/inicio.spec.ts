@@ -121,7 +121,9 @@ test('encargar, verlo llegar en «lo último» y aprobar un aviso en línea', as
     .toEqual({ puestoId: 'p-cobros', encargo: 'Revisa las facturas vencidas de hoy.' });
 
   // Verlo llegar: «Lo último» refleja la tarea recién arrancada sin recargar la página.
-  await expect(page.getByTestId('lo-ultimo-lista')).toContainText('Revisa las facturas vencidas de hoy.');
+  await expect(page.getByTestId('lo-ultimo-lista')).toContainText(
+    'Revisa las facturas vencidas de hoy.',
+  );
 
   // Aprobar en línea: desaparece de los avisos y la decisión lleva el sentido correcto.
   await page.getByRole('button', { name: 'Aprobar' }).click();
