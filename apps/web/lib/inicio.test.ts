@@ -108,6 +108,9 @@ function fuenteFalsa(salas: ResumenDeSala[]): FuenteDeSala & { suscripciones: st
       };
     },
     indicarEscritura: () => undefined,
+    mensajes: () => Promise.resolve({ mensajes: [], propuestas: [] }),
+    enviarMensaje: () => Promise.resolve(),
+    decidirPropuesta: () => Promise.resolve(),
   };
 }
 
@@ -143,6 +146,9 @@ describe('suscribirseAAgentesEnVivo', () => {
         return () => undefined;
       },
       indicarEscritura: () => undefined,
+      mensajes: () => Promise.resolve({ mensajes: [], propuestas: [] }),
+      enviarMensaje: () => Promise.resolve(),
+      decidirPropuesta: () => Promise.resolve(),
     };
     const alCambiar = vi.fn();
     await suscribirseAAgentesEnVivo(fuente, alCambiar);
@@ -156,6 +162,9 @@ describe('suscribirseAAgentesEnVivo', () => {
       miembros: () => Promise.resolve([]),
       suscribir: () => () => undefined,
       indicarEscritura: () => undefined,
+      mensajes: () => Promise.resolve({ mensajes: [], propuestas: [] }),
+      enviarMensaje: () => Promise.resolve(),
+      decidirPropuesta: () => Promise.resolve(),
     };
     const darDeBaja = await suscribirseAAgentesEnVivo(fuente, () => undefined);
     expect(() => darDeBaja()).not.toThrow();
