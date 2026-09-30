@@ -155,6 +155,12 @@ export interface PuertoSala {
   miembrosDeSala(tenantId: string, salaId: string): Promise<MiembroDeLaVista[]>;
   /** Marca que la persona ha leído la sala hasta ahora. */
   marcarLeido(tenantId: string, salaId: string, personaId: string): Promise<void>;
+  /**
+   * El ajuste «Mostrar mi presencia en las salas» del perfil (ADR-026). Se pide
+   * antes de mintar un token de canal y antes de publicar «escribiendo»: con la
+   * presencia oculta, ninguno de los dos revela que la persona está conectada.
+   */
+  mostrarPresencia(tenantId: string, personaId: string): Promise<boolean>;
   /** Token de conexión y de canal, o nulo si la persona no es miembro de la sala. */
   tokenDeSala(
     tenantId: string,
@@ -411,6 +417,18 @@ export function puertoSala(
   const ultimaActividad = (tenantId: string, personaId: string): number | null =>
     ultimaActividadPorPersona.get(claveActividad(tenantId, personaId)) ?? null;
 
+  /** El ajuste «Mostrar mi presencia en las salas» del perfil (ADR-026). */
+  const mostrarPresencia = async (tenantId: string, personaId: string): Promise<boolean> => {
+    const [fila] = await conTenant(
+      cliente,
+      tenantId,
+      (tx) => tx<{ mostrar_presencia: boolean }[]>`
+        select mostrar_presencia from persona where tenant_id = ${tenantId} and id = ${personaId}
+      `,
+    );
+    return fila?.mostrar_presencia !== false;
+  };
+
   return {
     async salaGeneral(tenantId) {
       const [fila] = await conTenant(
@@ -603,10 +621,11 @@ export function puertoSala(
             persona_nombre: string | null;
             puesto_nombre: string | null;
             puesto_estado: string | null;
+            mostrar_presencia: boolean | null;
           }[]
         >`
         select sp.persona_id, sp.puesto_id, pe.nombre as persona_nombre,
-          pu.nombre as puesto_nombre, pu.estado as puesto_estado
+          pu.nombre as puesto_nombre, pu.estado as puesto_estado, pe.mostrar_presencia
         from sala_participante sp
         left join persona pe on pe.tenant_id = sp.tenant_id and pe.id = sp.persona_id
         left join puesto pu on pu.tenant_id = sp.tenant_id and pu.id = sp.puesto_id
@@ -681,9 +700,13 @@ export function puertoSala(
           return { id: fila.puesto_id, tipo: 'agente', nombre: fila.puesto_nombre ?? '', estado };
         }
         const personaId = fila.persona_id ?? '';
+        // Presencia oculta desde el perfil (ADR-026): aunque Centrifugo la vea
+        // conectada, aquí se pinta siempre como desconectada. Es la defensa de
+        // profundidad; la de servidor de verdad es el `override` del token de
+        // canal, que hace que Centrifugo ni siquiera cuente esa conexión.
         const estado = calcularEstadoDePresencia({
           tipo: 'persona',
-          conectada: conectadas.has(personaId),
+          conectada: fila.mostrar_presencia !== false && conectadas.has(personaId),
           ultimaActividadMs: ultimaActividad(tenantId, personaId),
           ahoraMs,
         });
@@ -718,6 +741,7 @@ export function puertoSala(
       registrarActividad(tenantId, personaId);
       if (!configuracion.v1) throw new Error('Sala v1 no está configurada.');
       const { secretoHmac } = configuracion.v1.centrifugo;
+      const ocultarPresencia = !(await mostrarPresencia(tenantId, personaId));
       return {
         token: tokenDeConexion(secretoHmac, {
           personaId,
@@ -729,6 +753,7 @@ export function puertoSala(
           tenantId,
           salaId,
           ttlSegundos: SEGUNDOS_TOKEN_CENTRIFUGO,
+          ocultarPresencia,
         }),
         canal: canalDeSala(tenantId, salaId),
       };
@@ -737,6 +762,10 @@ export function puertoSala(
     async avisarEscribiendo(tenantId, salaId, personaId) {
       registrarActividad(tenantId, personaId);
       if (!configuracion.v1) return;
+      // Presencia oculta (ADR-026): «escribiendo» no se publica, así que nadie
+      // más lo recibe. No basta con que la interfaz lo esconda: aquí ni se llama
+      // a Centrifugo.
+      if (!(await mostrarPresencia(tenantId, personaId))) return;
       await publicarEnSala(
         configuracion.v1.centrifugo,
         tenantId,
@@ -749,5 +778,7 @@ export function puertoSala(
         buscarCentrifugo,
       );
     },
+
+    mostrarPresencia,
   };
 }

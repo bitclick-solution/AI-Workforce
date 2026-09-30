@@ -37,6 +37,7 @@ import {
   lectorConBaseDeDatos,
   type RespuestaContador,
 } from './rutas/contador.js';
+import { atenderPerfil, puertoPerfilConBaseDeDatos } from './rutas/perfil.js';
 import {
   atenderSala,
   configuracionSalaDesdeEntorno,
@@ -156,6 +157,24 @@ export function crearApi(opciones: OpcionesServidor = {}): {
         { metodo: peticion.method, url: peticion.url, cabeceras: peticion.headers },
         configuracion,
         lector,
+        resolverSesion,
+      ),
+    );
+  }
+
+  // Perfil: el ajuste de presencia (ADR-026). Solo exige sesión, como el resto de
+  // rutas de datos desde «Acceso al panel»; sin conexión a la base no existe.
+  if (conexion) {
+    const puertoPerfil = puertoPerfilConBaseDeDatos(conexion.cliente);
+    manejadores.push(async (peticion) =>
+      atenderPerfil(
+        {
+          metodo: peticion.method,
+          url: peticion.url,
+          cabeceras: peticion.headers,
+          cuerpo: peticion.method === 'PATCH' ? await leerJson(peticion) : undefined,
+        },
+        puertoPerfil,
         resolverSesion,
       ),
     );
