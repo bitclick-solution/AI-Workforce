@@ -16,7 +16,10 @@
     "demo:sala": "tsx src/demo-sala.ts",
     "demo:aprendizaje": "tsx src/demo-aprendizaje.ts",
     "aprendizaje": "tsx src/demo-aprendizaje-cli.ts",
-    "comprobar:centrifugo": "tsx src/comprobar-centrifugo.ts"
+    "comprobar:centrifugo": "tsx src/comprobar-centrifugo.ts",
+    "bitclick:sembrar": "tsx src/bitclick/sembrar.ts",
+    "bitclick:cobros": "tsx src/bitclick/lanzar-cobros.ts",
+    "bitclick:informe": "tsx src/bitclick/informe-semanal.ts"
   },
   "dependencies": {
     "@ai-sdk/provider": "catalog:",

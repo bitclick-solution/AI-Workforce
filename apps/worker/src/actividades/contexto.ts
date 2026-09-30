@@ -132,6 +132,56 @@ export function registroConDemostracionPorProceso(opciones: {
 }
 
 /**
+ * Registro que lanza el conector de Odoo como proceso hijo (ADR-024).
+ *
+ * Mismo camino que `registroConDemostracionPorProceso`: el gateway arranca
+ * `@aiw/connector-odoo` con `AIW_CONECTOR_ODOO=1` y le inyecta la clave de API en
+ * el entorno del hijo. La URL, la base y el usuario de Odoo no son secretos —los
+ * resuelve `conector.referencia_secreto`, que solo cubre la clave— así que viajan
+ * como el resto del entorno del hijo, tomados de las variables `ODOO_URL`,
+ * `ODOO_BASE` y `ODOO_USUARIO` del proceso que registra este conector.
+ */
+/** Variable del entorno del hijo por la que viaja la clave de API de Odoo. */
+export const VARIABLE_SECRETO_ODOO = 'ODOO_CLAVE_API';
+
+/**
+ * Entorno no secreto del hijo de Odoo: la bandera de funcionalidad más la URL, la
+ * base y el usuario, tal como los tenga el proceso que registra el conector.
+ * Función pura y aparte de `registroDeOdooPorProceso` para poder probarla sin
+ * lanzar ningún proceso de verdad.
+ */
+export function entornoDelHijoDeOdoo(
+  entorno: Record<string, string | undefined>,
+): Record<string, string> {
+  const odooMcpUrl = entorno['ODOO_MCP_URL'];
+  return {
+    AIW_CONECTOR_ODOO: '1',
+    ODOO_URL: entorno['ODOO_URL'] ?? '',
+    ODOO_BASE: entorno['ODOO_BASE'] ?? '',
+    ODOO_USUARIO: entorno['ODOO_USUARIO'] ?? '',
+    ...(odooMcpUrl === undefined ? {} : { ODOO_MCP_URL: odooMcpUrl }),
+  };
+}
+
+export function registroDeOdooPorProceso(opciones: {
+  nombreConector: string;
+  comando: string;
+  argumentos: readonly string[];
+  directorio?: string | undefined;
+  entorno: Record<string, string | undefined>;
+}): RegistroDeServidores {
+  return new RegistroDeServidores().registrar(opciones.nombreConector, (secreto) =>
+    conexionPorProcesoHijo(opciones.nombreConector, secreto, {
+      comando: opciones.comando,
+      argumentos: opciones.argumentos,
+      variableDelSecreto: VARIABLE_SECRETO_ODOO,
+      ...(opciones.directorio === undefined ? {} : { directorio: opciones.directorio }),
+      entorno: entornoDelHijoDeOdoo(opciones.entorno),
+    }),
+  );
+}
+
+/**
  * Registro que habla con un conector ya arrancado, por HTTP transmisible.
  *
  * La credencial va en la cabecera de autorización, que la pone el gateway al abrir

@@ -35,8 +35,17 @@ export default tseslint.config(
   {
     // Scripts de operación y ficheros de configuración pueden escribir en consola.
     // Los guiones de demostración (`demo-*.ts`) también: su salida por consola es
-    // justo lo que se demuestra, y viven junto al código que enseñan.
-    files: ['scripts/**', '*.config.{js,ts,mjs}', 'apps/*/src/main.ts', 'apps/*/src/demo-*.ts'],
+    // justo lo que se demuestra, y viven junto al código que enseñan. Los guiones de
+    // operación de Bitclick (`bitclick/`, `comprobar-*.ts`, ADR-024) son la misma
+    // clase de guion: su salida por consola es la constancia que pide el runbook.
+    files: [
+      'scripts/**',
+      '*.config.{js,ts,mjs}',
+      'apps/*/src/main.ts',
+      'apps/*/src/demo-*.ts',
+      'apps/*/src/bitclick/*.ts',
+      'connectors/*/src/comprobar-*.ts',
+    ],
     languageOptions: { globals: globals.node },
     rules: { 'no-console': 'off' },
   },

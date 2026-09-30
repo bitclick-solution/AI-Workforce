@@ -18,6 +18,7 @@
     "iniciar": "tsx src/servidor.ts",
     "start": "node dist/servidor.js",
     "demo:odoo": "tsx src/demo-odoo.ts",
+    "comprobar:registros-compartidos": "tsx src/comprobar-registros-compartidos.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "clean": "rm -rf dist coverage .turbo"
