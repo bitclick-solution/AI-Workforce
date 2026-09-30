@@ -5,8 +5,9 @@
  * escrituras, Sonnet 5 por defecto, Haiku 4.5 para moderador/clasificación/rutinas.
  * El identificador real cambia con la plataforma:
  *
- * - **Vertex UE** (proveedor principal, ADR-023): identificador desnudo del Model
- *   Garden de Anthropic en la multirregión europea (`docs.claude.com/en/build-with-claude/claude-on-vertex-ai`,
+ * - **Vertex UE** (respaldo por defecto, ADR-023 — implementado, inactivo hasta
+ *   que Google conceda cuota): identificador desnudo del Model Garden de
+ *   Anthropic en la multirregión europea (`docs.claude.com/en/build-with-claude/claude-on-vertex-ai`,
  *   comprobado el 2026-09-29), sin prefijo. Excepción: Haiku 4.5 se publica en
  *   Vertex solo con la versión fechada `@20251001` (la misma forma que Opus 4.5,
  *   `claude-opus-4-5@20251101`, en la tabla oficial de identificadores de Agent
@@ -14,7 +15,8 @@
  *   excepción ya existente de Haiku 4.5 en Bedrock: no es una sustitución de
  *   modelo, es la única forma que publica la plataforma para ese modelo.
  * - **Primera parte**: identificador desnudo, nunca con fecha (ADR-018).
- * - **Bedrock UE** (respaldo, ADR-023): depende del camino. El endpoint de
+ * - **Bedrock UE** (proveedor principal por defecto, ADR-023 — ni Bedrock ni
+ *   Vertex tienen cuota de la familia 5 hoy): depende del camino. El endpoint de
  *   Mensajes (`bedrock-mantle`) usaría el identificador con el prefijo
  *   `anthropic.`, pero hoy la cuenta no tiene acceso a ningún modelo de Anthropic
  *   por ese camino en las regiones de la UE contratadas (403 «not available for
@@ -41,11 +43,11 @@
  * falta aquí — ver `docs/runbooks/modelos-funciones-ausentes.md`.
  *
  * El papel que guarda la versión de puesto sigue siendo `opus5`/`sonnet5`
- * (ADR-018): tanto el cambio de proveedor principal (ADR-023) como el cambio de
- * modelo cuando Bedrock conceda acceso a la familia 5 son cambios de esta tabla o
- * de la variable de entorno del proveedor, nunca una promoción de versión de
- * puesto — la versión de puesto nunca supo con qué plataforma ni con qué
- * identificador se sirvió.
+ * (ADR-018): tanto el cambio de proveedor (ADR-023) como el cambio de modelo
+ * cuando Bedrock o Vertex concedan cuota de la familia 5 son cambios de esta
+ * tabla o de la variable de entorno del proveedor, nunca una promoción de
+ * versión de puesto — la versión de puesto nunca supo con qué plataforma ni con
+ * qué identificador se sirvió.
  */
 import type { PapelModelo, PlataformaModelo } from '@aiw/domain';
 
@@ -57,7 +59,8 @@ const IDENTIFICADOR_DESNUDO_OBJETIVO: Record<PapelModelo, string> = {
 };
 
 /**
- * Identificadores reales de Vertex UE (ADR-023, proveedor principal), en la
+ * Identificadores reales de Vertex UE (ADR-023, respaldo por defecto — sin
+ * cuota concedida hoy, ver `docs/runbooks/vertex-wif.md`), en la
  * multirregión europea (`AIW_VERTEX_REGION_UE=eu`). Fuente: tabla de
  * identificadores de Agent Platform de `docs.claude.com/en/build-with-claude/claude-on-vertex-ai`
  * (comprobada el 2026-09-29) — pendientes de verificar con una llamada real desde

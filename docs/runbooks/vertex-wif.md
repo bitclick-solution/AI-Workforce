@@ -2,13 +2,18 @@ VIGENTE
 
 # Runbook · Vertex AI UE, federación de identidades de GitHub y cambio de proveedor en una línea
 
-Pasos para que Jesús active y mantenga Vertex AI en la UE como proveedor
-principal de `@aiw/models` (ADR-023, enmienda del ADR-017), cómo cambiar de
-proveedor principal o de respaldo sin tocar código, y cómo cambiar un modelo
-cuando salga uno nuevo en la multirregión europea. El Constructor no crea nada
-de esto en Google Cloud ni pide ni ve ninguna clave: solo deja escrito qué
-crear y con qué forma — igual que `docs/runbooks/bedrock-iam-oidc.md` para
-Bedrock.
+Vertex AI UE está implementado y documentado detrás del puerto de
+`@aiw/models`, pero **inactivo**: ni Bedrock ni Vertex conceden hoy cuota de
+Opus 5.5/Sonnet 5 a la cuenta de Bitclick (ADR-023, revisado el 2026-09-29), así
+que el cliente clásico de Bedrock UE sigue siendo el proveedor por defecto
+(`docs/runbooks/modelos-funciones-ausentes.md`, `bedrock-iam-oidc.md`). Este
+runbook deja escrito qué crear en Google Cloud y con qué forma, y el bloque de
+comandos de Cloud Shell que verifica los tres modelos con una llamada real
+—para el día que Google conceda la cuota, no para ejecutar ahora—. El
+Constructor no crea nada de esto en Google Cloud ni pide ni ve ninguna clave.
+También explica cómo cambiar de proveedor principal o de respaldo sin tocar
+código, y cómo cambiar un modelo cuando salga uno nuevo en la multirregión
+europea.
 
 **Fuente de los datos de esta página**: `docs.claude.com/en/build-with-claude/claude-on-vertex-ai`
 (comprobado el 2026-09-29). No se ha podido comprobar `docs.cloud.google.com`
@@ -78,12 +83,14 @@ Bitclick (`gcloud config get-value project` y
 `gcloud projects describe <GCP_PROJECT_ID> --format='value(projectNumber)'`
 los dan). Todo desde Cloud Shell o `gcloud` local con ese proyecto activo.
 
-### 1. Vertex AI y los tres modelos, ya hecho
+### 1. Vertex AI y los tres modelos, activados — sin cuota todavía
 
 Confirmado por Jesús el 29-9-2026: proyecto con Vertex AI activado y Opus 5.5,
-Sonnet 5 y Haiku 4.5 concedidos en la multirregión europea del Model Garden de
-Anthropic. Nada que crear aquí; el bloque de comandos del final de esta
-rebanada lo verifica con una llamada real.
+Sonnet 5 y Haiku 4.5 visibles en el Model Garden de Anthropic en la
+multirregión europea. Activado no es lo mismo que con cuota: la cuenta no
+tiene cuota concedida para invocarlos todavía, igual que Bedrock
+(`docs/adr/ADR-023.md`). Nada que crear aquí — cuando Google conceda la cuota,
+el bloque de comandos de la sección 5 lo confirma con una llamada real.
 
 ### 2. Grupo y proveedor de identidad de GitHub (WIF)
 
@@ -154,32 +161,71 @@ repositorio:
 
 Ninguna es un secreto: sin la condición de atributo del paso 2, ninguna de
 ellas sirve para nada fuera de una ejecución sobre `main` de este repositorio.
-`ci.yml` ya tiene el job **Vertex UE · integración**, con
+`ci.yml` ya tiene el job **Vertex UE · integración (manual, sin cuota)**, con
 `permissions: id-token: write` y `google-github-actions/auth` asumiendo la
 cuenta de servicio por federación de identidades. En cuanto exista
 `AIW_VERTEX_WIF_PROVIDER`, ese job deja de decir «nada que probar» y ejecuta
 `pnpm --filter @aiw/models test:integracion:vertex` y los dos casos dorados
-reales de Cobros y Conciliación en el cron semanal o al lanzarlo a mano desde
-la pestaña **Actions**.
+reales de Cobros y Conciliación — solo al lanzarlo a mano desde la pestaña
+**Actions**, sin cron semanal (a diferencia del de Bedrock): no tiene sentido
+pagar una comprobación periódica de un proveedor sin cuota. Añadir el mismo
+`schedule` que usa el job de Bedrock a `vertex-integracion` en `ci.yml` es el
+único cambio cuando Google conceda la cuota.
+
+### 5. Verificar los tres modelos con una llamada real (para cuando haya cuota)
+
+**No ejecutar todavía**: sin cuota concedida, esta llamada falla con un error
+de cuota o de acceso, no con nada que arreglar en el código. Queda aquí para
+cuando Google la conceda — es el mismo bloque que cierra el criterio de hecho
+pendiente «los identificadores se verifican con una llamada real, nunca de
+memoria». Sustituye `<GCP_PROJECT_ID>` y ejecútalo desde Cloud Shell, con el
+proyecto de Bitclick activo:
+
+```bash
+PROJECT_ID="<GCP_PROJECT_ID>"
+LOCATION="eu"
+TOKEN=$(gcloud auth print-access-token)
+
+for MODEL_ID in claude-opus-5-5 claude-sonnet-5 "claude-haiku-4-5@20251001"; do
+  echo "=== ${MODEL_ID} ==="
+  curl -s "https://aiplatform.${LOCATION}.rep.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/anthropic/models/${MODEL_ID}:rawPredict" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "anthropic_version": "vertex-2023-10-16",
+      "messages": [{"role": "user", "content": "Responde solo: Pong"}],
+      "max_tokens": 16
+    }' | jq .
+  echo
+done
+```
+
+La salida no lleva secretos (solo el identificador del modelo y su respuesta):
+puede pegarse tal cual en una sesión del Constructor para confirmar los tres
+identificadores de `IDENTIFICADOR_VERTEX_UE` antes de darlos por buenos para
+tráfico de un tenant real. Un `Pong` de cada modelo confirma el identificador y
+la ubicación a la vez; un error de cuota confirma que sigue sin haberla.
 
 ## Cómo cambiar de proveedor principal (o de respaldo) en una línea
 
 Todo lo que ve un puesto es `puertoAnthropicPrincipalDesdeEntorno(papel,
 configuracion)` (`packages/models/src/proveedor.ts`), nunca
 `clienteVertexDesdeEntorno`/`clienteBedrockDesdeEntorno` a mano. Esa función lee
-`AIW_PROVEEDOR_MODELOS` (por defecto `vertex-ue`, ADR-023):
+`AIW_PROVEEDOR_MODELOS` (por defecto `bedrock-ue`, ADR-023 — sin cuota, Vertex
+no sirve tráfico real todavía aunque se anule la variable):
 
 ```bash
-# Volver a Bedrock como principal (por ejemplo, si Vertex UE tiene una incidencia,
-# o hasta que Bedrock conceda cuota de Opus 5.5/Sonnet 5 y quieras compararlos):
+# Por defecto: Bedrock clásico como principal (ninguna cuota concedida hoy).
 AIW_PROVEEDOR_MODELOS=bedrock-ue
 
-# Volver a Vertex UE como principal:
+# Probar Vertex UE a mano (por ejemplo, en cuanto Google conceda la cuota, o
+# para repetir el bloque de comandos de Cloud Shell de la sección 5 con el
+# cliente real del paquete en vez de curl):
 AIW_PROVEEDOR_MODELOS=vertex-ue
 ```
 
 Lo mismo para el respaldo, con `AIW_PROVEEDOR_MODELOS_RESPALDO` (por defecto
-`bedrock-ue`). Ningún cambio de código en ninguno de los dos casos — solo la
+`vertex-ue`). Ningún cambio de código en ninguno de los dos casos — solo la
 variable de entorno del `.env` o del secreto de despliegue que corresponda.
 `puertoAnthropicRespaldoDesdeEntorno` construye el puerto del proveedor de
 respaldo con la misma firma: queda listo como bloque de construcción para
@@ -199,7 +245,7 @@ está, comprobado el 2026-09-29 — ADR-023 lo señala explícitamente):
    de identificadores de Agent Platform
    (`docs.claude.com/en/build-with-claude/claude-on-vertex-ai`) — con una
    llamada real desde el proyecto de Bitclick, no de memoria (repite el
-   bloque de comandos de Cloud Shell del final de esta rebanada, cambiando el
+   bloque de comandos de Cloud Shell de la sección 5, cambiando el
    identificador del modelo).
 2. En `packages/models/src/identificadores.ts`, cambia una fila de
    `IDENTIFICADOR_VERTEX_UE` — por ejemplo, `sonnet5: 'claude-sonnet-5-5'` en

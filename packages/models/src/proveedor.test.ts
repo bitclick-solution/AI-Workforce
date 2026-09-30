@@ -10,9 +10,9 @@ import {
 } from './proveedor.js';
 
 describe('proveedor principal y de respaldo (ADR-023): cambiar de proveedor es cambiar una línea', () => {
-  it('por defecto, el principal es vertex-ue y el respaldo bedrock-ue', () => {
-    expect(proveedorPrincipalDesdeEntorno({})).toBe('vertex-ue');
-    expect(proveedorRespaldoDesdeEntorno({})).toBe('bedrock-ue');
+  it('por defecto, el principal es bedrock-ue y el respaldo vertex-ue (sin cuota hoy)', () => {
+    expect(proveedorPrincipalDesdeEntorno({})).toBe('bedrock-ue');
+    expect(proveedorRespaldoDesdeEntorno({})).toBe('vertex-ue');
   });
 
   it('AIW_PROVEEDOR_MODELOS y AIW_PROVEEDOR_MODELOS_RESPALDO anulan el valor por defecto', () => {
@@ -25,7 +25,7 @@ describe('proveedor principal y de respaldo (ADR-023): cambiar de proveedor es c
   });
 
   it('un valor vacío (variable de repositorio sin definir en la CI) cae al valor por defecto', () => {
-    expect(proveedorPrincipalDesdeEntorno({ AIW_PROVEEDOR_MODELOS: '' })).toBe('vertex-ue');
+    expect(proveedorPrincipalDesdeEntorno({ AIW_PROVEEDOR_MODELOS: '' })).toBe('bedrock-ue');
   });
 
   it('un proveedor no reconocido lanza con el nombre exacto de la variable y los valores admitidos', () => {
@@ -52,16 +52,16 @@ describe('proveedor principal y de respaldo (ADR-023): cambiar de proveedor es c
   it('puertoAnthropicPrincipalDesdeEntorno y puertoAnthropicRespaldoDesdeEntorno despachan al proveedor correspondiente', () => {
     expect(() =>
       puertoAnthropicPrincipalDesdeEntorno('sonnet5', { esfuerzoPorClasePaso: {} }, {}),
-    ).toThrow(/AIW_VERTEX_REGION_UE/);
+    ).toThrow(/AIW_BEDROCK_REGION_UE/);
     expect(() =>
       puertoAnthropicRespaldoDesdeEntorno('sonnet5', { esfuerzoPorClasePaso: {} }, {}),
-    ).toThrow(/AIW_BEDROCK_REGION_UE/);
+    ).toThrow(/AIW_VERTEX_REGION_UE/);
     expect(() =>
       puertoAnthropicPrincipalDesdeEntorno(
         'sonnet5',
         { esfuerzoPorClasePaso: {} },
-        { AIW_PROVEEDOR_MODELOS: 'bedrock-ue' },
+        { AIW_PROVEEDOR_MODELOS: 'vertex-ue' },
       ),
-    ).toThrow(/AIW_BEDROCK_REGION_UE/);
+    ).toThrow(/AIW_VERTEX_REGION_UE/);
   });
 });

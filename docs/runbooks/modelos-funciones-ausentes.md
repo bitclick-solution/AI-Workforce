@@ -179,17 +179,21 @@ endpoint de Mensajes, o al revés.
    `clientes.test.ts`) a los identificadores objetivo y repite el paso 7 de
    arriba con los casos dorados.
 
-## Activar el proveedor real de Vertex UE (proveedor principal, ADR-023)
+## Activar el proveedor real de Vertex UE (implementado, sin cuota — ADR-023)
 
 Estado a 2026-09-29: Jesús ha habilitado Vertex AI en el proyecto de Google
-Cloud de Bitclick, con Opus 5.5, Sonnet 5 y Haiku 4.5 activos en la
-multirregión europea (`eu`). Pasos completos, con los comandos de Cloud Shell
-y la política mínima de la cuenta de servicio de la CI:
+Cloud de Bitclick, con Opus 5.5, Sonnet 5 y Haiku 4.5 visibles en el Model
+Garden de la multirregión europea (`eu`) — pero, igual que Bedrock, sin cuota
+concedida todavía para invocarlos. El ADR-023 vuelve al cliente clásico de
+Bedrock UE como proveedor por defecto (`AIW_PROVEEDOR_MODELOS=bedrock-ue`);
+Vertex UE queda implementado y documentado, listo para cuando Google conceda
+la cuota. Pasos completos, con los comandos de Cloud Shell (para entonces, no
+para ejecutar ahora) y la política mínima de la cuenta de servicio de la CI:
 `docs/runbooks/vertex-wif.md`. Resumen:
 
-1. Proyecto de Google Cloud con Vertex AI activado y acceso concedido a
-   Opus 5.5, Sonnet 5 y Haiku 4.5 en la multirregión `eu` del Model Garden de
-   Anthropic en Vertex — ya hecho.
+1. Proyecto de Google Cloud con Vertex AI activado y Opus 5.5, Sonnet 5 y
+   Haiku 4.5 visibles en el Model Garden en la multirregión `eu` — ya hecho.
+   Cuota: pendiente de que Google la conceda.
 2. Credenciales de Google, nunca una clave de API (el SDK de Vertex no la
    admite): `gcloud auth application-default login` en desarrollo, o una
    cuenta de servicio con el rol mínimo en producción; en GitHub Actions, sin
@@ -201,11 +205,13 @@ y la política mínima de la cuenta de servicio de la CI:
    (`eu` o una región concreta `europe-*`); antes de eso, o con cualquier otra
    ubicación, lanza con el nombre exacto de lo que falta o de por qué la
    rechaza.
-4. Cambiar de proveedor principal entre Vertex UE y Bedrock UE (ADR-023) es
-   cambiar `AIW_PROVEEDOR_MODELOS` (por defecto `vertex-ue`), sin tocar
+4. Cambiar de proveedor principal entre Bedrock UE y Vertex UE (ADR-023) es
+   cambiar `AIW_PROVEEDOR_MODELOS` (por defecto `bedrock-ue`), sin tocar
    código — `packages/models/src/proveedor.ts`, detallado en
-   `docs/runbooks/vertex-wif.md`.
-5. En cuanto la prueba de integración
+   `docs/runbooks/vertex-wif.md`. El job **Vertex UE · integración** en
+   `ci.yml` es solo manual (sin el cron semanal de Bedrock) hasta que haya
+   cuota.
+5. En cuanto haya cuota y la prueba de integración
    (`packages/models/src/adaptadores/anthropic.vertex.integracion.test.ts`)
    pase en la CI, repite los casos dorados de Cobros y de Conciliación contra
    el cliente real

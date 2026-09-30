@@ -93,18 +93,23 @@ jobs:
           echo "Ver docs/runbooks/bedrock-iam-oidc.md."
 
   vertex-integracion:
-    name: Vertex UE · integración (nocturna o manual)
-    # Vertex UE es el proveedor principal (ADR-023): mismo motivo que Bedrock para
-    # no correr en cada PR (no pagar modelos en cada revisión) y solo sobre main —
-    # la condición de confianza de la federación de identidades de aiw-ci-vertex
-    # solo admite ese ref (docs/runbooks/vertex-wif.md), así que en un PR fallaría
-    # al cambiar el token de identidad de GitHub por credenciales de Google Cloud.
+    name: Vertex UE · integración (manual, sin cuota)
+    # Vertex UE queda implementado y documentado, pero inactivo (ADR-023, revisado
+    # el 29-9-2026: Google tampoco concede cuota de la familia 5 — Bedrock UE
+    # clásico vuelve a ser el principal). Por eso este job es solo manual, sin el
+    # cron semanal que sí lleva "Bedrock UE · integración": no tiene sentido pagar
+    # una comprobación semanal de un proveedor que hoy no puede completar ninguna
+    # petición. En cuanto Google conceda la cuota, añadir aquí el mismo evento
+    # 'schedule' que usa el job de Bedrock es el único cambio (docs/runbooks/vertex-wif.md).
+    # Solo sobre main — la condición de confianza de la federación de identidades
+    # de aiw-ci-vertex solo admite ese ref, así que en un PR fallaría al cambiar el
+    # token de identidad de GitHub por credenciales de Google Cloud.
     # Sin credenciales guardadas: la cuenta de servicio aiw-ci-vertex se asume por
     # federación de identidades (WIF), como con Bedrock y OIDC.
     # Sin AIW_VERTEX_WIF_PROVIDER todavía, el job no falla: solo dice que no hay
     # nada que probar.
     if: |
-      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main'
     runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
     permissions:

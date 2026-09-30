@@ -100,7 +100,8 @@ function comprobarResidenciaVertexUE(region: string): void {
 }
 
 /**
- * Cliente real de Vertex UE (ADR-017, ADR-023: proveedor principal). Necesita
+ * Cliente real de Vertex UE (ADR-017, ADR-023: implementado, respaldo por
+ * defecto — inactivo hasta que Google conceda cuota de la familia 5). Necesita
  * `AIW_VERTEX_REGION_UE` y `AIW_VERTEX_PROJECT_ID`. Sin clave de API: el SDK de
  * Vertex se autentica siempre con `google-auth-library` (credenciales de
  * aplicación por defecto de Google o cuenta de servicio) — ver

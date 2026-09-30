@@ -1,13 +1,19 @@
 /**
- * Proveedor principal y proveedor de respaldo de `@aiw/models` (ADR-023).
+ * Proveedor principal y proveedor de respaldo de `@aiw/models` (ADR-023, revisado
+ * el 29-9-2026: Vertex UE tampoco tiene cuota de la familia 5, así que Bedrock UE
+ * clásico vuelve a ser el proveedor por defecto; Vertex queda implementado y
+ * documentado, pero inactivo hasta que Google conceda la cuota).
  *
  * Cambiar de proveedor es cambiar el valor de una variable de entorno, nunca
  * código: quien construye el puerto de un papel llama a
  * `puertoAnthropicPrincipalDesdeEntorno` (o a `puertoAnthropicRespaldoDesdeEntorno`
  * para el respaldo) en vez de elegir a mano `clienteVertexDesdeEntorno` /
- * `clienteBedrockDesdeEntorno` y la `plataforma` que le corresponde. `AIW_PROVEEDOR_MODELOS`
- * decide el principal (por defecto `vertex-ue`, ADR-023) y
- * `AIW_PROVEEDOR_MODELOS_RESPALDO` el de respaldo (por defecto `bedrock-ue`).
+ * `clienteBedrockDesdeEntorno` y la `plataforma` que le corresponde.
+ * `AIW_PROVEEDOR_MODELOS` decide el principal (por defecto `bedrock-ue`, ADR-023)
+ * y `AIW_PROVEEDOR_MODELOS_RESPALDO` el de respaldo (por defecto `vertex-ue`, hoy
+ * sin cuota — solo queda listo para cuando la tenga). Cuando Bedrock o Vertex
+ * concedan cuota, volver a Vertex como principal (o cualquier otra combinación) es
+ * cambiar el valor de `AIW_PROVEEDOR_MODELOS`, nunca código.
  *
  * La primera parte no es un proveedor elegible aquí: sigue reservada a los usos
  * internos sin datos de clientes del ADR-017 (`clientePrimeraParteDesdeEntorno`),
@@ -54,14 +60,14 @@ function proveedorDesdeEntorno(
   return valor;
 }
 
-/** Proveedor principal (ADR-023): `AIW_PROVEEDOR_MODELOS`, por defecto `vertex-ue`. */
+/** Proveedor principal (ADR-023): `AIW_PROVEEDOR_MODELOS`, por defecto `bedrock-ue`. */
 export function proveedorPrincipalDesdeEntorno(entorno: Entorno = process.env): ProveedorModelos {
-  return proveedorDesdeEntorno(entorno, 'AIW_PROVEEDOR_MODELOS', 'vertex-ue');
+  return proveedorDesdeEntorno(entorno, 'AIW_PROVEEDOR_MODELOS', 'bedrock-ue');
 }
 
-/** Proveedor de respaldo (ADR-023): `AIW_PROVEEDOR_MODELOS_RESPALDO`, por defecto `bedrock-ue`. */
+/** Proveedor de respaldo (ADR-023): `AIW_PROVEEDOR_MODELOS_RESPALDO`, por defecto `vertex-ue`. */
 export function proveedorRespaldoDesdeEntorno(entorno: Entorno = process.env): ProveedorModelos {
-  return proveedorDesdeEntorno(entorno, 'AIW_PROVEEDOR_MODELOS_RESPALDO', 'bedrock-ue');
+  return proveedorDesdeEntorno(entorno, 'AIW_PROVEEDOR_MODELOS_RESPALDO', 'vertex-ue');
 }
 
 /** La `PlataformaModelo` (vocabulario de `identificadores.ts`) de un proveedor. */
@@ -96,7 +102,7 @@ function puertoDelProveedorDesdeEntorno(
 
 /**
  * Puerto de Anthropic para un papel, con el proveedor **principal** que diga
- * `AIW_PROVEEDOR_MODELOS` (por defecto `vertex-ue`, ADR-023). Es el punto de
+ * `AIW_PROVEEDOR_MODELOS` (por defecto `bedrock-ue`, ADR-023). Es el punto de
  * entrada que debe usar quien instala el puerto de un puesto: cambiar de
  * proveedor principal es cambiar esa variable, nunca esta llamada.
  */
@@ -115,10 +121,11 @@ export function puertoAnthropicPrincipalDesdeEntorno(
 
 /**
  * Puerto de Anthropic para un papel, con el proveedor de **respaldo** que diga
- * `AIW_PROVEEDOR_MODELOS_RESPALDO` (por defecto `bedrock-ue`, ADR-023). Bloque de
- * construcción para quien decida, en su propia rebanada, cómo conmutar del
- * principal al respaldo en tiempo de ejecución (por ejemplo el bucle del agente);
- * esta rebanada no cablea esa conmutación automática.
+ * `AIW_PROVEEDOR_MODELOS_RESPALDO` (por defecto `vertex-ue`, ADR-023 — sin cuota
+ * hoy, ver el runbook). Bloque de construcción para quien decida, en su propia
+ * rebanada, cómo conmutar del principal al respaldo en tiempo de ejecución (por
+ * ejemplo el bucle del agente); esta rebanada no cablea esa conmutación
+ * automática.
  */
 export function puertoAnthropicRespaldoDesdeEntorno(
   papel: PapelModelo,

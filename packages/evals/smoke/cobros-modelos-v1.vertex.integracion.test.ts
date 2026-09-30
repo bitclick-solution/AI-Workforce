@@ -5,7 +5,8 @@
  *
  * Sin `AIW_VERTEX_REGION_UE`/`AIW_VERTEX_PROJECT_ID` se salta, igual que
  * `anthropic.vertex.integracion.test.ts`: nunca corre en un PR normal, solo en el
- * job **Vertex UE · integración** (`ci.yml`), semanal o manual, en `main`.
+ * job **Vertex UE · integración** (`ci.yml`), manual en `main` (ADR-023, revisado
+ * el 29-9-2026: sin cuota de Google todavía, este job no tiene cron semanal).
  *
  * `evaluarCasoDoradoEstructurado` (`@aiw/evals`) compara por igualdad exacta de
  * JSON, pensado para el servidor simulado que devuelve literalmente el
