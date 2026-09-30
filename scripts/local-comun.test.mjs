@@ -1,14 +1,23 @@
 // Pruebas de la lógica que depende de la plataforma en local-comun.mjs (fallos 1,
-// 2 y 6 de «demo local en Windows»): resolución de pnpm, parada del árbol de
-// procesos y prioridad del entorno. `process.platform` es siempre inyectable,
-// así que se prueban los dos sentidos (Windows y POSIX) sin necesitar Windows.
+// 2 y 6 de «demo local en Windows», y criterio 2 y 3 del segundo seguimiento del
+// Probador): resolución de pnpm, parada del árbol de procesos (y del puerto que
+// deja huérfano), reconocimiento de servicios ya vivos y prioridad del entorno.
+// `process.platform` es siempre inyectable, así que se prueban los dos sentidos
+// (Windows y POSIX) sin necesitar Windows.
 import { describe, expect, it, vi } from 'vitest';
 
 import {
   comandoPnpm,
   entornoDeProceso,
+  extraerSemillaSala,
+  matarPid,
   pararArbolDeProcesos,
+  pararServicio,
+  pidsDeNetstat,
+  pidsEnPuerto,
+  procesoVivo,
   separarDelPadre,
+  servicioVivo,
 } from './local-comun.mjs';
 
 describe('comandoPnpm', () => {
@@ -100,6 +109,241 @@ describe('pararArbolDeProcesos', () => {
     const ejecutar = vi.fn(() => ({ status: 1, stdout: '', stderr: 'acceso denegado' }));
     const resultado = pararArbolDeProcesos(4242, { plataforma: 'win32', ejecutar });
     expect(resultado).toEqual({ parado: false, motivo: 'acceso denegado' });
+  });
+});
+
+describe('procesoVivo', () => {
+  it('en POSIX, señal 0 sin lanzar cuenta como vivo', () => {
+    const matar = vi.fn();
+    expect(procesoVivo(4242, { plataforma: 'linux', matar })).toBe(true);
+    expect(matar).toHaveBeenCalledWith(4242, 0);
+  });
+
+  it('en POSIX, ESRCH cuenta como no vivo', () => {
+    const matar = vi.fn(() => {
+      throw Object.assign(new Error('no existe'), { code: 'ESRCH' });
+    });
+    expect(procesoVivo(4242, { plataforma: 'linux', matar })).toBe(false);
+  });
+
+  it('en POSIX, un error que no es ESRCH (p. ej. EPERM) cuenta como vivo: existe pero no es nuestro', () => {
+    const matar = vi.fn(() => {
+      throw Object.assign(new Error('permiso denegado'), { code: 'EPERM' });
+    });
+    expect(procesoVivo(4242, { plataforma: 'linux', matar })).toBe(true);
+  });
+
+  it('en Windows, tasklist con el pid en la salida cuenta como vivo', () => {
+    const ejecutar = vi.fn(() => ({
+      status: 0,
+      stdout: 'node.exe                     4242 Console                    1     50.000 K',
+    }));
+    expect(procesoVivo(4242, { plataforma: 'win32', ejecutar })).toBe(true);
+  });
+
+  it('en Windows, tasklist sin ese pid cuenta como no vivo', () => {
+    const ejecutar = vi.fn(() => ({
+      status: 0,
+      stdout: 'INFO: No tasks are running which match the specified criteria.',
+    }));
+    expect(procesoVivo(4242, { plataforma: 'win32', ejecutar })).toBe(false);
+  });
+});
+
+describe('servicioVivo', () => {
+  it('sin puerto (el worker), basta con que el pid esté vivo', async () => {
+    const matar = vi.fn();
+    await expect(
+      servicioVivo({ pid: 4242, puerto: undefined }, { plataforma: 'linux', matar }),
+    ).resolves.toBe(true);
+  });
+
+  it('con puerto (api o web), hace falta que el pid esté vivo y el puerto siga escuchando', async () => {
+    const matar = vi.fn();
+    const comprobarPuerto = vi.fn().mockResolvedValue(true);
+    await expect(
+      servicioVivo({ pid: 4242, puerto: '3002' }, { plataforma: 'linux', matar, comprobarPuerto }),
+    ).resolves.toBe(true);
+    expect(comprobarPuerto).toHaveBeenCalledWith('3002');
+  });
+
+  it('con puerto pero ya sin nadie escuchando, no cuenta como vivo', async () => {
+    const matar = vi.fn();
+    const comprobarPuerto = vi.fn().mockResolvedValue(false);
+    await expect(
+      servicioVivo({ pid: 4242, puerto: '3002' }, { plataforma: 'linux', matar, comprobarPuerto }),
+    ).resolves.toBe(false);
+  });
+
+  it('con el pid ya muerto, no hace falta mirar el puerto', async () => {
+    const matar = vi.fn(() => {
+      throw Object.assign(new Error('no existe'), { code: 'ESRCH' });
+    });
+    const comprobarPuerto = vi.fn();
+    await expect(
+      servicioVivo({ pid: 4242, puerto: '3002' }, { plataforma: 'linux', matar, comprobarPuerto }),
+    ).resolves.toBe(false);
+    expect(comprobarPuerto).not.toHaveBeenCalled();
+  });
+});
+
+describe('extraerSemillaSala', () => {
+  it('extrae cola y tenantId de la línea SEMILLA_SALA', () => {
+    expect(extraerSemillaSala('algo\nSEMILLA_SALA tenant=abc cola=aiw-demo\nmás')).toEqual({
+      cola: 'aiw-demo',
+      tenantId: 'abc',
+    });
+  });
+
+  it('sin la línea SEMILLA_SALA, undefined', () => {
+    expect(extraerSemillaSala('arrancando...')).toBeUndefined();
+  });
+});
+
+describe('pidsDeNetstat', () => {
+  const SALIDA = [
+    '',
+    '  Proto  Direcciones locales    Direcciones remotas   Estado',
+    '  TCP    0.0.0.0:3000           0.0.0.0:0             LISTENING       9999',
+    '  TCP    127.0.0.1:3000         127.0.0.1:54321       ESTABLISHED     8888',
+    '  TCP    [::]:3000              [::]:0                LISTENING       9999',
+    '  TCP    0.0.0.0:3002           0.0.0.0:0             LISTENING       7777',
+    '',
+  ].join('\r\n');
+
+  it('recoge los pids en LISTENING de ese puerto, sin duplicar', () => {
+    expect(pidsDeNetstat(SALIDA, 3000)).toEqual([9999]);
+  });
+
+  it('no confunde un puerto con otro', () => {
+    expect(pidsDeNetstat(SALIDA, 3002)).toEqual([7777]);
+    expect(pidsDeNetstat(SALIDA, 4000)).toEqual([]);
+  });
+
+  it('ignora las líneas que no están escuchando', () => {
+    expect(pidsDeNetstat(SALIDA, 3000)).not.toContain(8888);
+  });
+});
+
+describe('pidsEnPuerto', () => {
+  it('en Windows llama a netstat y parsea su salida', () => {
+    const ejecutar = vi.fn(() => ({
+      status: 0,
+      stdout: '  TCP    0.0.0.0:3000    0.0.0.0:0    LISTENING    9999',
+    }));
+    expect(pidsEnPuerto(3000, { plataforma: 'win32', ejecutar })).toEqual([9999]);
+    expect(ejecutar).toHaveBeenCalledWith(
+      'netstat',
+      ['-ano', '-p', 'TCP'],
+      expect.objectContaining({ encoding: 'utf8' }),
+    );
+  });
+
+  it('en POSIX llama a lsof con el puerto', () => {
+    const ejecutar = vi.fn(() => ({ status: 0, stdout: '9999\n8888\n' }));
+    expect(pidsEnPuerto(3000, { plataforma: 'linux', ejecutar })).toEqual([9999, 8888]);
+    expect(ejecutar).toHaveBeenCalledWith(
+      'lsof',
+      ['-ti', 'tcp:3000', '-sTCP:LISTEN'],
+      expect.objectContaining({ encoding: 'utf8' }),
+    );
+  });
+
+  it('si la herramienta no está (o falla), no finge que el puerto está libre: devuelve []', () => {
+    const ejecutar = vi.fn(() => ({ status: 1, error: new Error('ENOENT') }));
+    expect(pidsEnPuerto(3000, { plataforma: 'linux', ejecutar })).toEqual([]);
+  });
+});
+
+describe('matarPid', () => {
+  it('en Windows manda taskkill /PID <pid> /F, sin /T (ya no es el árbol, es el pid concreto)', () => {
+    const ejecutar = vi.fn(() => ({ status: 0 }));
+    expect(matarPid(9999, { plataforma: 'win32', ejecutar })).toBe(true);
+    expect(ejecutar).toHaveBeenCalledWith(
+      'taskkill',
+      ['/PID', '9999', '/F'],
+      expect.objectContaining({ encoding: 'utf8' }),
+    );
+  });
+
+  it('en POSIX manda SIGKILL al pid concreto', () => {
+    const matar = vi.fn();
+    expect(matarPid(9999, { plataforma: 'linux', matar })).toBe(true);
+    expect(matar).toHaveBeenCalledWith(9999, 'SIGKILL');
+  });
+});
+
+describe('pararServicio', () => {
+  it('sin puerto, basta con que el árbol pare (el worker no escucha nada)', async () => {
+    const matar = vi.fn();
+    const resultado = await pararServicio(
+      { pid: 4242, puerto: undefined },
+      { plataforma: 'linux', matar },
+    );
+    expect(resultado).toEqual({ parado: true });
+  });
+
+  it('si el árbol ya falla, ni mira el puerto', async () => {
+    const matar = vi.fn(() => {
+      throw Object.assign(new Error('permiso denegado'), { code: 'EPERM' });
+    });
+    const comprobarPuerto = vi.fn();
+    const resultado = await pararServicio(
+      { pid: 4242, puerto: '3000' },
+      { plataforma: 'linux', matar, comprobarPuerto },
+    );
+    expect(resultado).toEqual({ parado: false, motivo: 'permiso denegado' });
+    expect(comprobarPuerto).not.toHaveBeenCalled();
+  });
+
+  it('con puerto y ya libre tras el árbol, parado sin más (el caso normal)', async () => {
+    const ejecutar = vi.fn(() => ({ status: 0 }));
+    const comprobarPuerto = vi.fn().mockResolvedValue(false);
+    const resultado = await pararServicio(
+      { pid: 4242, puerto: '3000' },
+      { plataforma: 'win32', ejecutar, comprobarPuerto },
+    );
+    expect(resultado).toEqual({ parado: true });
+  });
+
+  it('en Windows, taskkill /T dice parado pero el puerto sigue escuchando: remata a quien lo tiene (fallo real tras el #54)', async () => {
+    const ejecutar = vi
+      .fn()
+      // taskkill /PID 4242 /T /F (la raíz)
+      .mockReturnValueOnce({ status: 0 })
+      // netstat -ano -p TCP
+      .mockReturnValueOnce({
+        status: 0,
+        stdout: '  TCP    0.0.0.0:3000    0.0.0.0:0    LISTENING    9999',
+      })
+      // taskkill /PID 9999 /F (el nieto huérfano)
+      .mockReturnValueOnce({ status: 0 });
+    const comprobarPuerto = vi.fn().mockResolvedValue(true);
+    const resultado = await pararServicio(
+      { pid: 4242, puerto: 3000 },
+      { plataforma: 'win32', ejecutar, comprobarPuerto },
+    );
+    expect(resultado).toEqual({ parado: true });
+    expect(ejecutar).toHaveBeenNthCalledWith(
+      3,
+      'taskkill',
+      ['/PID', '9999', '/F'],
+      expect.objectContaining({ encoding: 'utf8' }),
+    );
+  });
+
+  it('si el puerto sigue ocupado y no se identifica a nadie, lo dice y no lo da por parado', async () => {
+    const ejecutar = vi
+      .fn()
+      .mockReturnValueOnce({ status: 0 }) // taskkill de la raíz
+      .mockReturnValueOnce({ status: 1, error: new Error('ENOENT') }); // netstat ausente
+    const comprobarPuerto = vi.fn().mockResolvedValue(true);
+    const resultado = await pararServicio(
+      { pid: 4242, puerto: 3000 },
+      { plataforma: 'win32', ejecutar, comprobarPuerto },
+    );
+    expect(resultado.parado).toBe(false);
+    expect(resultado.motivo).toMatch(/sigue escuchando/);
   });
 });
 

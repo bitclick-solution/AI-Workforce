@@ -4,7 +4,11 @@
 // resueltos, la parte de estas comprobaciones que sí se puede probar sin máquina.
 import { describe, expect, it } from 'vitest';
 
-import { evaluarVersionPnpm, puertoDeNuestroCompose } from './local-requisitos.mjs';
+import {
+  evaluarVersionPnpm,
+  procesoRegistradoEnPuerto,
+  puertoDeNuestroCompose,
+} from './local-requisitos.mjs';
 
 describe('evaluarVersionPnpm', () => {
   it('pnpm por debajo de 10 es un error', () => {
@@ -48,5 +52,26 @@ describe('puertoDeNuestroCompose', () => {
   it('un puerto que no publica nuestro Compose sigue siendo un conflicto', () => {
     expect(puertoDeNuestroCompose('5432', [])).toBe(false);
     expect(puertoDeNuestroCompose('3001', SERVICIOS)).toBe(false);
+  });
+});
+
+describe('procesoRegistradoEnPuerto', () => {
+  const PROCESOS = [
+    { nombre: 'worker-sala', pid: 111, puerto: undefined },
+    { nombre: 'api', pid: 222, puerto: '3002' },
+    { nombre: 'web', pid: 333, puerto: '3000' },
+  ];
+
+  it('encuentra el proceso registrado con ese puerto (criterio 3: segundo seguimiento)', () => {
+    expect(procesoRegistradoEnPuerto('3002', PROCESOS)).toEqual(PROCESOS[1]);
+    expect(procesoRegistradoEnPuerto(3000, PROCESOS)).toEqual(PROCESOS[2]);
+  });
+
+  it('un puerto que no coincide con lo registrado (p. ej. cambió AIW_API_PUERTO) no es nuestro', () => {
+    expect(procesoRegistradoEnPuerto('4000', PROCESOS)).toBeUndefined();
+  });
+
+  it('un proceso sin puerto propio (el worker) nunca coincide', () => {
+    expect(procesoRegistradoEnPuerto(undefined, PROCESOS)).toBeUndefined();
   });
 });

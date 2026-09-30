@@ -5,6 +5,7 @@
 import { spawnSync } from 'node:child_process';
 
 import {
+  composeArgs,
   leerEnv,
   puertoOcupado,
   raiz,
@@ -59,17 +60,26 @@ if (ejecutar('pnpm', ['install'], { env: { ...process.env, CI: 'true' } }).statu
 
 console.log('— Migrando la base');
 const env = leerEnv(rutaEnv);
-// Comprobación explícita en vez de dejar que la migración falle con un
-// `ECONNREFUSED` críptico: si acabas de `pnpm local:parar`, el Compose (y
-// Postgres con él) ya no está arriba, y `db:migrar` no lo arranca por su
-// cuenta — visto de verdad tras el #50, con el mensaje de error del cliente
-// de postgres sin decir qué hacer.
+// Si acabas de `pnpm local:parar`, el Compose (y Postgres con él) ya no está
+// arriba, y `db:migrar` no lo arranca por su cuenta: antes del segundo
+// seguimiento del Probador esto fallaba con un `ECONNREFUSED` críptico; barato
+// de arreglar del todo (mismo `docker compose ... up -d --wait` que ya usa
+// `local:arrancar`), así que se levanta aquí en vez de solo decir cómo hacerlo.
 const puertoPostgres = valorEntorno(env, 'POSTGRES_PORT', '5432');
 if (!(await puertoOcupado(puertoPostgres))) {
-  salir(
-    `Postgres no responde en el puerto ${puertoPostgres}: el Compose no está arriba. ` +
-      'Arráncalo con `pnpm local:arrancar` (o `pnpm dev:up` si solo quieres la infraestructura) y repite `pnpm local:actualizar`.',
-  );
+  console.log(`  Postgres no responde en el puerto ${puertoPostgres}: levantando el Compose.`);
+  if (ejecutar('docker', [...composeArgs, 'up', '-d', '--wait']).status !== 0) {
+    salir(
+      'El Compose no ha arrancado. Revisa el mensaje de arriba, o arráncalo a mano con ' +
+        '`pnpm local:arrancar` (o `pnpm dev:up` si solo quieres la infraestructura) y repite `pnpm local:actualizar`.',
+    );
+  }
+  if (!(await puertoOcupado(puertoPostgres))) {
+    salir(
+      `Postgres sigue sin responder en el puerto ${puertoPostgres} tras levantar el Compose. ` +
+        'Revisa `docker compose ... logs` y repite `pnpm local:actualizar`.',
+    );
+  }
 }
 try {
   const migracion = ejecutar('pnpm', ['--filter', '@aiw/db', 'db:migrar'], {

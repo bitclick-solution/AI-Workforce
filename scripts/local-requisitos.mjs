@@ -5,7 +5,15 @@ import { freemem, totalmem } from 'node:os';
 import { readFileSync, statfsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { comandoPnpm, estadoServicios, puertoOcupado, raiz, valorEntorno } from './local-comun.mjs';
+import {
+  comandoPnpm,
+  estadoServicios,
+  leerProcesos,
+  puertoOcupado,
+  raiz,
+  servicioVivo,
+  valorEntorno,
+} from './local-comun.mjs';
 
 const NODE_MAYOR_MINIMO = 22;
 const NODE_MAYOR_MAXIMO = 23; // exclusivo, como en package.json#engines
@@ -64,6 +72,17 @@ function packageManagerDeclarado() {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * El proceso registrado (api o web) cuyo puerto guardado coincide con este, o
+ * undefined. Un puerto que ya no coincide con lo registrado (por ejemplo,
+ * AIW_API_PUERTO cambió en .env desde el último arranque) no cuenta como propio:
+ * podría ser otro programa el que lo ocupa de verdad.
+ */
+export function procesoRegistradoEnPuerto(puerto, procesos) {
+  const texto = String(puerto);
+  return procesos.find((p) => String(p.puerto ?? '') === texto);
 }
 
 /**
@@ -148,16 +167,26 @@ export async function comprobarRequisitos(env, { puertoApi = '3002', puertoWeb =
   }
 
   const servicios = estadoServicios();
+  const procesos = leerProcesos();
   const ocupados = [];
   for (const [variable, porDefecto] of Object.entries(VARIABLE_POR_PUERTO)) {
     const puerto = valorEntorno(env, variable, porDefecto);
     if (puertoDeNuestroCompose(puerto, servicios)) continue;
     if (await puertoOcupado(puerto)) ocupados.push(`${puerto} (${variable})`);
   }
+  // Segundo seguimiento del Probador (criterio 3): con su propio api o web ya
+  // registrados y vivos, el puerto que ocupan es el suyo, no un conflicto — solo
+  // aborta por puertos de otros programas.
   const puertoApiReal = valorEntorno(env, 'AIW_API_PUERTO', puertoApi);
-  if (await puertoOcupado(puertoApiReal)) ocupados.push(`${puertoApiReal} (AIW_API_PUERTO)`);
+  const propioApi = procesoRegistradoEnPuerto(puertoApiReal, procesos);
+  if (!(propioApi && (await servicioVivo(propioApi))) && (await puertoOcupado(puertoApiReal))) {
+    ocupados.push(`${puertoApiReal} (AIW_API_PUERTO)`);
+  }
   const puertoWebReal = valorEntorno(env, 'AIW_WEB_PUERTO', puertoWeb);
-  if (await puertoOcupado(puertoWebReal)) ocupados.push(`${puertoWebReal} (AIW_WEB_PUERTO)`);
+  const propioWeb = procesoRegistradoEnPuerto(puertoWebReal, procesos);
+  if (!(propioWeb && (await servicioVivo(propioWeb))) && (await puertoOcupado(puertoWebReal))) {
+    ocupados.push(`${puertoWebReal} (AIW_WEB_PUERTO)`);
+  }
   if (ocupados.length > 0) {
     errores.push(
       `Puertos ocupados: ${ocupados.join(', ')}. Si es un arranque anterior, ejecuta \`pnpm local:parar\` primero.`,
