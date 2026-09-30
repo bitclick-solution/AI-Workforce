@@ -25,7 +25,7 @@ export const PAQUETE = {
 
 export type Paquete = typeof PAQUETE;
 
-export { identificadorDeModelo, nombreCanonico } from './identificadores.js';
+export { identificadorDeModelo, modeloDeTarifa, nombreCanonico } from './identificadores.js';
 export { esfuerzoParaClase } from './esfuerzo.js';
 export type {
   CategoriaRechazo,
@@ -40,7 +40,18 @@ export type {
   RespuestaDeModeloRechazo,
   TokensDeUso,
 } from './puerto.js';
-export { completarConRespaldo, decidirRespaldo, type ResultadoConRespaldo } from './respaldo.js';
+export {
+  completarConRespaldo,
+  crearPuertoEnrutado,
+  decidirRespaldo,
+  type IntentoFallido,
+  type OpcionesPuertoEnrutado,
+  type ProveedorDePuertos,
+  type PuertoEnrutado,
+  type RespuestaEnrutada,
+  type ResultadoConRespaldo,
+  type Sirvio,
+} from './respaldo.js';
 
 export {
   MAX_TOKENS_POR_DEFECTO,
@@ -83,6 +94,8 @@ export {
 // Prueba técnica del stack
 export * from './proveedor-prueba.js';
 export * from './enrutado.js';
+export * from './enrutador-entorno.js';
+export * from './paso-puerto.js';
 export * from './uso.js';
 export * from './trazas.js';
 export * from './paso.js';

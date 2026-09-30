@@ -50,7 +50,9 @@ export function guionDelModelo(modeloId: string): Guion {
 
 /** Enrutador con el proveedor de prueba, que contesta a cada modelo con su guion. */
 export function enrutadorDeGuiones(): Enrutador {
-  return new Enrutador().registrar(PROVEEDOR_PRUEBA, (modeloId) =>
-    crearProveedorDePrueba({ guion: guionDelModelo(modeloId), modeloId }),
-  );
+  return new Enrutador()
+    .registrar(PROVEEDOR_PRUEBA, (modeloId) =>
+      crearProveedorDePrueba({ guion: guionDelModelo(modeloId), modeloId }),
+    )
+    .elegir({ principal: PROVEEDOR_PRUEBA });
 }
