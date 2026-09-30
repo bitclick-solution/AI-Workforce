@@ -9,11 +9,18 @@ describe('identificadorDeModelo', () => {
     );
   });
 
-  it('va desnudo, sin fecha, en Vertex y en primera parte (ADR-018)', () => {
-    expect(identificadorDeModelo('opus5', 'vertex-eu')).toBe('claude-opus-5');
+  it('va desnudo, sin fecha, en primera parte (ADR-018)', () => {
     expect(identificadorDeModelo('opus5', 'primera-parte')).toBe('claude-opus-5');
+    expect(identificadorDeModelo('sonnet5', 'primera-parte')).toBe('claude-sonnet-5');
+  });
+
+  it('en Vertex UE (ADR-023, implementado, respaldo por defecto), opus5 lo sirve Opus 5.5, no el objetivo desnudo del ADR-018', () => {
+    expect(identificadorDeModelo('opus5', 'vertex-eu')).toBe('claude-opus-5-5');
     expect(identificadorDeModelo('sonnet5', 'vertex-eu')).toBe('claude-sonnet-5');
-    expect(identificadorDeModelo('opus5', 'vertex-eu')).not.toMatch(/\d{8}/);
+  });
+
+  it('en Vertex UE, Haiku 4.5 lleva la versión fechada del catálogo de Agent Platform (excepción al ADR-018, igual que en Bedrock)', () => {
+    expect(identificadorDeModelo('haiku45', 'vertex-eu')).toBe('claude-haiku-4-5@20251001');
   });
 
   it('rechaza ai-sdk: no tiene identificador de Anthropic', () => {
@@ -40,7 +47,7 @@ describe('identificadorDeModelo', () => {
 
     it('haiku45 no tiene sustitución provisional en ninguna plataforma: ya está disponible', () => {
       expect(esProvisional('haiku45', 'bedrock-eu')).toBe(false);
-      expect(identificadorDeModelo('haiku45', 'vertex-eu')).toBe('claude-haiku-4-5');
+      expect(esProvisional('haiku45', 'vertex-eu')).toBe(false);
     });
   });
 });
