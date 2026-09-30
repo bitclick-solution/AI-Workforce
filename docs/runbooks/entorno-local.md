@@ -119,7 +119,7 @@ eso es cosa suya, no tuya. Dos cosas se resuelven distinto ahí:
   hace falta nada de tu parte más que tener `pnpm --version` funcionando en tu
   terminal.
 - **`pnpm local:parar` para el árbol de procesos con `taskkill /PID <pid> /T
-  /F`.** Windows no tiene grupos de procesos como Linux o macOS, así que no
+/F`.** Windows no tiene grupos de procesos como Linux o macOS, así que no
   hay un único «matar al grupo»: `taskkill` con `/T` (árbol) y `/F` (forzado)
   es la forma documentada de parar un proceso y todo lo que lanzó (pnpm
   arrastra `tsx` o `next`). Si algo no se pudo parar, `local:parar` lo dice

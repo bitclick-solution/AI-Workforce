@@ -125,9 +125,7 @@ export async function comprobarRequisitos(env, { puertoApi = '3002', puertoWeb =
 
   const pnpm = pnpmDisponible();
   if (!pnpm.ok) {
-    errores.push(
-      'pnpm no está en el PATH (o no se pudo lanzar). Con Corepack: `corepack enable`.',
-    );
+    errores.push('pnpm no está en el PATH (o no se pudo lanzar). Con Corepack: `corepack enable`.');
   } else {
     const { error, aviso } = evaluarVersionPnpm(pnpm.salida, packageManagerDeclarado());
     if (error) errores.push(error);

@@ -144,7 +144,10 @@ async function llamarApi(
   const texto = await respuesta.text();
   const cuerpo =
     texto.length > 0
-      ? (JSON.parse(texto) as { result?: Record<string, unknown>; error?: { code: number; message: string } })
+      ? (JSON.parse(texto) as {
+          result?: Record<string, unknown>;
+          error?: { code: number; message: string };
+        })
       : {};
   if (cuerpo.error) throw new ErrorCentrifugo(cuerpo.error.code, cuerpo.error.message);
   return cuerpo;

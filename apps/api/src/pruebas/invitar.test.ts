@@ -174,14 +174,51 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     );
     expect(acciones).toHaveLength(1);
 
-    // Invitar otra vez al mismo correo (reactivación) no duplica el participante ni la auditoría.
-    await invitarPropietario(cliente, {
+    // Idempotencia del `on conflict`: una persona que ya existía (creada fuera de
+    // invitarPropietario, p. ej. por otra vía de alta) y que ya era participante de
+    // la sala general antes de tener acceso. Reinvitar el mismo correo por segunda
+    // vez no vale como prueba: `usuario.correo` es único en toda la plataforma, así
+    // que un segundo invitarPropietario con el mismo correo siempre falla con
+    // InvitacionNoValida (ya probado arriba) antes de llegar a la sala — no hay
+    // forma de repetir el alta de verdad a través de la función pública.
+    const correoYaMiembro = `ya-miembro-${sufijo}@olmo.example`;
+    const [personaYaMiembro] = await conTenant(
+      cliente,
+      primera.tenantId,
+      (tx) => tx<{ id: string }[]>`
+        insert into persona (tenant_id, nombre, correo) values (${primera.tenantId}, 'Ya Miembro', ${correoYaMiembro})
+        returning id
+      `,
+    );
+    if (!personaYaMiembro) throw new Error('la persona no se insertó.');
+    await conTenant(
+      cliente,
+      primera.tenantId,
+      (tx) => tx`
+        insert into sala_participante (tenant_id, sala_id, persona_id, rol)
+        values (${primera.tenantId}, ${salaGeneralId}, ${personaYaMiembro.id}, 'humano')
+      `,
+    );
+
+    const hechaYaMiembro = await invitarPropietario(cliente, {
       tenantId: primera.tenantId,
-      nombre: 'Persona Invitada',
-      correo: correoInvitada,
+      nombre: 'Ya Miembro',
+      correo: correoYaMiembro,
     });
-    expect(await participantes()).toEqual([{ persona_id: invitada.personaId, rol: 'humano' }]);
-    const accionesTrasRepetir = await conTenant(
+    expect(hechaYaMiembro.personaId).toBe(personaYaMiembro.id);
+
+    const participantesYaMiembro = await conTenant(
+      cliente,
+      primera.tenantId,
+      (tx) => tx<{ persona_id: string }[]>`
+        select persona_id from sala_participante
+        where tenant_id = ${primera.tenantId} and sala_id = ${salaGeneralId} and persona_id = ${personaYaMiembro.id}
+      `,
+    );
+    // Sigue habiendo una sola fila (el `on conflict do nothing` no la duplicó) y
+    // ninguna entrada de auditoría nueva (no hubo alta real que anotar).
+    expect(participantesYaMiembro).toHaveLength(1);
+    const accionesYaMiembro = await conTenant(
       cliente,
       primera.tenantId,
       (tx) => tx<{ accion: string }[]>`
@@ -189,6 +226,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
         where tenant_id = ${primera.tenantId} and accion = ${ACCION_SALA_MIEMBRO_ANADIDO}
       `,
     );
-    expect(accionesTrasRepetir).toHaveLength(1);
+    // Sigue habiendo solo la entrada de la invitación anterior (la de «Persona Invitada»).
+    expect(accionesYaMiembro).toHaveLength(1);
   });
 });

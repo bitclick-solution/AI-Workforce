@@ -314,7 +314,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       const espia = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       try {
         const puerto = puertoSala(conexion.cliente, flujos, configuracionV1, buscar);
-        await expect(puerto.avisarEscribiendo(tenantId, salaId, personaId)).resolves.toBeUndefined();
+        await expect(
+          puerto.avisarEscribiendo(tenantId, salaId, personaId),
+        ).resolves.toBeUndefined();
         expect(espia).toHaveBeenCalledWith(
           expect.stringContaining('escribiendo'),
           expect.stringContaining('unknown channel'),

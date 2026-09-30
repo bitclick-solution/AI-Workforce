@@ -90,22 +90,33 @@ function conectarYSuscribir(personaId: string, ocultarPresencia: boolean): Promi
     };
     socket.addEventListener('open', () => enviar({ connect: { token: tokenConexion } }));
     socket.addEventListener('message', (evento) => {
-      const mensaje = JSON.parse(String(evento.data)) as MensajeCentrifugo;
-      if (mensaje.error) {
-        clearTimeout(limite);
-        socket.close();
-        rechazar(
-          new Error(`Centrifugo rechazó la petición: ${mensaje.error.code} ${mensaje.error.message}`),
-        );
-        return;
-      }
-      if (mensaje.connect) {
-        enviar({ subscribe: { channel: canal, token: tokenCanal } });
-        return;
-      }
-      if (mensaje.subscribe) {
-        clearTimeout(limite);
-        resolver(socket);
+      // El protocolo JSON de Centrifugo puede repartir varias respuestas en un
+      // solo frame de WebSocket, una por línea (lo vio esta misma comprobación
+      // contra el Centrifugo real de la CI: `JSON.parse` sin más fallaba con
+      // «Unexpected non-whitespace character» en cuanto `connect` y `subscribe`
+      // llegaban juntos). Cada línea no vacía es un mensaje aparte.
+      for (const linea of String(evento.data).split('\n')) {
+        if (linea.trim().length === 0) continue;
+        const mensaje = JSON.parse(linea) as MensajeCentrifugo;
+        if (mensaje.error) {
+          clearTimeout(limite);
+          socket.close();
+          rechazar(
+            new Error(
+              `Centrifugo rechazó la petición: ${mensaje.error.code} ${mensaje.error.message}`,
+            ),
+          );
+          return;
+        }
+        if (mensaje.connect) {
+          enviar({ subscribe: { channel: canal, token: tokenCanal } });
+          continue;
+        }
+        if (mensaje.subscribe) {
+          clearTimeout(limite);
+          resolver(socket);
+          return;
+        }
       }
     });
     socket.addEventListener('error', () => {
