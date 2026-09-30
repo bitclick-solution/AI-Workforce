@@ -7,10 +7,11 @@
 import { aplicarMigraciones, conTenant, purgarOrganizacion, uuidV7 } from '@aiw/db';
 import { HAY_BASE_DE_DATOS, MOTIVO_SALTO, conectar } from '@aiw/db/pruebas';
 import { verificarCadenaEnBase } from '@aiw/ledger';
+import { NOMBRE_SALA_GENERAL } from '@aiw/rooms';
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { ACCIONES_ACCESO } from '../identidad/auditoria';
+import { ACCIONES_ACCESO, ACCION_SALA_MIEMBRO_ANADIDO } from '../identidad/auditoria';
 import { CorreoEnMemoria } from '../identidad/correo';
 import { InvitacionNoValida, avisarInvitacion, invitarPropietario } from '../identidad/invitar';
 
@@ -107,5 +108,87 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
         correo: `nadie-${sufijo}@olmo.example`,
       }),
     ).rejects.toThrow(/no existe/);
+  });
+
+  it('sin sala general, la invitación no falla ni la inventa (fallo 4, fuera de alcance)', async () => {
+    const hecha = await invitarPropietario(cliente, {
+      organizacion: `Sin sala ${sufijo}`,
+      nombre: 'Sin Sala',
+      correo: `sin-sala-${sufijo}@olmo.example`,
+    });
+    tenants.push(hecha.tenantId);
+    const salas = await conTenant(
+      cliente,
+      hecha.tenantId,
+      (tx) => tx<{ id: string }[]>`select id from sala where tenant_id = ${hecha.tenantId}`,
+    );
+    expect(salas).toHaveLength(0);
+  });
+
+  it('con sala general, la persona invitada entra en ella una sola vez (fallo 4)', async () => {
+    const primera = await invitarPropietario(cliente, {
+      organizacion: `Con sala ${sufijo}`,
+      nombre: 'Con Sala',
+      correo: `con-sala-${sufijo}@olmo.example`,
+    });
+    tenants.push(primera.tenantId);
+
+    const [salaGeneral] = await conTenant(
+      cliente,
+      primera.tenantId,
+      (tx) => tx<{ id: string }[]>`
+        insert into sala (tenant_id, ambito, nombre)
+        values (${primera.tenantId}, 'organizacion', ${NOMBRE_SALA_GENERAL})
+        returning id
+      `,
+    );
+    if (!salaGeneral) throw new Error('la sala general no se insertó.');
+    const salaGeneralId = salaGeneral.id;
+
+    const correoInvitada = `invitada-${sufijo}@olmo.example`;
+    const invitada = await invitarPropietario(cliente, {
+      tenantId: primera.tenantId,
+      nombre: 'Persona Invitada',
+      correo: correoInvitada,
+    });
+
+    async function participantes() {
+      return conTenant(
+        cliente,
+        primera.tenantId,
+        (tx) => tx<{ persona_id: string; rol: string }[]>`
+          select persona_id, rol from sala_participante
+          where tenant_id = ${primera.tenantId} and sala_id = ${salaGeneralId}
+        `,
+      );
+    }
+
+    expect(await participantes()).toEqual([{ persona_id: invitada.personaId, rol: 'humano' }]);
+    const acciones = await conTenant(
+      cliente,
+      primera.tenantId,
+      (tx) => tx<{ accion: string }[]>`
+        select accion from entrada_auditoria
+        where tenant_id = ${primera.tenantId} and accion = ${ACCION_SALA_MIEMBRO_ANADIDO}
+      `,
+    );
+    expect(acciones).toHaveLength(1);
+
+    // Invitar otra vez al mismo correo (reactivación) no duplica el participante ni la auditoría.
+    await invitarPropietario(cliente, {
+      tenantId: primera.tenantId,
+      nombre: 'Persona Invitada',
+      correo: correoInvitada,
+    });
+    expect(await participantes()).toEqual([{ persona_id: invitada.personaId, rol: 'humano' }]);
+    const accionesTrasRepetir = await conTenant(
+      cliente,
+      primera.tenantId,
+      (tx) => tx<{ accion: string }[]>`
+        select accion from entrada_auditoria
+        where tenant_id = ${primera.tenantId} and accion = ${ACCION_SALA_MIEMBRO_ANADIDO}
+      `,
+    );
+    expect(accionesTrasRepetir).toHaveLength(1);
   });
 });

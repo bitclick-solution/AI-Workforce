@@ -16,9 +16,10 @@
 import { ROL_APLICACION, ROL_IDENTIDAD, AJUSTE_TENANT, identificadorSeguro, uuidV7 } from '@aiw/db';
 import type { PuertoDeCorreo } from '@aiw/domain';
 import { anotar } from '@aiw/ledger';
+import { NOMBRE_SALA_GENERAL } from '@aiw/rooms';
 import type postgres from 'postgres';
 
-import { ACCIONES_ACCESO } from './auditoria.js';
+import { ACCIONES_ACCESO, ACCION_SALA_MIEMBRO_ANADIDO } from './auditoria.js';
 import { correoDeInvitacion } from './correo.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -115,6 +116,35 @@ export async function invitarPropietario(
       ],
       resultado: 'exito',
     });
+
+    // Fallo 4 («demo local en Windows»): la persona invitada entra en la sala
+    // general si esa organización ya la tiene (una organización nueva sin
+    // sembrar todavía no tiene sala general, y crearla aquí no es alcance de
+    // esta rebanada). Idempotente con el mismo índice único que usa
+    // `asegurarSalaDeEquipo` en el trabajador, para que invitar dos veces al
+    // mismo correo no duplique la fila ni la entrada de auditoría.
+    const [salaGeneral] = await tx<{ id: string }[]>`
+      select id from sala where tenant_id = ${tenantId} and nombre = ${NOMBRE_SALA_GENERAL}
+    `;
+    if (salaGeneral) {
+      const insertado = await tx`
+        insert into sala_participante (tenant_id, sala_id, persona_id, rol)
+        values (${tenantId}, ${salaGeneral.id}, ${personaId}, 'humano')
+        on conflict (tenant_id, sala_id, persona_id) do nothing
+      `;
+      if (insertado.count > 0) {
+        await anotar(tx, tenantId, {
+          actorTipo: 'plataforma',
+          actorId: personaId,
+          accion: ACCION_SALA_MIEMBRO_ANADIDO,
+          datosReferenciados: [
+            { tipo: 'sala', id: salaGeneral.id },
+            { tipo: 'persona', id: personaId },
+          ],
+          resultado: 'exito',
+        });
+      }
+    }
 
     await tx.unsafe(`set local role ${identificadorSeguro(ROL_IDENTIDAD)}`);
     try {
