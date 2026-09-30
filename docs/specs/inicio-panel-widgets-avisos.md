@@ -63,3 +63,5 @@ Presupuesto: 50 €. Referencia: «Sala v1 · interfaz estilo Discord» costó 3
 ## Pregunta abierta
 
 ¿La disposición del panel por persona se guarda en una columna nueva de la tabla `usuario` que ya trajo Acceso al panel, o necesita una tabla propia? Una columna no cambia la zona crítica de esta rebanada; una tabla nueva la convierte en zona crítica por migración. Lo decide el Constructor al ver el tamaño real del dato, salvo que Jesús prefiera fijarlo antes.
+
+**Resuelta (PR #53):** columna. `persona.disposicion_panel` (jsonb), migración `0008_disposicion_panel_inicio.sql` con su reverso, mismo patrón que `mostrar_presencia` (0007). El dato es pequeño (entradas `{id, tamano, oculto}` del catálogo cerrado v1), así que no hizo falta tabla propia. La migración sigue siendo zona crítica por tocar `packages/db` (CODEOWNERS), con revisión humana obligatoria de Jesús, independientemente de columna-vs-tabla.
