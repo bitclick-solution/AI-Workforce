@@ -12,7 +12,7 @@
  * Lo que no sabe hacer lo dice con una aclaración, sin inventar: una plantilla que
  * no existe, un departamento que la organización no tiene o un puesto que ya está.
  */
-import { decidirPaso, type Nivel } from '@aiw/domain';
+import { decidirPaso, type Nivel, type PapelModelo } from '@aiw/domain';
 import { aparece } from '@aiw/rooms';
 
 import catalogoDePlantillas from './catalogo/plantillas.json' with { type: 'json' };
@@ -24,6 +24,19 @@ export interface HerramientaDePlantilla {
   nombre: string;
   tipo: TipoHerramienta;
   descripcion: string;
+}
+
+/**
+ * Con qué modelo decide un puesto, en la forma que lee el enrutador de `@aiw/models`
+ * (`enrutadoModelo`): un papel del ADR-018, el papel que prueba tras un rechazo del
+ * clasificador y, para las ejecuciones deterministas (CI, evals de humo, demo local),
+ * el guion de prueba que lo contesta. El identificador concreto lo resuelve
+ * `@aiw/models` según el proveedor que elija cada proceso, no esta plantilla.
+ */
+export interface EnrutadoDePlantilla {
+  papel: PapelModelo;
+  papelRespaldo?: PapelModelo;
+  modeloDePrueba?: string;
 }
 
 export interface Plantilla {
@@ -47,7 +60,7 @@ export interface Plantilla {
   presupuestoPorTareaEuros: number;
   guardiasSalida: string[];
   coste: { tareasMes: number; eurosMesCliente: number; eurosMesModelo: number };
-  enrutadoModelo: { proveedor: string; modelo: string };
+  enrutadoModelo: EnrutadoDePlantilla;
   prompt: string;
 }
 
@@ -100,7 +113,7 @@ export interface PropuestaDeContratacion {
     estadoInicial: 'en_prueba';
     diasDePrueba: number;
     ficha: Plantilla['ficha'] & { temas: string[]; plantilla: { id: string; version: number } };
-    enrutadoModelo: Plantilla['enrutadoModelo'];
+    enrutadoModelo: EnrutadoDePlantilla;
     prompt: string;
     politica: {
       niveles: Record<string, Nivel>;

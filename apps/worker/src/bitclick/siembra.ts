@@ -16,7 +16,15 @@
  *
  *   pnpm --filter @aiw/worker bitclick:sembrar
  */
+import { readFileSync } from 'node:fs';
+
 import { conTenant, uuidV7 } from '@aiw/db';
+import {
+  RUTA_CATALOGO_EJEMPLO,
+  registrarTarifa,
+  tarifaVigente,
+  tarifasDelCatalogo,
+} from '@aiw/ledger';
 import { CATALOGO, type Plantilla } from '@aiw/platform-agents';
 import type postgres from 'postgres';
 
@@ -63,6 +71,72 @@ export interface OpcionesSiembraBitclick {
 export interface ResultadoSiembra extends EstadoBitclick {
   /** `false` cuando ya existía y esta ejecución solo la confirmó. */
   creada: boolean;
+  /** Tarifas de Anthropic que esta ejecución dio de alta en el tenant (ninguna si ya estaban). */
+  tarifasCargadas: number;
+  /** `true` si esta ejecución cambió el enrutado de modelo del puesto de Cobros al de la plantilla. */
+  enrutadoActualizado: boolean;
+}
+
+/** Plataformas de la UE en las que Bitclick puede usar los modelos de Anthropic (ADR-017, ADR-023). */
+const PLATAFORMAS_DE_BITCLICK = ['bedrock-eu', 'vertex-eu'];
+
+/**
+ * Da de alta en el tenant las tarifas de Anthropic del catálogo de desarrollo del
+ * contador, solo las que falten. Sin ellas el contador no puede cobrar un paso de
+ * modelo real y el trabajador se niega a llamar (`SinTarifa`). Una tarifa que ya
+ * existe no se toca: los precios son dato del tenant y los cambia Operación, no una
+ * siembra que se repite. Los importes son los de referencia del catálogo (ver su
+ * nota); Operación los sustituye por los versionados reales.
+ */
+export async function cargarTarifasDeBitclick(
+  cliente: postgres.Sql,
+  tenantId: string,
+): Promise<number> {
+  const catalogo: unknown = JSON.parse(readFileSync(RUTA_CATALOGO_EJEMPLO, 'utf8'));
+  const tarifas = tarifasDelCatalogo(catalogo).filter(
+    (tarifa) =>
+      tarifa.proveedor === 'anthropic' && PLATAFORMAS_DE_BITCLICK.includes(tarifa.plataforma ?? ''),
+  );
+  let cargadas = 0;
+  for (const tarifa of tarifas) {
+    await conTenant(cliente, tenantId, async (tx) => {
+      const existente = await tarifaVigente(
+        tx,
+        tenantId,
+        tarifa.proveedor,
+        tarifa.modelo,
+        new Date(),
+        tarifa.plataforma,
+      );
+      if (existente) return;
+      await registrarTarifa(tx, tenantId, tarifa);
+      cargadas += 1;
+    });
+  }
+  return cargadas;
+}
+
+/**
+ * Pone el enrutado de modelo del puesto de Cobros al de la plantilla certificada.
+ * Un puesto sembrado antes de que las plantillas enrutaran por papel sigue apuntando
+ * al proveedor de prueba, y con Bedrock elegido el trabajador se negaría a servirlo.
+ */
+async function ponerEnrutadoDeLaPlantilla(
+  cliente: postgres.Sql,
+  estado: EstadoBitclick,
+  plantilla: Plantilla,
+): Promise<boolean> {
+  const filas = await conTenant(
+    cliente,
+    estado.tenantId,
+    (tx) => tx<{ id: string }[]>`
+      update puesto set enrutado_modelo = ${JSON.stringify(plantilla.enrutadoModelo)}::text::jsonb
+      where tenant_id = ${estado.tenantId} and id = ${estado.puestoId}
+        and enrutado_modelo is distinct from ${JSON.stringify(plantilla.enrutadoModelo)}::text::jsonb
+      returning id
+    `,
+  );
+  return filas.length > 0;
 }
 
 function exigir<T>(valor: T | undefined, que: string): T {
@@ -180,12 +254,19 @@ export async function sembrarBitclick(
 ): Promise<ResultadoSiembra> {
   const existente = leerEstadoBitclick();
   if (existente && (await organizacionSigueViva(cliente, existente.tenantId))) {
-    return { ...existente, creada: false };
+    const enrutadoActualizado = await ponerEnrutadoDeLaPlantilla(
+      cliente,
+      existente,
+      plantillaCobros(),
+    );
+    const tarifasCargadas = await cargarTarifasDeBitclick(cliente, existente.tenantId);
+    return { ...existente, creada: false, tarifasCargadas, enrutadoActualizado };
   }
 
   const plantilla = plantillaCobros();
   const correoJesus = opciones.correoJesus ?? CORREO_JESUS_POR_DEFECTO;
   const estado = await crearOrganizacion(cliente, plantilla, correoJesus);
   guardarEstadoBitclick(estado);
-  return { ...estado, creada: true };
+  const tarifasCargadas = await cargarTarifasDeBitclick(cliente, estado.tenantId);
+  return { ...estado, creada: true, tarifasCargadas, enrutadoActualizado: false };
 }

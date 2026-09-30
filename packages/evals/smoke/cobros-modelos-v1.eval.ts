@@ -1,6 +1,7 @@
 /**
  * Caso dorado del puesto Cobros (ADR-018: `crear_nota_seguimiento` es una escritura
- * N1, así que decide con el papel `opus5` y esfuerzo alto de `decision_escritura`).
+ * N1, así que decide con esfuerzo alto de `decision_escritura`; la plantilla lo
+ * enruta al papel `sonnet5`, con respaldo `haiku45`, por el enrutador del trabajador).
  *
  * Corre contra el servidor simulado de `@aiw/models/pruebas`, no contra Bedrock ni
  * Vertex reales: no hay credenciales de la UE todavía (runbook de funciones
@@ -10,7 +11,7 @@
  * evaluador de casos dorados encajan. El criterio de hecho «pasa con el proveedor
  * real» queda pendiente en el PR con los pasos exactos para activarlo.
  */
-import { crearAdaptadorAnthropic, clienteSimulado } from '@aiw/models';
+import { clienteSimulado } from '@aiw/models';
 import {
   iniciarServidorSimulado,
   respuestaDeTexto,
@@ -20,6 +21,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { casoDoradoEstructurado, evaluarCasoDoradoEstructurado } from '../src/index.js';
+import { ENRUTADO_COBROS, puestoConCliente } from './casos-dorados-proveedor-real.compartido.js';
 
 const decisionCobros = z.object({
   proponerNota: z.boolean(),
@@ -42,13 +44,9 @@ async function decidirCobros(
   const servidor: ServidorSimulado = await iniciarServidorSimulado(
     respuestaDeTexto(JSON.stringify(esperado)),
   );
-  const puesto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
-    papel: 'opus5',
-    plataforma: 'bedrock-eu',
-    configuracion: { esfuerzoPorClasePaso: {} },
-  });
+  const puesto = puestoConCliente(clienteSimulado(servidor.url), 'bedrock-eu', ENRUTADO_COBROS);
 
-  const resultado = await puesto.completar({
+  const { resultado } = await puesto.completar({
     clasePaso: 'decision_escritura',
     sistema:
       'Eres el puesto Cobros. Decides si proponer una nota de seguimiento por factura vencida.',

@@ -6,7 +6,7 @@
  * funciones ausentes). El criterio de hecho «pasa con el proveedor real» queda
  * pendiente en el PR con los pasos exactos para activarlo.
  */
-import { crearAdaptadorAnthropic, clienteSimulado } from '@aiw/models';
+import { clienteSimulado } from '@aiw/models';
 import {
   iniciarServidorSimulado,
   respuestaDeTexto,
@@ -16,6 +16,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { casoDoradoEstructurado, evaluarCasoDoradoEstructurado } from '../src/index.js';
+import {
+  ENRUTADO_CONCILIACION,
+  puestoConCliente,
+} from './casos-dorados-proveedor-real.compartido.js';
 
 const decisionConciliacion = z.object({
   facturaId: z.string().nullable(),
@@ -37,13 +41,13 @@ async function decidirConciliacion(
   const servidor: ServidorSimulado = await iniciarServidorSimulado(
     respuestaDeTexto(JSON.stringify(esperado)),
   );
-  const puesto = crearAdaptadorAnthropic(clienteSimulado(servidor.url), {
-    papel: 'opus5',
-    plataforma: 'vertex-eu',
-    configuracion: { esfuerzoPorClasePaso: {} },
-  });
+  const puesto = puestoConCliente(
+    clienteSimulado(servidor.url),
+    'vertex-eu',
+    ENRUTADO_CONCILIACION,
+  );
 
-  const resultado = await puesto.completar({
+  const { resultado } = await puesto.completar({
     clasePaso: 'conciliacion',
     sistema: 'Eres el puesto Conciliación. Decides qué factura casa con un movimiento bancario.',
     mensajes: [

@@ -27,6 +27,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ejecutarBucle, type OperacionesDelBucle } from '../bucle/bucle.js';
 
 import { crearContextoDeActividades } from '../actividades/contexto.js';
+import { cargarTarifasDeBitclick } from '../bitclick/siembra.js';
 import type { PeticionPasoModelo } from '../bucle/tipos.js';
 import { montarParaPruebas, type MontajeDePruebas } from './montaje.js';
 
@@ -309,6 +310,22 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('paso de modelo · proveedor real', () => {
       'claude-sonnet-4-6',
       'claude-sonnet-4-6',
     ]);
+  });
+
+  it('la siembra de Bitclick da de alta las tarifas de Anthropic que faltan y no repite las que ya están', async () => {
+    const bedrock = await servidor(respuestaDeTexto('Nada que reclamar.'));
+    const montaje = await montar(bedrock, { conTarifas: false });
+    const { tenantId } = montaje.semilla;
+
+    const primera = await cargarTarifasDeBitclick(montaje.cliente, tenantId);
+    const segunda = await cargarTarifasDeBitclick(montaje.cliente, tenantId);
+
+    expect(primera).toBeGreaterThan(0);
+    expect(segunda).toBe(0);
+    // Con sus tarifas, el puesto ya puede dar un paso real.
+    await expect(montaje.actividades.pasoModelo(peticion(montaje))).resolves.toMatchObject({
+      texto: 'Nada que reclamar.',
+    });
   });
 
   it('un puesto con enrutado vacío falla en voz alta en vez de caer a prueba', async () => {

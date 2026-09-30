@@ -104,6 +104,9 @@ const { proceso: procesoSala, rutaRegistro: registroSala } = lanzarProceso(
     env: entornoDeProceso(env, {
       DATABASE_URL: urlBase,
       AIW_PRUEBA_STACK: '1',
+      // Proveedor de modelos de la demo: `prueba` (determinista, sin claves ni coste) salvo
+      // que .env o el entorno digan otra cosa, p. ej. AIW_PROVEEDOR_MODELOS=bedrock-ue.
+      AIW_PROVEEDOR_MODELOS: valorEntorno(env, 'AIW_PROVEEDOR_MODELOS', 'prueba'),
       DEMO_CONECTOR_SECRETO: demoConector,
     }),
   },

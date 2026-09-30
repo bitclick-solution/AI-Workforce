@@ -86,13 +86,17 @@ que no responde, mira ahí primero; para lo que pasa dentro del Compose,
 
 ## Proveedor de modelos
 
-Por defecto, sin ninguna clave en `.env`, todo corre con el proveedor de
-prueba determinista (`packages/models/src/proveedor-prueba.ts`): el mismo
-que usa la CI, sin coste y sin red. Es la razón de que `pnpm local:arrancar`
-no pida ninguna credencial.
+`AIW_PROVEEDOR_MODELOS` decide con qué modelo trabaja el trabajador. En la demo
+local vale `prueba` (el proveedor determinista de
+`packages/models/src/proveedor-prueba.ts`, el mismo que usa la CI, sin coste y
+sin red): `.env.example` lo trae puesto y `pnpm local:arrancar` lo pasa al
+trabajador aunque tu `.env` no lo tenga. Es la razón de que `pnpm local:arrancar`
+no pida ninguna credencial. Un proceso **sin** la variable no cae a `prueba`:
+arranca con Bedrock y se niega a arrancar si le faltan credenciales.
 
 Para probar contra Bedrock UE con las credenciales de `aiw-dev` (solo tuyas,
-nunca las compartas ni las subas a ningún sitio): añade a tu `.env`
+nunca las compartas ni las subas a ningún sitio): cambia en tu `.env`
+`AIW_PROVEEDOR_MODELOS=bedrock-ue` y añade
 
 ```
 AIW_BEDROCK_REGION_UE=eu-north-1
@@ -101,8 +105,10 @@ AWS_SECRET_ACCESS_KEY=<la tuya>
 ```
 
 y repite `pnpm local:arrancar` (o solo reinicia `api`/`worker` si ya estaban
-arriba). Detalle completo, incluida la matriz de modelos provisional mientras
-AWS no conceda acceso a Sonnet 5 y Opus 5:
+arriba). Cada paso cuesta dinero de verdad. Pasos completos, coste esperado por
+tarea y qué hacer si algo falla:
+[`proveedor-real-local.md`](proveedor-real-local.md). Matriz de modelos
+provisional mientras AWS no conceda acceso a Sonnet 5 y Opus 5:
 [`modelos-funciones-ausentes.md`](modelos-funciones-ausentes.md).
 
 ## Windows

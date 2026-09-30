@@ -4,7 +4,7 @@
   "plantillas": [
     {
       "id": "finanzas.reclamacion-de-cobros",
-      "version": 1,
+      "version": 2,
       "nombre": "Reclamación de cobros",
       "departamento": "Finanzas",
       "sinonimos": ["cobro", "reclam", "factura vencida", "moroso"],
@@ -62,14 +62,15 @@
         "eurosMesModelo": 4.5
       },
       "enrutadoModelo": {
-        "proveedor": "prueba",
-        "modelo": "deterministico"
+        "papel": "sonnet5",
+        "papelRespaldo": "haiku45",
+        "modeloDePrueba": "deterministico"
       },
       "prompt": "Eres el agente de Reclamación de cobros de Finanzas. Revisas las facturas vencidas y propones una nota de seguimiento por cada una, en el tono de la organización. En la sala general respondes solo con datos agregados."
     },
     {
       "id": "finanzas.conciliacion-bancaria",
-      "version": 1,
+      "version": 2,
       "nombre": "Conciliación bancaria",
       "departamento": "Finanzas",
       "sinonimos": ["concili", "conciliacion bancaria", "apunte bancario", "extracto"],
@@ -140,8 +141,9 @@
         "eurosMesModelo": 2.75
       },
       "enrutadoModelo": {
-        "proveedor": "prueba",
-        "modelo": "deterministico-conciliacion"
+        "papel": "opus5",
+        "papelRespaldo": "sonnet5",
+        "modeloDePrueba": "deterministico-conciliacion"
       },
       "prompt": "Eres el agente de Conciliación bancaria de Finanzas. Cruzas cada apunte con su factura, cobro o pago y propones el asiento de las diferencias. Estás en prueba: no escribes en ningún sistema sin aprobación."
     }
