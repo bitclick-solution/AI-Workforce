@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 
 import { accesoActivo, sesionDelPanel, urlDeLaApi } from '../../../lib/acceso';
+import { perfilDelPanel } from '../../../lib/perfil';
 import { VistaDeCuenta } from './vista';
 
 export const dynamic = 'force-dynamic';
@@ -13,8 +14,10 @@ export default async function Cuenta() {
   if (!accesoActivo(process.env)) notFound();
   const apiUrl = urlDeLaApi(process.env);
   const galletas = await cookies();
-  const sesion = apiUrl ? await sesionDelPanel(apiUrl, galletas.toString(), fetch) : null;
+  const cabeceraCookie = galletas.toString();
+  const sesion = apiUrl ? await sesionDelPanel(apiUrl, cabeceraCookie, fetch) : null;
   if (!sesion) redirect('/acceso');
+  const perfil = apiUrl ? await perfilDelPanel(apiUrl, cabeceraCookie, fetch) : null;
   return (
     <main className="mx-auto flex max-w-xl flex-col gap-6 px-4 py-12">
       <header>
@@ -22,7 +25,10 @@ export default async function Cuenta() {
         <h1 className="text-3xl font-semibold">{sesion.nombre}</h1>
         <p className="text-neutral-600">{sesion.correo}</p>
       </header>
-      <VistaDeCuenta caducaEn={sesion.caducaEn} />
+      <VistaDeCuenta
+        caducaEn={sesion.caducaEn}
+        mostrarPresenciaInicial={perfil?.mostrarPresencia ?? true}
+      />
     </main>
   );
 }

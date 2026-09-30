@@ -66,6 +66,15 @@ export const MIGRACIONES: readonly Migracion[] = [
       new URL('../drizzle/reverso/0006_acceso_al_panel.sql', import.meta.url),
     ),
   },
+  {
+    nombre: '0007_presencia_configurable_perfil',
+    ruta: fileURLToPath(
+      new URL('../drizzle/0007_presencia_configurable_perfil.sql', import.meta.url),
+    ),
+    rutaReverso: fileURLToPath(
+      new URL('../drizzle/reverso/0007_presencia_configurable_perfil.sql', import.meta.url),
+    ),
+  },
 ];
 
 export function huellaDe(contenido: string): string {

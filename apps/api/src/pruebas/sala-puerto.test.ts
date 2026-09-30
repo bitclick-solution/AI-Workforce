@@ -305,5 +305,82 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       expect(llamadas).toHaveLength(1);
       expect((llamadas[0] as { cuerpo: { method: string } }).cuerpo.method).toBe('publish');
     });
+
+    it('si Centrifugo rechaza el canal, avisarEscribiendo no rompe: es de mejor esfuerzo (fallo 5)', async () => {
+      const buscar: BuscadorCentrifugo = async () =>
+        new Response(JSON.stringify({ error: { code: 102, message: 'unknown channel' } }), {
+          status: 200,
+        });
+      const espia = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        const puerto = puertoSala(conexion.cliente, flujos, configuracionV1, buscar);
+        await expect(puerto.avisarEscribiendo(tenantId, salaId, personaId)).resolves.toBeUndefined();
+        expect(espia).toHaveBeenCalledWith(
+          expect.stringContaining('escribiendo'),
+          expect.stringContaining('unknown channel'),
+        );
+      } finally {
+        espia.mockRestore();
+      }
+    });
+
+    // Presencia configurable desde el perfil (ADR-026): con el ajuste desactivado,
+    // ni la lista de miembros ni el token de canal ni «escribiendo» revelan que la
+    // persona está conectada, aunque Centrifugo la vea.
+    it('con la presencia oculta, sale añadida, el token de canal lleva el override y no se avisa de que escribe', async () => {
+      await conTenant(
+        cliente,
+        tenantId,
+        (tx) => tx`
+          update persona set mostrar_presencia = false
+          where tenant_id = ${tenantId} and id = ${personaId}
+        `,
+      );
+      try {
+        const conectada: BuscadorCentrifugo = async () =>
+          new Response(JSON.stringify({ result: { presence: { c1: { user: personaId } } } }), {
+            status: 200,
+          });
+        const puerto = puertoSala(conexion.cliente, flujos, configuracionV1, conectada);
+
+        const miembros = await puerto.miembrosDeSala(tenantId, salaId);
+        expect(miembros.find((m) => m.id === personaId)?.estado).toBe('anadido');
+
+        const emitido = await puerto.tokenDeSala(tenantId, salaId, personaId);
+        const [, cargaB64] = emitido?.canalToken.split('.') ?? [];
+        const carga = JSON.parse(
+          Buffer.from((cargaB64 ?? '').replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString(
+            'utf8',
+          ),
+        ) as { override?: unknown };
+        expect(carga.override).toEqual({
+          presence: { value: false },
+          join_leave: { value: false },
+        });
+
+        const llamadas: unknown[] = [];
+        const registraLlamadas: BuscadorCentrifugo = async (url, opciones) => {
+          llamadas.push({ url, opciones });
+          return new Response('{}', { status: 200 });
+        };
+        const puertoQueRegistra = puertoSala(
+          conexion.cliente,
+          flujos,
+          configuracionV1,
+          registraLlamadas,
+        );
+        await puertoQueRegistra.avisarEscribiendo(tenantId, salaId, personaId);
+        expect(llamadas).toHaveLength(0);
+      } finally {
+        await conTenant(
+          cliente,
+          tenantId,
+          (tx) => tx`
+            update persona set mostrar_presencia = true
+            where tenant_id = ${tenantId} and id = ${personaId}
+          `,
+        );
+      }
+    });
   });
 });

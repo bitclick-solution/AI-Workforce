@@ -87,6 +87,13 @@ export const persona = pgTable(
     correo: text('correo').notNull(),
     telefono: text('telefono'),
     activa: boolean('activa').notNull().default(true),
+    /**
+     * Privacidad de la presencia en las salas (ADR-026): visible por defecto, cada
+     * persona puede apagarla desde su perfil. Vive en `persona` y no en `usuario`
+     * (identidad de Better Auth) porque la presencia de Sala v1 se calcula con el
+     * rol de aplicación, que no tiene permiso sobre las tablas de identidad.
+     */
+    mostrarPresencia: boolean('mostrar_presencia').notNull().default(true),
     ...columnasMutables(),
   },
   (t) => [

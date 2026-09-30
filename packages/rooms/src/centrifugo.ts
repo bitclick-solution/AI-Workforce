@@ -58,6 +58,14 @@ export interface OpcionesTokenDeCanal {
   salaId: string;
   ttlSegundos: number;
   ahoraMs?: number | undefined;
+  /**
+   * Presencia oculta desde el perfil (ADR-026, rebanada «Presencia configurable
+   * desde el perfil»): con `true`, el token lleva el `override` que le dice a
+   * Centrifugo que no cuente esta conexión en la presencia del canal ni avise de
+   * su `join`/`leave` a nadie. Es la capa de servidor: aunque el cliente ignore la
+   * respuesta de la API, Centrifugo mismo no publica esa presencia.
+   */
+  ocultarPresencia?: boolean | undefined;
 }
 
 /**
@@ -72,6 +80,9 @@ export function tokenDeCanal(secreto: string, opciones: OpcionesTokenDeCanal): s
     sub: opciones.personaId,
     channel: canalDeSala(opciones.tenantId, opciones.salaId),
     exp: Math.floor(ahora / 1000) + Math.max(1, Math.trunc(opciones.ttlSegundos)),
+    ...(opciones.ocultarPresencia
+      ? { override: { presence: { value: false }, join_leave: { value: false } } }
+      : {}),
   };
   return firmar(secreto, JSON.stringify(carga));
 }
