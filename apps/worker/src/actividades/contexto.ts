@@ -7,9 +7,10 @@
  * desde su historial, que es lo único que hace durable a una tarea.
  *
  * Se construye una vez por proceso y se cierra al apagarlo. La demostración y las
- * pruebas construyen el suyo con el conector de demostración registrado; un proceso
- * de verdad registraría el conector de Odoo y un proveedor de modelo con clave, sin
- * tocar ni una línea del bucle.
+ * pruebas construyen el suyo con el conector de demostración registrado y el
+ * proveedor de prueba elegido a propósito; un proceso de verdad registra el
+ * conector de Odoo y el proveedor de modelo que diga su entorno, sin tocar ni una
+ * línea del bucle.
  */
 import { conTenant, crearConexion, type Conexion } from '@aiw/db';
 import {
@@ -30,8 +31,11 @@ import {
   TrazasEnMemoria,
   crearCacheDePrompts,
   enrutadorDeGuiones,
+  enrutadorDesdeEntorno,
+  observadorDesdeEntorno,
   type CacheDePrompts,
   type Enrutador,
+  type PuertoDeObservabilidadDeCoste,
   type PuertoDeTrazas,
 } from '@aiw/models';
 import {
@@ -46,7 +50,15 @@ export interface OpcionesContexto {
   urlBaseDeDatos: string;
   /** Registro de servidores MCP. Sin valor, solo el conector de demostración. */
   registro?: RegistroDeServidores | undefined;
+  /**
+   * Enrutador de modelos. Sin valor, el del entorno del proceso
+   * (`enrutadorDesdeEntorno`): Bedrock UE salvo que `AIW_PROVEEDOR_MODELOS` diga otra
+   * cosa. Nunca cae al proveedor de prueba por su cuenta: quien lo quiere lo elige
+   * (`AIW_PROVEEDOR_MODELOS=prueba` o `enrutadorDeDemostracion()`).
+   */
   enrutador?: Enrutador | undefined;
+  /** Coste por tarea completada. Sin valor, el de Langfuse si hay claves, o ninguno. */
+  observadorDeCoste?: PuertoDeObservabilidadDeCoste | undefined;
   secretos?: ResolvedorDeSecretos | undefined;
   trazas?: PuertoDeTrazas | undefined;
   /** Sala v1: reparto por Centrifugo. Sin ella, `avisarSala` no hace nada. */
@@ -59,6 +71,7 @@ export interface ContextoDeActividades {
   cliente: postgres.Sql;
   gateway: Gateway;
   enrutador: Enrutador;
+  observadorDeCoste: PuertoDeObservabilidadDeCoste;
   cachePrompts: CacheDePrompts;
   trazas: PuertoDeTrazas;
   /**
@@ -202,7 +215,27 @@ export function enrutadorDeDemostracion(): Enrutador {
   return enrutadorDeGuiones();
 }
 
+/**
+ * Enrutador de los guiones de demostración (`demo:sala`, `demo:cobros`).
+ *
+ * Una demostración es determinista por definición, y aquí se escribe: sin
+ * `AIW_PROVEEDOR_MODELOS` en el entorno elige `prueba`. Con la variable puesta a
+ * `bedrock-ue`, la misma demostración habla con el modelo real. Es el único sitio
+ * donde `prueba` es el valor por omisión, y solo para los guiones de demo.
+ */
+export function enrutadorDeLaDemo(
+  entorno: Record<string, string | undefined> = process.env,
+): Enrutador {
+  const elegido = entorno['AIW_PROVEEDOR_MODELOS']?.trim();
+  return enrutadorDesdeEntorno({
+    ...entorno,
+    AIW_PROVEEDOR_MODELOS: elegido === undefined || elegido === '' ? 'prueba' : elegido,
+  });
+}
+
 export function crearContextoDeActividades(opciones: OpcionesContexto): ContextoDeActividades {
+  // Primero el proveedor de modelos: si falta algo, el proceso falla antes de abrir nada.
+  const enrutador = opciones.enrutador ?? enrutadorDesdeEntorno();
   const conexion: Conexion = crearConexion({ url: opciones.urlBaseDeDatos });
   const registro = opciones.registro ?? registroConDemostracion();
   const gateway = new Gateway({
@@ -216,7 +249,8 @@ export function crearContextoDeActividades(opciones: OpcionesContexto): Contexto
   return {
     cliente: conexion.cliente,
     gateway,
-    enrutador: opciones.enrutador ?? enrutadorDeDemostracion(),
+    enrutador,
+    observadorDeCoste: opciones.observadorDeCoste ?? observadorDesdeEntorno(),
     cachePrompts: crearCacheDePrompts(),
     trazas: opciones.trazas ?? new TrazasEnMemoria(),
     async avisarSala(tenantId, salaId, datos) {

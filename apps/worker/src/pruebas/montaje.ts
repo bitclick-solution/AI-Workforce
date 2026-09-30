@@ -15,7 +15,7 @@ import { conTenant, uuidV7 } from '@aiw/db';
 import { URL_BASE_DE_DATOS } from '@aiw/db/pruebas';
 import { VARIABLE_SECRETO_DEMO } from '@aiw/connector-demo';
 import { resolvedorDeEntorno } from '@aiw/mcp-gateway';
-import { TrazasEnMemoria } from '@aiw/models';
+import { TrazasEnMemoria, type Enrutador } from '@aiw/models';
 import type postgres from 'postgres';
 
 import { crearActividades, type Actividades } from '../actividades/index.js';
@@ -46,6 +46,8 @@ export interface OpcionesMontaje {
   presupuestoTareaEuros?: number | undefined;
   /** Cuántas llamadas falla el conector antes de responder. */
   fallosIniciales?: number | undefined;
+  /** Enrutador de modelos. Por defecto, el de prueba, elegido a propósito. */
+  enrutador?: Enrutador | undefined;
 }
 
 export interface MontajeDePruebas {
@@ -62,6 +64,7 @@ export interface MontajeDePruebas {
 function contextoDePrueba(
   trazas: TrazasEnMemoria,
   fallosIniciales?: number | undefined,
+  enrutador?: Enrutador | undefined,
 ): ContextoDeActividades {
   return crearContextoDeActividades({
     urlBaseDeDatos: URL_BASE_DE_DATOS ?? '',
@@ -69,7 +72,7 @@ function contextoDePrueba(
       credencialEsperada: SECRETO_DE_PRUEBA,
       ...(fallosIniciales === undefined ? {} : { fallosIniciales }),
     }),
-    enrutador: enrutadorDeDemostracion(),
+    enrutador: enrutador ?? enrutadorDeDemostracion(),
     secretos: resolvedorDeEntorno(ENTORNO_DE_PRUEBA),
     trazas,
   });
@@ -77,7 +80,7 @@ function contextoDePrueba(
 
 export async function montarParaPruebas(opciones: OpcionesMontaje): Promise<MontajeDePruebas> {
   const trazas = new TrazasEnMemoria();
-  const contexto = contextoDePrueba(trazas, opciones.fallosIniciales);
+  const contexto = contextoDePrueba(trazas, opciones.fallosIniciales, opciones.enrutador);
 
   const semilla = await sembrarDemostracion(contexto.cliente, {
     nombre: opciones.nombre,

@@ -57,6 +57,10 @@ export interface MensajeDeConversacion {
   /** Presente en los mensajes de herramienta: a qué llamada contesta. */
   llamadaId?: string | undefined;
   herramienta?: string | undefined;
+  /** En el turno del agente: las herramientas que pidió, para devolvérselas al proveedor real. */
+  llamadas?: LlamadaPedidaPorElModelo[] | undefined;
+  /** En el turno del agente: el contenido original del proveedor real. Opaco. */
+  bloques?: unknown[] | undefined;
 }
 
 export interface LlamadaPedidaPorElModelo {
@@ -82,6 +86,8 @@ export interface SalidaPasoModelo {
   /** Coste acumulado de la tarea raíz tras este paso. Lo dice la base, no el bucle. */
   gastadoEuros: number;
   motivoFin: string;
+  /** Contenido original del proveedor real, para el turno siguiente. Opaco; ausente con el de prueba. */
+  bloques?: unknown[] | undefined;
   /** Guardia de salida que se disparó, si alguna. El texto ya viene saneado. */
   guardiaDisparada?: string | undefined;
 }
