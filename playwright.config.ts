@@ -32,6 +32,9 @@ export default defineConfig({
     timeout: 120_000,
     // Sala v1 sin API ni datos reales (e2e/sala-v1.spec.ts): la vista pide la
     // simulada explícitamente con `?fuenteSimulada=1` (lib/sala-fuente.ts).
-    env: { AIW_SALA_V1: '1' },
+    // AIW_INICIO_PANEL solo hace que exista la página `/panel/inicio`
+    // (e2e/inicio.spec.ts): sin API ni base de datos reales, sus peticiones a
+    // `/api/inicio/**` las intercepta la propia prueba con `page.route`.
+    env: { AIW_SALA_V1: '1', AIW_INICIO_PANEL: '1' },
   },
 });
