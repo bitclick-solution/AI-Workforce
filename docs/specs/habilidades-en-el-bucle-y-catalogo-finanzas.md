@@ -82,3 +82,5 @@ Presupuesto: 60 €. Es la mayor de las rebanadas del ciclo: mecanismo más nuev
 ## Pregunta abierta
 
 ¿Quién de Bitclick revisa el contenido normativo de las habilidades de Cobros y Previsión antes de activarlas con un cliente real? Ninguna habilidad da asesoramiento, pero una fecha fiscal o un interés de demora equivocados en una propuesta sí hacen daño.
+
+Resuelta por Jesús el 2026-09-30: «lo miro yo y nota para la gestoría». Jesús revisa el contenido normativo en el PR de esta rebanada, y la dirección prepara con él una nota para su gestoría, que la revisa antes del primer cliente externo.

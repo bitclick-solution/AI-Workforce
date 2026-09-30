@@ -23,3 +23,6 @@ export type Aplicacion = typeof APLICACION;
 
 // Sala v0
 export * from './director.js';
+
+// Habilidades en el bucle del agente: esquema y catálogo (sin contenido todavía)
+export * from './catalogo-habilidades.js';
