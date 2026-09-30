@@ -61,12 +61,15 @@ for (const anadida of completarEnv()) console.log(`  añadida ${anadida} (nueva 
 const env = leerEnv();
 
 paso('Comprobando requisitos de la máquina');
-const { errores, avisos } = await comprobarRequisitos(env);
+const { errores, avisos, pnpmInfo } = await comprobarRequisitos(env);
 for (const aviso of avisos) console.warn(`  aviso: ${aviso}`);
 if (errores.length > 0) {
   fallar(['No se cumplen los requisitos:', ...errores.map((e) => `  - ${e}`)].join('\n'));
 }
 console.log('  requisitos en orden.');
+if (pnpmInfo) {
+  console.log(`  pnpm ${pnpmInfo.version}${pnpmInfo.ruta ? ` (${pnpmInfo.ruta})` : ''}.`);
+}
 
 paso('Levantando el Compose de desarrollo (puede tardar unos minutos la primera vez)');
 const compose = spawnSync('docker', [...composeArgs, 'up', '-d', '--wait'], {
@@ -105,6 +108,11 @@ const { proceso: procesoSala, rutaRegistro: registroSala } = lanzarProceso(
     }),
   },
 );
+// Registrado en cuanto se lanza, no cuando termina de arrancar: si el arranque
+// falla o se agota el plazo de abajo, `pnpm local:parar` tiene que poder
+// encontrar y parar este proceso igual (antes no quedaba en `procesos.json` y
+// un arranque fallido dejaba un huérfano que nada limpiaba).
+registrarProceso('worker-sala', procesoSala.pid, registroSala);
 let semilla;
 try {
   semilla = await esperarEnFichero(
@@ -122,7 +130,6 @@ try {
 } catch (error) {
   fallar(`La demo de sala no ha arrancado: ${error.message}\nRegistro: ${registroSala}`);
 }
-registrarProceso('worker-sala', procesoSala.pid, registroSala);
 console.log(`  sembrado: organización ${semilla.tenantId}, cola ${semilla.cola}.`);
 
 const salaToken = env.AIW_SALA_TOKEN || tokenAleatorio();

@@ -45,17 +45,17 @@ siguientes, con las imágenes ya en caché, unos treinta segundos a un minuto.
 
 ## Otros comandos
 
-| Comando                           | Qué hace                                                                                                                                                                         |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm local:parar`                | Para `api`, `web`, el worker de la demo y el Compose. Conserva los datos.                                                                                                        |
-| `pnpm local:parar -- --volumenes` | Igual, y además borra los volúmenes (PostgreSQL, Silo, Redis, ClickHouse).                                                                                                       |
-| `pnpm local:actualizar`           | Trae `main`, reinstala dependencias y migra. Se niega si no estás en `main` o si tienes cambios sin confirmar. No reinicia los procesos: hazlo con `parar` y `arrancar` después. |
-| `pnpm local:a-cero`               | Pide confirmación, para todo y borra volúmenes y el estado de `.aiw-local/`. `.env` se conserva.                                                                                 |
-| `pnpm local:a-cero -- --si`       | Igual, sin preguntar (para scripts).                                                                                                                                             |
-| `pnpm local:copia`                | Vuelca PostgreSQL a `.aiw-local/copias/<fecha>.dump`.                                                                                                                            |
-| `pnpm local:copia -- mi-copia`    | Igual, con el nombre que le des.                                                                                                                                                 |
-| `pnpm local:restaurar`            | Restaura la copia más reciente de `.aiw-local/copias/` (pide confirmación).                                                                                                      |
-| `pnpm local:restaurar -- <ruta>`  | Restaura esa copia concreta.                                                                                                                                                     |
+| Comando                           | Qué hace                                                                                                                                                                                                                                  |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm local:parar`                | Para `api`, `web`, el worker de la demo y el Compose. Conserva los datos.                                                                                                                                                                 |
+| `pnpm local:parar -- --volumenes` | Igual, y además borra los volúmenes (PostgreSQL, Silo, Redis, ClickHouse).                                                                                                                                                                |
+| `pnpm local:actualizar`           | Trae `main`, reinstala dependencias y migra. Se niega si no estás en `main` o si tienes cambios sin confirmar, y si el Compose no está arriba (hace falta para migrar). No reinicia los procesos: hazlo con `parar` y `arrancar` después. |
+| `pnpm local:a-cero`               | Pide confirmación, para todo y borra volúmenes y el estado de `.aiw-local/`. `.env` se conserva.                                                                                                                                          |
+| `pnpm local:a-cero -- --si`       | Igual, sin preguntar (para scripts).                                                                                                                                                                                                      |
+| `pnpm local:copia`                | Vuelca PostgreSQL a `.aiw-local/copias/<fecha>.dump`.                                                                                                                                                                                     |
+| `pnpm local:copia -- mi-copia`    | Igual, con el nombre que le des.                                                                                                                                                                                                          |
+| `pnpm local:restaurar`            | Restaura la copia más reciente de `.aiw-local/copias/` (pide confirmación).                                                                                                                                                               |
+| `pnpm local:restaurar -- <ruta>`  | Restaura esa copia concreta.                                                                                                                                                                                                              |
 
 ## Puertos que ocupa
 
@@ -166,6 +166,12 @@ Corepack ponga el suyo delante.
 - **`git pull --ff-only` falla en `local:actualizar`**: tu `main` local ha
   divergido de `origin/main` (algún commit propio sin subir). Resuélvelo a
   mano: `git log origin/main..main` para ver qué tienes de más.
+- **`local:actualizar` dice que Postgres no responde**: si acabas de `pnpm
+local:parar` (que también baja el Compose), `local:actualizar` no lo
+  levanta por su cuenta — no es su trabajo, solo trae `main`, reinstala y
+  migra. Arranca el Compose primero (`pnpm dev:up` si solo quieres la
+  infraestructura, o `pnpm local:arrancar` entero) y repite `pnpm
+local:actualizar`.
 - **Falta memoria o el arranque va muy lento**: sube los recursos de Docker
   Desktop (macOS) o cierra otras aplicaciones; el aviso de `pnpm
 local:arrancar` te dice cuánta memoria tienes libre. Si tu máquina ya corre

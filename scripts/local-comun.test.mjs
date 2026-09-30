@@ -4,7 +4,12 @@
 // así que se prueban los dos sentidos (Windows y POSIX) sin necesitar Windows.
 import { describe, expect, it, vi } from 'vitest';
 
-import { comandoPnpm, entornoDeProceso, pararArbolDeProcesos } from './local-comun.mjs';
+import {
+  comandoPnpm,
+  entornoDeProceso,
+  pararArbolDeProcesos,
+  separarDelPadre,
+} from './local-comun.mjs';
 
 describe('comandoPnpm', () => {
   it('en Linux o macOS lanza pnpm tal cual, sin shell', () => {
@@ -28,6 +33,21 @@ describe('comandoPnpm', () => {
       plataforma: 'win32',
     });
     expect(conEspacio.argumentos[1]).toBe('"C:\\Programas con espacio\\app"');
+  });
+});
+
+describe('separarDelPadre', () => {
+  it('en Windows con shell (pnpm ahí) no se separa: perdía la salida del hijo (fallo tras el #50)', () => {
+    expect(separarDelPadre('win32', { shell: true })).toBe(false);
+  });
+
+  it('en Windows sin shell (un .exe nativo) sí se separa, como siempre', () => {
+    expect(separarDelPadre('win32', {})).toBe(true);
+  });
+
+  it('fuera de Windows siempre se separa, lleve shell o no', () => {
+    expect(separarDelPadre('linux', {})).toBe(true);
+    expect(separarDelPadre('darwin', { shell: true })).toBe(true);
   });
 });
 

@@ -175,12 +175,25 @@ export function lanzarProceso(
   const flujo = spawn(resolucion.mandato, resolucion.argumentos, {
     cwd,
     env: { ...process.env, ...env },
-    detached: true,
+    detached: separarDelPadre(plataforma, resolucion.opciones),
     stdio: ['ignore', descriptor, descriptor],
     ...resolucion.opciones,
   });
   flujo.unref();
   return { nombre, proceso: flujo, rutaRegistro };
+}
+
+/**
+ * Si el proceso lanzado debe separarse del todo del padre (`detached`). Fallo
+ * del Probador tras el #50: en win32, combinar `detached: true` con
+ * `shell: true` (necesario para lanzar pnpm ahí, ver `comandoPnpm`) pierde la
+ * salida del hijo — el fichero de registro queda a 0 bytes aunque el proceso
+ * funcione de verdad por debajo. `unref()` ya deja que este proceso termine
+ * sin esperar al hijo (la razón original de `detached`, ver la nota de
+ * `lanzarProceso`); en Windows, sin `shell`, no hace falta separarlo también.
+ */
+export function separarDelPadre(plataforma, opciones) {
+  return !(plataforma === 'win32' && opciones.shell);
 }
 
 /**

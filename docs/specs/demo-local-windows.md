@@ -3,9 +3,9 @@ VIGENTE
 # Especificación · Demo local de punta a punta en Windows: arranque, Sala v1 con presencia real y parada
 
 - Rebanada: [Notion](https://app.notion.com/p/3eb5306618988171b6efeb3975ccc034) · Ciclo 1 · Tipo Plataforma · Paquetes `deploy`, `rooms`, `api`, `web`, `docs` (más `scripts/`, `.github/workflows/ci.yml`) · P0
-- Rama: `rebanada/demo-local-windows`
+- Rama: `rebanada/demo-local-windows` (PR #50, fusionado) y su seguimiento `rebanada/demo-local-windows-seguimiento` (este PR, tras la verificación del Probador).
 - Plan de referencia: [plan v8](https://claude.ai/artifact/Mf7PeYbaXCnp5wFhQu3XWn); especificaciones hermanas [`entorno-local.md`](entorno-local.md) (arranque de un solo comando) y [`sala-v1-presencia.md`](sala-v1-presencia.md) (Centrifugo, presencia); [ADR-026](../adr/ADR-026.md) (privacidad de la presencia).
-- Zona crítica: sí. Toca `invitarPropietario` (código de identidad: quién entra en qué sala) y `.github/workflows/ci.yml`. «Revisión humana obligatoria» marcada en la rebanada y «Zona crítica: sí» en el PR.
+- Zona crítica: el PR #50 sí (tocaba `invitarPropietario` y `.github/workflows/ci.yml`; ya fusionado). Este PR de seguimiento no: solo toca `scripts/` y documentación, nada de `.github/workflows` ni de `CODEOWNERS`.
 
 ## Objetivo
 
@@ -58,16 +58,72 @@ Los nueve de la rebanada en Notion:
 - Auditoría y contador: `sala.miembro_anadido` desde `invitarPropietario` se comprueba en `apps/api/src/pruebas/invitar.test.ts` contando filas de `entrada_auditoria` filtradas por `accion`, igual que ya hace `apps/worker/src/pruebas/sala-equipo.test.ts` para el mismo nombre de acción desde el trabajador (ninguno de los dos usa `verificarCadenaEnBase` para esta acción en concreto; ese helper lo usan otras pruebas de `apps/worker/src/pruebas/sala.test.ts` para acciones distintas).
 - Secretos: sin cambios de alcance. Ningún fichero nuevo lleva secretos; `comprobar-centrifugo.ts` lee `CENTRIFUGO_TOKEN_HMAC_SECRET_KEY` y `CENTRIFUGO_API_KEY` del entorno del paso de la CI (`.env` generado por `local:arrancar`, nunca del repositorio) y no los imprime.
 
+## Seguimiento tras el #50 (30-9)
+
+El Probador verificó el criterio 9 en la máquina de Jesús sobre `main` en
+`43753a4` (el #50 ya fusionado, después del #49): sesión, sala, presencia
+real y presencia oculta (#49) quedan bien — cinco de los seis fallos
+originales, confirmados de punta a punta. `pnpm local:arrancar` vuelve a
+fallar por un fallo nuevo que introdujo el propio #50, y aparecieron dos más
+al probar el resto del ciclo (`local:parar` → `local:actualizar` →
+`local:arrancar`). El detalle completo está en la rebanada de Notion,
+sección «Verificación tras #50»; aquí solo las decisiones de esta rama:
+
+1. **`lanzarProceso` no separa del todo al hijo (`detached`) cuando ya lo
+   lanza con `shell: true` en Windows.** Es el propio arreglo del fallo 2 del
+   #50 (`shell: true` para poder lanzar pnpm ahí) el que descubre esta
+   combinación: Windows pierde la salida del proceso hijo cuando se pide a la
+   vez `detached: true` y `shell: true` — el fichero de registro queda a 0
+   bytes aunque el proceso siembre la demo bien por debajo (reproducido en
+   aislado por el Probador). `unref()` ya basta para que `local-arrancar.mjs`
+   no se quede esperando al hijo (la razón original de `detached`, ver la
+   nota de `lanzarProceso`); separarlo también del padre solo hacía falta
+   fuera de este caso concreto. `separarDelPadre(plataforma, opciones)` aísla
+   esa decisión y se prueba en los dos sentidos sin necesitar Windows.
+2. **Cada proceso se registra en `procesos.json` en cuanto se lanza, no
+   cuando termina de arrancar.** Antes, un arranque que fallara mientras
+   `local-arrancar.mjs` esperaba su salida (el caso de arriba, o cualquier
+   plazo agotado) dejaba el proceso sin registrar: `pnpm local:parar` no
+   podía encontrarlo ni pararlo, y quedaba huérfano. Solo hacía falta mover
+   el `registrarProceso` del worker de la demo antes de la espera; `api` y
+   `web` ya lo hacían bien.
+3. **`local:actualizar` no dependía de una consola interactiva a propósito,
+   pero `pnpm install` sí la pedía.** Sin TTY, `pnpm install` pregunta si
+   puede purgar `node_modules` y, sin poder preguntar, aborta con
+   `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` (pasaba con `CI=true`, que ya
+   es como pnpm sabe que no debe preguntar). Se fija esa variable para esa
+   llamada, sin tocar el resto del entorno.
+4. **`local:actualizar` no comprobaba que el Compose estuviera arriba antes
+   de migrar.** El ciclo real del Probador es `local:parar` (que también baja
+   el Compose) → `local:actualizar` → `local:arrancar`; migrar contra un
+   Postgres parado daba un `ECONNREFUSED` críptico. Se añade la misma
+   comprobación de puerto que ya usa `comprobarRequisitos`
+   (`puertoOcupado`/`valorEntorno` de `local-comun.mjs`) antes de migrar, con
+   un mensaje que dice qué ejecutar. No se hace que `local:actualizar` levante
+   el Compose por su cuenta: no es su responsabilidad (la tiene
+   `local:arrancar`), y hacerlo aquí también habría exigido reinstalar toda
+   la comprobación de requisitos que ya hace ese otro comando.
+5. **Menor: en éxito, la comprobación de requisitos no decía qué pnpm había
+   resuelto.** `comprobarRequisitos` devuelve ahora `pnpmInfo` (versión y
+   ruta, esta última por `where`/`which`, informativa, nunca bloqueante) y
+   `pnpm local:arrancar` la imprime junto a «requisitos en orden».
+
+Sin Windows en esta sesión: los tres primeros puntos están reproducidos y
+motivados por el propio informe del Probador (con el mensaje de error exacto
+y la causa que él mismo aisló), no adivinados; se han probado en unitario en
+los dos sentidos donde depende de la plataforma. La verificación de punta a
+punta en Windows la vuelve a hacer el Probador tras fusionar este PR.
+
 ## Fuera de alcance
 
 - Crear la sala general de una organización nueva sin sembrar: no lo pide ningún criterio de hecho de esta rebanada (decisión 1). Sería una rebanada de alta de organización.
 - Cualquier cambio en la lógica de presencia configurable del perfil: es el PR #49 (`rebanada/presencia-configurable-perfil`), que se fusiona después de esta.
 - Ejecutores auto-hospedados o cambios de infraestructura de la CI más allá del paso nuevo del job ya existente.
-- Verificación real en la máquina Windows de Jesús (criterio 9): la hace el Probador tras fusionar. Esta sesión no tiene Windows ni Docker.
+- Verificación real en la máquina Windows de Jesús (criterio 9): la hace el Probador tras fusionar. Esta sesión no tiene Windows ni Docker; ya se hizo una vuelta tras el #50 (ver «Seguimiento tras el #50» arriba) y falta repetirla tras este PR.
 
 ## Presupuesto de tokens
 
-Presupuesto: 12 €. Consumo real: se registra en la rebanada al abrir el PR. Superar el presupuesto en un 50 % pasa la rebanada a Bloqueada con diagnóstico.
+Presupuesto: 12 € para la rebanada entera. El PR #50 ya lo agotó (consumo real anotado en su momento, sin acceso a la facturación exacta, probablemente por encima); este seguimiento se acota a los tres puntos del informe del Probador para no sumar más de lo necesario. Consumo real total: se registra en la rebanada al abrir este PR.
 
 ## Pregunta abierta
 
