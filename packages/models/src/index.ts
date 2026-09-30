@@ -59,6 +59,17 @@ export {
 export { crearAdaptadorAiSdk, type OpcionesAdaptadorAiSdk } from './adaptadores/ai-sdk.js';
 
 export {
+  PROVEEDORES_MODELO,
+  clienteDelProveedorDesdeEntorno,
+  plataformaDelProveedor,
+  proveedorPrincipalDesdeEntorno,
+  proveedorRespaldoDesdeEntorno,
+  puertoAnthropicPrincipalDesdeEntorno,
+  puertoAnthropicRespaldoDesdeEntorno,
+  type ProveedorModelos,
+} from './proveedor.js';
+
+export {
   crearObservadorLangfuse,
   observadorDesdeEntorno,
   observadorEnMemoria,

@@ -21,6 +21,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "test:integracion:bedrock": "vitest run src/adaptadores/anthropic.bedrock.integracion.test.ts",
+    "test:integracion:vertex": "vitest run src/adaptadores/anthropic.vertex.integracion.test.ts",
     "clean": "rm -rf dist coverage .turbo"
   },
   "dependencies": {
