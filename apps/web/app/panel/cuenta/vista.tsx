@@ -23,11 +23,7 @@ function horaDeCaducidad(iso: string): string {
  * Ajuste de presencia del perfil (ADR-026): interruptor mínimo propio de esta
  * página, sin ampliar `packages/ui` para una sola casilla.
  */
-function InterruptorDePresencia({
-  mostrarPresenciaInicial,
-}: {
-  mostrarPresenciaInicial: boolean;
-}) {
+function InterruptorDePresencia({ mostrarPresenciaInicial }: { mostrarPresenciaInicial: boolean }) {
   const [activo, setActivo] = useState(mostrarPresenciaInicial);
   const [guardando, setGuardando] = useState(false);
   const [fallo, setFallo] = useState<string | undefined>();

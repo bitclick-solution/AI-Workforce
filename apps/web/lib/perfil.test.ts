@@ -11,9 +11,9 @@ describe('perfil del panel', () => {
 
   it('devuelve el ajuste de una respuesta válida', async () => {
     const buscar: Buscador = async () => Response.json({ mostrarPresencia: false });
-    expect(
-      await perfilDelPanel('http://api:3002', 'aiw.session_token=x', buscar),
-    ).toEqual({ mostrarPresencia: false });
+    expect(await perfilDelPanel('http://api:3002', 'aiw.session_token=x', buscar)).toEqual({
+      mostrarPresencia: false,
+    });
   });
 
   it('sin sesión, un error o una API caída son «sin ajuste»', async () => {

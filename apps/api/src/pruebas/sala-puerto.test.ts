@@ -315,10 +315,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
         const emitido = await puerto.tokenDeSala(tenantId, salaId, personaId);
         const [, cargaB64] = emitido?.canalToken.split('.') ?? [];
         const carga = JSON.parse(
-          Buffer.from(
-            (cargaB64 ?? '').replace(/-/g, '+').replace(/_/g, '/'),
-            'base64',
-          ).toString('utf8'),
+          Buffer.from((cargaB64 ?? '').replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString(
+            'utf8',
+          ),
         ) as { override?: unknown };
         expect(carga.override).toEqual({
           presence: { value: false },

@@ -25,7 +25,10 @@ export default async function Cuenta() {
         <h1 className="text-3xl font-semibold">{sesion.nombre}</h1>
         <p className="text-neutral-600">{sesion.correo}</p>
       </header>
-      <VistaDeCuenta caducaEn={sesion.caducaEn} mostrarPresenciaInicial={perfil?.mostrarPresencia ?? true} />
+      <VistaDeCuenta
+        caducaEn={sesion.caducaEn}
+        mostrarPresenciaInicial={perfil?.mostrarPresencia ?? true}
+      />
     </main>
   );
 }
