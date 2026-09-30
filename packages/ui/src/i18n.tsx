@@ -58,7 +58,14 @@ export type ClaveDeTexto =
   | 'ui.escritura.dos'
   | 'ui.escritura.varios'
   | 'ui.hoja.cerrar'
-  | 'ui.propuesta.etiqueta';
+  | 'ui.propuesta.etiqueta'
+  | 'ui.panelDeWidgets.rejilla'
+  | 'ui.panelDeWidgets.subir'
+  | 'ui.panelDeWidgets.bajar'
+  | 'ui.panelDeWidgets.agrandar'
+  | 'ui.panelDeWidgets.achicar'
+  | 'ui.panelDeWidgets.ocultos'
+  | 'ui.panelDeWidgets.mostrar';
 
 export type Diccionario = Partial<Record<ClaveDeTexto, string>>;
 
@@ -113,6 +120,13 @@ const CASTELLANO: Record<ClaveDeTexto, string> = {
   'ui.escritura.varios': 'Varios miembros están escribiendo…',
   'ui.hoja.cerrar': 'Cerrar',
   'ui.propuesta.etiqueta': 'Propuesta',
+  'ui.panelDeWidgets.rejilla': 'Widgets del inicio',
+  'ui.panelDeWidgets.subir': 'Subir «{titulo}»',
+  'ui.panelDeWidgets.bajar': 'Bajar «{titulo}»',
+  'ui.panelDeWidgets.agrandar': 'Agrandar «{titulo}»',
+  'ui.panelDeWidgets.achicar': 'Achicar «{titulo}»',
+  'ui.panelDeWidgets.ocultos': 'Ocultos:',
+  'ui.panelDeWidgets.mostrar': 'Mostrar «{titulo}»',
 };
 
 const INGLES: Diccionario = {
@@ -163,6 +177,13 @@ const INGLES: Diccionario = {
   'ui.escritura.varios': 'Several members are typing…',
   'ui.hoja.cerrar': 'Close',
   'ui.propuesta.etiqueta': 'Proposal',
+  'ui.panelDeWidgets.rejilla': 'Home widgets',
+  'ui.panelDeWidgets.subir': 'Move "{titulo}" up',
+  'ui.panelDeWidgets.bajar': 'Move "{titulo}" down',
+  'ui.panelDeWidgets.agrandar': 'Enlarge "{titulo}"',
+  'ui.panelDeWidgets.achicar': 'Shrink "{titulo}"',
+  'ui.panelDeWidgets.ocultos': 'Hidden:',
+  'ui.panelDeWidgets.mostrar': 'Show "{titulo}"',
 };
 
 const DICCIONARIOS: Record<Idioma, Diccionario> = { es: CASTELLANO, en: INGLES };

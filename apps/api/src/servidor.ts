@@ -37,13 +37,18 @@ import {
   lectorConBaseDeDatos,
   type RespuestaContador,
 } from './rutas/contador.js';
+import {
+  atenderInicio,
+  configuracionInicioDesdeEntorno,
+  puertoInicio,
+  type PuertoInicio,
+} from './rutas/inicio.js';
 import { atenderPerfil, puertoPerfilConBaseDeDatos } from './rutas/perfil.js';
 import {
   atenderSala,
   configuracionSalaDesdeEntorno,
   puertoSala,
   type ClienteDeFlujos,
-  type ConfiguracionSala,
   type PuertoSala,
 } from './rutas/sala.js';
 
@@ -55,6 +60,8 @@ export interface OpcionesServidor {
   conexion?: Conexion | undefined;
   /** Puerto de la sala ya construido. Solo para pruebas. */
   puertoSala?: PuertoSala | undefined;
+  /** Puerto del inicio ya construido. Solo para pruebas. */
+  puertoInicio?: PuertoInicio | undefined;
   /** Correo del acceso. Solo para pruebas: si falta, sale de `AIW_CORREO_PROVEEDOR`. */
   correoAcceso?: PuertoDeCorreo | undefined;
 }
@@ -79,8 +86,13 @@ async function leerJson(peticion: IncomingMessage): Promise<unknown> {
   }
 }
 
-/** Abre el cliente de Temporal de la sala. Solo se importa si se usa. */
-async function abrirFlujos(configuracion: ConfiguracionSala) {
+/**
+ * Abre el cliente de Temporal. Solo se importa si se usa, y lo comparten la sala y
+ * el inicio: las dos arrancan y señalan flujos por nombre e id, así que una sola
+ * conexión perezosa basta para las dos (`servidor.ts` la abre con la primera
+ * escritura de cualquiera de las dos, no al arrancar la API).
+ */
+async function abrirFlujos(configuracion: { temporal: { direccion: string; espacio: string } }) {
   const { Client, Connection } = await import('@temporalio/client');
   const conexion = await Connection.connect({ address: configuracion.temporal.direccion });
   const cliente = new Client({ connection: conexion, namespace: configuracion.temporal.espacio });
@@ -180,21 +192,28 @@ export function crearApi(opciones: OpcionesServidor = {}): {
     );
   }
 
-  // Sala v0: otra línea, y el módulo decide si la ruta existe. El cliente de
-  // Temporal se abre con la primera escritura, no al arrancar la API.
-  const configuracionSala = configuracionSalaDesdeEntorno(entorno);
+  // Cliente de Temporal compartido por la sala v0 y el inicio: la primera escritura
+  // de cualquiera de las dos lo abre; ninguna lo abre al arrancar la API.
   let flujosAbiertos: Awaited<ReturnType<typeof abrirFlujos>> | undefined;
-  if (conexion && configuracionSala) {
-    const flujos: ClienteDeFlujos = {
+  function flujosCompartidos(configuracion: {
+    temporal: { direccion: string; espacio: string };
+  }): ClienteDeFlujos {
+    return {
       async arrancar(nombre, opciones) {
-        flujosAbiertos ??= await abrirFlujos(configuracionSala);
+        flujosAbiertos ??= await abrirFlujos(configuracion);
         await flujosAbiertos.arrancar(nombre, opciones);
       },
       async senalar(id, senal, carga) {
-        flujosAbiertos ??= await abrirFlujos(configuracionSala);
+        flujosAbiertos ??= await abrirFlujos(configuracion);
         await flujosAbiertos.senalar(id, senal, carga);
       },
     };
+  }
+
+  // Sala v0: otra línea, y el módulo decide si la ruta existe.
+  const configuracionSala = configuracionSalaDesdeEntorno(entorno);
+  if (conexion && configuracionSala) {
+    const flujos = flujosCompartidos(configuracionSala);
     const puerto = opciones.puertoSala ?? puertoSala(conexion.cliente, flujos, configuracionSala);
     manejadores.push(async (peticion) =>
       atenderSala(
@@ -205,6 +224,29 @@ export function crearApi(opciones: OpcionesServidor = {}): {
           cuerpo: peticion.method === 'POST' ? await leerJson(peticion) : undefined,
         },
         configuracionSala,
+        puerto,
+        resolverSesion,
+      ),
+    );
+  }
+
+  // Inicio: agentes en tiempo real, avisos a la derecha, encargar y decidir en
+  // línea. Misma sesión que el resto del panel desde «Acceso al panel», así que
+  // basta con la conexión: sin ella, ninguna de las dos rutas existe.
+  const configuracionInicio = configuracionInicioDesdeEntorno(entorno);
+  if (conexion && configuracionInicio) {
+    const flujos = flujosCompartidos(configuracionInicio);
+    const puerto =
+      opciones.puertoInicio ?? puertoInicio(conexion.cliente, flujos, configuracionInicio);
+    manejadores.push(async (peticion) =>
+      atenderInicio(
+        {
+          metodo: peticion.method,
+          url: peticion.url,
+          cabeceras: peticion.headers,
+          cuerpo: peticion.method === 'POST' ? await leerJson(peticion) : undefined,
+        },
+        configuracionInicio,
         puerto,
         resolverSesion,
       ),

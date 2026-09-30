@@ -25,7 +25,11 @@ import { verificarCadenaEnBase } from '@aiw/ledger';
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { ACCION_PRESENCIA_ACTUALIZADA, puertoPerfilConBaseDeDatos } from '../rutas/perfil';
+import {
+  ACCION_DISPOSICION_ACTUALIZADA,
+  ACCION_PRESENCIA_ACTUALIZADA,
+  puertoPerfilConBaseDeDatos,
+} from '../rutas/perfil';
 
 const TITULO = HAY_BASE_DE_DATOS
   ? 'puerto del perfil'
@@ -70,9 +74,12 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     await cliente?.end({ timeout: 5 });
   });
 
-  it('el ajuste está activado por defecto (ADR-026)', async () => {
+  it('el ajuste está activado por defecto (ADR-026) y sin disposición del panel', async () => {
     const puerto = puertoPerfilConBaseDeDatos(conexion.cliente);
-    expect(await puerto.leer(tenantId, personaId)).toEqual({ mostrarPresencia: true });
+    expect(await puerto.leer(tenantId, personaId)).toEqual({
+      mostrarPresencia: true,
+      disposicionPanel: [],
+    });
   });
 
   it('actualizarPresencia guarda el cambio y anota su propia entrada en el libro', async () => {
@@ -80,8 +87,12 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     try {
       expect(await puerto.actualizarPresencia(tenantId, personaId, false)).toEqual({
         mostrarPresencia: false,
+        disposicionPanel: [],
       });
-      expect(await puerto.leer(tenantId, personaId)).toEqual({ mostrarPresencia: false });
+      expect(await puerto.leer(tenantId, personaId)).toEqual({
+        mostrarPresencia: false,
+        disposicionPanel: [],
+      });
 
       const acciones = await conTenant(
         cliente,
@@ -105,7 +116,10 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     const puerto = puertoPerfilConBaseDeDatos(conexion.cliente);
     try {
       await puerto.actualizarPresencia(tenantId, personaId, false);
-      expect(await puerto.leer(otroTenantId, otraPersonaId)).toEqual({ mostrarPresencia: true });
+      expect(await puerto.leer(otroTenantId, otraPersonaId)).toEqual({
+        mostrarPresencia: true,
+        disposicionPanel: [],
+      });
       // La RLS por tenant hace que no exista fila que tocar con el tenant equivocado.
       const [fila] = await conTenant(
         cliente,
@@ -117,6 +131,54 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       expect(fila?.mostrar_presencia).toBe(true);
     } finally {
       await puerto.actualizarPresencia(tenantId, personaId, true);
+    }
+  });
+
+  it('actualizarDisposicion guarda la disposición del panel de widgets y anota su entrada', async () => {
+    const puerto = puertoPerfilConBaseDeDatos(conexion.cliente);
+    const disposicion = [
+      { id: 'saludo', tamano: 'grande' as const, oculto: false },
+      { id: 'contador', tamano: 'pequeno' as const, oculto: true },
+    ];
+    try {
+      expect(await puerto.actualizarDisposicion(tenantId, personaId, disposicion)).toEqual({
+        mostrarPresencia: true,
+        disposicionPanel: disposicion,
+      });
+      expect(await puerto.leer(tenantId, personaId)).toEqual({
+        mostrarPresencia: true,
+        disposicionPanel: disposicion,
+      });
+
+      const acciones = await conTenant(
+        cliente,
+        tenantId,
+        (tx) => tx<{ accion: string; actor_tipo: string; actor_id: string | null }[]>`
+        select accion, actor_tipo, actor_id from entrada_auditoria
+        where tenant_id = ${tenantId} and accion = ${ACCION_DISPOSICION_ACTUALIZADA}
+      `,
+      );
+      expect(acciones).toEqual([
+        { accion: ACCION_DISPOSICION_ACTUALIZADA, actor_tipo: 'persona', actor_id: personaId },
+      ]);
+      expect((await verificarCadenaEnBase(cliente, tenantId)).valida).toBe(true);
+    } finally {
+      await puerto.actualizarDisposicion(tenantId, personaId, []);
+    }
+  });
+
+  it('la disposición de una persona no se lee desde otra organización', async () => {
+    const puerto = puertoPerfilConBaseDeDatos(conexion.cliente);
+    try {
+      await puerto.actualizarDisposicion(tenantId, personaId, [
+        { id: 'saludo', tamano: 'mediano', oculto: false },
+      ]);
+      expect(await puerto.leer(otroTenantId, otraPersonaId)).toEqual({
+        mostrarPresencia: true,
+        disposicionPanel: [],
+      });
+    } finally {
+      await puerto.actualizarDisposicion(tenantId, personaId, []);
     }
   });
 });

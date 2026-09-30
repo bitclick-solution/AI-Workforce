@@ -130,3 +130,19 @@ export type { HojaMovilProps } from './hoja-movil';
 
 export { TarjetaDePropuesta } from './tarjeta-de-propuesta';
 export type { DatoDePropuesta, TarjetaDePropuestaProps } from './tarjeta-de-propuesta';
+
+export {
+  PanelDeWidgets,
+  cambiarTamano,
+  disposicionPorDefecto,
+  mostrarWidget,
+  moverWidget,
+  normalizarDisposicion,
+  ocultarWidget,
+} from './panel-de-widgets';
+export type {
+  DefinicionDeWidget,
+  DisposicionDeWidget,
+  PanelDeWidgetsProps,
+  TamanoDeWidget,
+} from './panel-de-widgets';

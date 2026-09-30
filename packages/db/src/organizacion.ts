@@ -94,6 +94,14 @@ export const persona = pgTable(
      * rol de aplicación, que no tiene permiso sobre las tablas de identidad.
      */
     mostrarPresencia: boolean('mostrar_presencia').notNull().default(true),
+    /**
+     * Disposición del panel de widgets del inicio, por persona (rebanada «Inicio:
+     * widgets, agentes en tiempo real y avisos a la derecha»): qué widgets del
+     * catálogo cerrado, en qué orden, con qué tamaño y cuáles ocultos. Un JSON
+     * pequeño de esta persona, así que vive aquí y no en una tabla propia; igual
+     * que `mostrarPresencia`, se lee y se escribe con el rol de aplicación.
+     */
+    disposicionPanel: jsonb('disposicion_panel').notNull().default([]),
     ...columnasMutables(),
   },
   (t) => [

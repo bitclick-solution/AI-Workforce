@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ResolutorDeSesion } from '../identidad/acceso';
-import { atenderPerfil, type PeticionPerfil, type PuertoPerfil } from './perfil';
+import {
+  atenderPerfil,
+  type EntradaDeDisposicion,
+  type PeticionPerfil,
+  type PerfilDeLaVista,
+  type PuertoPerfil,
+} from './perfil';
 
 const TENANT = '01a0d39e-98c3-7970-814a-0a98ad132311';
 const PERSONA = '01a0d39e-98c3-7970-814a-0a98ad132312';
@@ -34,18 +40,33 @@ function peticion(parcial: Partial<PeticionPerfil> = {}): PeticionPerfil {
   };
 }
 
-function puertoFalso(mostrarPresenciaInicial = true) {
+function puertoFalso(
+  mostrarPresenciaInicial = true,
+  disposicionInicial: EntradaDeDisposicion[] = [],
+) {
   let mostrarPresencia = mostrarPresenciaInicial;
+  let disposicionPanel = disposicionInicial;
   const actualizaciones: { tenantId: string; personaId: string; mostrarPresencia: boolean }[] = [];
+  const actualizacionesDisposicion: {
+    tenantId: string;
+    personaId: string;
+    disposicionPanel: EntradaDeDisposicion[];
+  }[] = [];
+  const estado = (): PerfilDeLaVista => ({ mostrarPresencia, disposicionPanel });
   const puerto: PuertoPerfil = {
-    leer: () => Promise.resolve({ mostrarPresencia }),
+    leer: () => Promise.resolve(estado()),
     actualizarPresencia: (tenantId, personaId, valor) => {
       mostrarPresencia = valor;
       actualizaciones.push({ tenantId, personaId, mostrarPresencia: valor });
-      return Promise.resolve({ mostrarPresencia });
+      return Promise.resolve(estado());
+    },
+    actualizarDisposicion: (tenantId, personaId, valor) => {
+      disposicionPanel = valor;
+      actualizacionesDisposicion.push({ tenantId, personaId, disposicionPanel: valor });
+      return Promise.resolve(estado());
     },
   };
-  return { puerto, actualizaciones };
+  return { puerto, actualizaciones, actualizacionesDisposicion };
 }
 
 describe('ruta del perfil', () => {
@@ -63,11 +84,11 @@ describe('ruta del perfil', () => {
     expect(respuesta?.estado).toBe(401);
   });
 
-  it('GET lee el ajuste, activado por defecto', async () => {
+  it('GET lee el ajuste, activado por defecto y sin disposición', async () => {
     const { puerto } = puertoFalso();
     const respuesta = await atender(peticion(), puerto);
     expect(respuesta?.estado).toBe(200);
-    expect(respuesta?.cuerpo).toEqual({ mostrarPresencia: true });
+    expect(respuesta?.cuerpo).toEqual({ mostrarPresencia: true, disposicionPanel: [] });
   });
 
   it('PATCH cambia el ajuste con la persona de la sesión, nunca de una cabecera', async () => {
@@ -81,7 +102,7 @@ describe('ruta del perfil', () => {
       puerto,
     );
     expect(respuesta?.estado).toBe(200);
-    expect(respuesta?.cuerpo).toEqual({ mostrarPresencia: false });
+    expect(respuesta?.cuerpo).toEqual({ mostrarPresencia: false, disposicionPanel: [] });
     expect(actualizaciones).toEqual([
       { tenantId: TENANT, personaId: PERSONA, mostrarPresencia: false },
     ]);
@@ -95,6 +116,60 @@ describe('ruta del perfil', () => {
     );
     expect(respuesta?.estado).toBe(400);
     expect(actualizaciones).toEqual([]);
+  });
+
+  it('PATCH guarda la disposición del panel de widgets', async () => {
+    const { puerto, actualizacionesDisposicion } = puertoFalso();
+    const disposicion: EntradaDeDisposicion[] = [
+      { id: 'saludo', tamano: 'grande', oculto: false },
+      { id: 'contador', tamano: 'pequeno', oculto: true },
+    ];
+    const respuesta = await atender(
+      peticion({ metodo: 'PATCH', cuerpo: { disposicionPanel: disposicion } }),
+      puerto,
+    );
+    expect(respuesta?.estado).toBe(200);
+    expect(respuesta?.cuerpo).toEqual({ mostrarPresencia: true, disposicionPanel: disposicion });
+    expect(actualizacionesDisposicion).toEqual([
+      { tenantId: TENANT, personaId: PERSONA, disposicionPanel: disposicion },
+    ]);
+  });
+
+  it('PATCH cambia los dos ajustes a la vez si los dos llegan', async () => {
+    const { puerto } = puertoFalso();
+    const respuesta = await atender(
+      peticion({
+        metodo: 'PATCH',
+        cuerpo: {
+          mostrarPresencia: false,
+          disposicionPanel: [{ id: 'equipo', tamano: 'mediano', oculto: false }],
+        },
+      }),
+      puerto,
+    );
+    expect(respuesta?.cuerpo).toEqual({
+      mostrarPresencia: false,
+      disposicionPanel: [{ id: 'equipo', tamano: 'mediano', oculto: false }],
+    });
+  });
+
+  it('PATCH rechaza una disposición con un tamaño fuera del catálogo', async () => {
+    const { puerto, actualizacionesDisposicion } = puertoFalso();
+    const respuesta = await atender(
+      peticion({
+        metodo: 'PATCH',
+        cuerpo: { disposicionPanel: [{ id: 'saludo', tamano: 'enorme', oculto: false }] },
+      }),
+      puerto,
+    );
+    expect(respuesta?.estado).toBe(400);
+    expect(actualizacionesDisposicion).toEqual([]);
+  });
+
+  it('PATCH sin ningún campo conocido responde 400', async () => {
+    const { puerto } = puertoFalso();
+    const respuesta = await atender(peticion({ metodo: 'PATCH', cuerpo: {} }), puerto);
+    expect(respuesta?.estado).toBe(400);
   });
 
   it('otro método no permitido responde 405', async () => {
