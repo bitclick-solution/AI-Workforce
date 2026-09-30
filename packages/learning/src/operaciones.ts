@@ -17,89 +17,30 @@ import { esquemas } from '@aiw/domain';
 import { anotar } from '@aiw/ledger';
 import type postgres from 'postgres';
 
+import {
+  ACCIONES_APRENDIZAJE,
+  ErrorDeAprendizaje,
+  ORIGEN_EDICION,
+  UUID,
+  bloquear,
+  claveDeMemoria,
+  esViolacionDeUnicidad,
+  exigirUuid,
+  json,
+  type CodigoErrorAprendizaje,
+} from './comun.js';
 import { sanearValor } from './datos-personales.js';
 import { diferenciaDeBorradores, type Cambio } from './diferencia.js';
+import { leerHabilidadesCongeladas } from './habilidades.js';
 import { redactarLeccion } from './leccion.js';
 
-/**
- * Nombres de acción del libro para el aprendizaje. Se añaden, no se renombran: una
- * consulta de auditoría escrita hoy tiene que seguir sirviendo dentro de seis años.
- */
-export const ACCIONES_APRENDIZAJE = {
-  senalRegistrada: 'aprendizaje.senal.registrada',
-  leccionPropuesta: 'aprendizaje.leccion.propuesta',
-  leccionPromocionada: 'aprendizaje.leccion.promocionada',
-  promocionBloqueada: 'aprendizaje.promocion.bloqueada',
-  versionRevertida: 'aprendizaje.version.revertida',
-} as const;
-
-/** Origen de la señal que nace de una edición del borrador antes de aprobar. */
-export const ORIGEN_EDICION = 'aprobacion.editada';
-
-/** Clave de la memoria viva de una lección: una fila por lección y puesto. */
-export function claveDeMemoria(leccionId: string): string {
-  return `leccion:${leccionId}`;
-}
-
-export type CodigoErrorAprendizaje =
-  | 'no_encontrada'
-  | 'no_es_edicion'
-  | 'sin_cambios'
-  | 'sin_persona'
-  | 'ya_promocionada'
-  | 'version_ajena'
-  | 'ya_activa';
-
-/**
- * Error esperado del aprendizaje. El flujo durable no lo reintenta: repetir una
- * promoción de una lección ya promocionada no la va a promocionar mejor.
- */
-export class ErrorDeAprendizaje extends Error {
-  readonly codigo: CodigoErrorAprendizaje;
-
-  constructor(codigo: CodigoErrorAprendizaje, mensaje: string) {
-    super(mensaje);
-    this.name = 'ErrorDeAprendizaje';
-    this.codigo = codigo;
-  }
-}
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function exigirUuid(valor: string, que: string): void {
-  if (!UUID.test(valor))
-    throw new ErrorDeAprendizaje('no_encontrada', `${que} no es un UUID: ${valor}`);
-}
-
-/** Código de PostgreSQL para la violación de una restricción de unicidad. */
-const UNICIDAD_VIOLADA = '23505';
-
-/**
- * El índice único `promocion_tenant_leccion_key` es la red de seguridad de la base:
- * la comprobación previa de `promocionarLeccion` evita la versión de puesto de sobra
- * en el camino normal, pero quien inserte en `promocion` sin pasar por ahí —o gane la
- * carrera contra ella— choca aquí igual.
- */
-function esViolacionDeUnicidad(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { code?: unknown }).code === UNICIDAD_VIOLADA
-  );
-}
-
-/**
- * Serializa dentro de la transacción las operaciones sobre la misma clave. Es lo que
- * impide que dos reintentos simultáneos inserten dos señales para una edición o dos
- * versiones con el mismo número para un puesto.
- */
-async function bloquear(tx: postgres.TransactionSql, clave: string): Promise<void> {
-  await tx`select pg_advisory_xact_lock(hashtextextended(${clave}, 1))`;
-}
-
-function json(valor: unknown): string {
-  return JSON.stringify(valor);
-}
+export {
+  ACCIONES_APRENDIZAJE,
+  ErrorDeAprendizaje,
+  ORIGEN_EDICION,
+  claveDeMemoria,
+  type CodigoErrorAprendizaje,
+};
 
 // ---------------------------------------------------------------------------
 // Lectura de la edición
@@ -477,6 +418,17 @@ export interface VersionCandidata {
   leccionId: string;
   parametros: esquemas.ParametrosLeccion;
   memoria: esquemas.MemoriaCongelada;
+  /**
+   * Habilidades congeladas que tendría la versión si se certifica, ya con la
+   * candidata añadida. Solo se rellena cuando `parametros.clase` es `habilidad`.
+   */
+  habilidadesCongeladas?: esquemas.HabilidadesCongeladas | undefined;
+  /**
+   * Nombres de herramienta que el puesto tiene en su lista blanca (todos sus
+   * conectores autorizados). La puerta la usa para bloquear una habilidad que
+   * nombra una herramienta fuera de esa lista (decisión 4 de la especificación).
+   */
+  listaBlancaHerramientas?: readonly string[] | undefined;
 }
 
 export interface CasoDeLaPuerta {
@@ -606,19 +558,55 @@ export async function promocionarLeccion(
       );
     }
 
+    // Habilidades en el bucle: una lección de clase `habilidad` no añade una línea
+    // de memoria, añade un elemento a `habilidades_congeladas`. El resto del camino
+    // —puerta, versión inmutable, puntero, libro— es el mismo para las dos clases
+    // (docs/specs/habilidades-en-el-bucle-y-catalogo-finanzas.md, decisión 5).
+    const esHabilidad = parametros.clase === 'habilidad';
     const memoriaAnterior = leerMemoriaCongelada(activa.memoria_congelada);
-    const memoria: esquemas.MemoriaCongelada = {
-      lineas: [
-        ...memoriaAnterior.lineas,
-        { leccionId: leccion.id, texto: String(parametros.valor) },
-      ],
-    };
+    const memoria: esquemas.MemoriaCongelada = esHabilidad
+      ? memoriaAnterior
+      : {
+          lineas: [
+            ...memoriaAnterior.lineas,
+            { leccionId: leccion.id, texto: String(parametros.valor) },
+          ],
+        };
+
+    let habilidadesCandidatas: esquemas.HabilidadesCongeladas | undefined;
+    let listaBlancaHerramientas: string[] | undefined;
+    if (esHabilidad) {
+      const nuevoItem = esquemas.validarCarga(
+        esquemas.habilidadCongeladaItem,
+        parametros.valor,
+        'leccion.parametros.valor',
+      );
+      const existentes = leerHabilidadesCongeladas(activa.habilidades_congeladas);
+      if (existentes.some((habilidad) => habilidad.nombre === nuevoItem.nombre)) {
+        throw new ErrorDeAprendizaje(
+          'ya_activa',
+          `La habilidad «${nuevoItem.nombre}» ya está activa en la versión actual del puesto ${leccion.puesto_id}.`,
+        );
+      }
+      habilidadesCandidatas = [...existentes, nuevoItem];
+
+      const filasListaBlanca = await tx<{ nombre: string }[]>`
+        select distinct elem as nombre
+        from autorizacion_herramientas ah,
+          jsonb_array_elements_text(ah.lista_blanca) as elem
+        where ah.tenant_id = ${tenantId} and ah.puesto_id = ${leccion.puesto_id}
+      `;
+      listaBlancaHerramientas = filasListaBlanca.map((fila) => fila.nombre);
+    }
+
     const resultados = await peticion.puerta({
       tenantId,
       puestoId: leccion.puesto_id,
       leccionId: leccion.id,
       parametros,
       memoria,
+      ...(habilidadesCandidatas === undefined ? {} : { habilidadesCongeladas: habilidadesCandidatas }),
+      ...(listaBlancaHerramientas === undefined ? {} : { listaBlancaHerramientas }),
     });
 
     if (!resultados.certificada) {
@@ -645,6 +633,8 @@ export async function promocionarLeccion(
       { leccionId: leccion.id, senalIds, promocionadaPorPersonaId: peticion.personaId },
     ];
     const numero = Number(activa.ultimo) + 1;
+    const habilidadesParaLaVersion =
+      habilidadesCandidatas === undefined ? activa.habilidades_congeladas : habilidadesCandidatas;
 
     const [version] = await tx<{ id: string }[]>`
       insert into version_puesto (
@@ -652,7 +642,7 @@ export async function promocionarLeccion(
         memoria_congelada, lecciones_origen, resultados_eval
       ) values (
         ${tenantId}, ${leccion.puesto_id}, ${numero}, ${activa.prompt},
-        ${json(activa.politica)}::text::jsonb, ${json(activa.habilidades_congeladas)}::text::jsonb,
+        ${json(activa.politica)}::text::jsonb, ${json(habilidadesParaLaVersion)}::text::jsonb,
         ${json(memoria)}::text::jsonb, ${json(leccionesOrigen)}::text::jsonb,
         ${json(resultados)}::text::jsonb
       )
@@ -688,15 +678,18 @@ export async function promocionarLeccion(
     `;
 
     // La memoria viva es para la búsqueda futura; el prompt se compone con la
-    // congelada, que es la que reproduce exactamente lo que vio cada tarea.
-    const clave = claveDeMemoria(leccion.id);
-    await tx`
-      insert into memoria (tenant_id, ambito, ambito_id, clave, contenido, metadatos)
-      values (
-        ${tenantId}, 'puesto', ${leccion.puesto_id}, ${clave}, ${String(parametros.valor)},
-        ${json({ leccionId: leccion.id, versionPuestoId: version.id })}::text::jsonb
-      )
-    `;
+    // congelada, que es la que reproduce exactamente lo que vio cada tarea. No
+    // aplica a una activación de habilidad: no hay línea de memoria que buscar.
+    if (!esHabilidad) {
+      const clave = claveDeMemoria(leccion.id);
+      await tx`
+        insert into memoria (tenant_id, ambito, ambito_id, clave, contenido, metadatos)
+        values (
+          ${tenantId}, 'puesto', ${leccion.puesto_id}, ${clave}, ${String(parametros.valor)},
+          ${json({ leccionId: leccion.id, versionPuestoId: version.id })}::text::jsonb
+        )
+      `;
+    }
 
     await anotar(tx, tenantId, {
       actorTipo: 'persona',

@@ -139,6 +139,27 @@ export const memoriaCongelada = z.object({
   lineas: z.array(z.object({ leccionId: z.string().min(1), texto: z.string().min(1) })).default([]),
 });
 
+/**
+ * Una habilidad congelada en `version_puesto.habilidades_congeladas`: lo que la
+ * versión vio de esa habilidad en el momento en que se activó. `nombre` y
+ * `casosQueAplican` son el índice que entra siempre en el prompt; `pasos` y
+ * `comprobaciones` son el cuerpo que solo entra cuando `cargar_habilidad` lo pide
+ * (docs/specs/habilidades-en-el-bucle-y-catalogo-finanzas.md, decisión 1).
+ * `herramientas` son los nombres que sus pasos nombran, para comprobar contra la
+ * lista blanca del puesto antes de activarla (decisión 4).
+ */
+export const habilidadCongeladaItem = z.object({
+  habilidadId: z.string().min(1),
+  nombre: z.string().min(1),
+  version: z.number().int().positive(),
+  casosQueAplican: z.array(z.string().min(1)).default([]),
+  pasos: z.array(z.string().min(1)).default([]),
+  comprobaciones: z.array(z.string().min(1)).default([]),
+  herramientas: z.array(z.string().min(1)).default([]),
+});
+
+export const habilidadesCongeladas = z.array(habilidadCongeladaItem);
+
 /** Lección que origina una versión de puesto, en `version_puesto.lecciones_origen`. */
 export const leccionesOrigen = z.array(
   z.object({
@@ -200,6 +221,8 @@ export type BorradorOpaco = z.infer<typeof borradorOpaco>;
 export type ParametrosLeccion = z.infer<typeof parametrosLeccion>;
 export type EdicionBorrador = z.infer<typeof edicionBorrador>;
 export type MemoriaCongelada = z.infer<typeof memoriaCongelada>;
+export type HabilidadCongeladaItem = z.infer<typeof habilidadCongeladaItem>;
+export type HabilidadesCongeladas = z.infer<typeof habilidadesCongeladas>;
 export type LeccionesOrigen = z.infer<typeof leccionesOrigen>;
 export type DatosReferenciados = z.infer<typeof datosReferenciados>;
 export type CambioDeNivel = z.infer<typeof cambioDeNivel>;

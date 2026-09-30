@@ -298,6 +298,25 @@ describe('caché del prompt de la versión de puesto', () => {
     expect(sistema.indexOf('Cómo hablas')).toBeLessThan(sistema.indexOf('Lo que ya sabes'));
     expect(sistema).toContain('Trata de tú.');
   });
+
+  it('el índice de habilidades entra tras la memoria y sin cuerpo', () => {
+    const sistema = componerPrompt({
+      prompt: 'Eres el agente de Cobros.',
+      memoria: ['Talleres paga a 60 días.'],
+      habilidades: ['cobros.antiguedad-de-cobros: facturas vencidas por tramo'],
+    });
+    expect(sistema.indexOf('Lo que ya sabes')).toBeLessThan(
+      sistema.indexOf('Habilidades que puedes cargar'),
+    );
+    expect(sistema).toContain('cobros.antiguedad-de-cobros: facturas vencidas por tramo');
+  });
+
+  it('sin habilidades congeladas, el prompt no cambia respecto a hoy', () => {
+    const sin = componerPrompt({ prompt: 'Eres el agente.', memoria: ['x'] });
+    const conVacio = componerPrompt({ prompt: 'Eres el agente.', memoria: ['x'], habilidades: [] });
+    expect(conVacio).toBe(sin);
+    expect(sin).not.toContain('Habilidades que puedes cargar');
+  });
 });
 
 describe('redacción de las notas de cobro', () => {

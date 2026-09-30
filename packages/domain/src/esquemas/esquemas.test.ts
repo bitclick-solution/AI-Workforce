@@ -4,6 +4,7 @@ import {
   borradorOpaco,
   configuracionModeloPuesto,
   edicionBorrador,
+  habilidadesCongeladas,
   memoriaCongelada,
   nivelAutonomia,
   parametrosLeccion,
@@ -104,5 +105,24 @@ describe('esquemas de las cargas jsonb', () => {
     expect(memoriaCongelada.safeParse({ lineas: [{ leccionId: '', texto: 'x' }] }).success).toBe(
       false,
     );
+  });
+
+  it('valida las habilidades congeladas de una versión de puesto, sin cuerpo obligatorio', () => {
+    const habilidades = habilidadesCongeladas.parse([
+      { habilidadId: 'h1', nombre: 'cobros.demo', version: 1, casosQueAplican: ['un caso'] },
+    ]);
+    expect(habilidades).toEqual([
+      {
+        habilidadId: 'h1',
+        nombre: 'cobros.demo',
+        version: 1,
+        casosQueAplican: ['un caso'],
+        pasos: [],
+        comprobaciones: [],
+        herramientas: [],
+      },
+    ]);
+    expect(habilidadesCongeladas.safeParse([{ nombre: '', version: 1 }]).success).toBe(false);
+    expect(habilidadesCongeladas.parse([])).toEqual([]);
   });
 });

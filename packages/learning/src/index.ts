@@ -22,3 +22,6 @@ export * from './diferencia.js';
 export * from './datos-personales.js';
 export * from './leccion.js';
 export * from './operaciones.js';
+
+// Habilidades en el bucle del agente
+export * from './habilidades.js';
