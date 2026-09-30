@@ -1,0 +1,14 @@
+{
+  "name": "@aiw/scripts-local",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pruebas unitarias de la lógica que depende de la plataforma en los guiones pnpm local:* (resolución de pnpm en Windows, parada del árbol de procesos, requisitos). Los guiones en sí (local-arrancar.mjs y demás) los invoca el package.json de la raíz, no este paquete.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf coverage .turbo"
+  },
+  "devDependencies": {
+    "vitest": "catalog:"
+  }
+}

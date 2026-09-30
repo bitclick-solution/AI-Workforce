@@ -10,8 +10,8 @@ máquina, sin servidor. Rebanada: [entorno local](../specs/entorno-local.md).
 - **Docker** con Compose v2 (`docker compose version`), demonio arrancado.
   - macOS: Docker Desktop. Dale al menos 6 GB de RAM en **Settings › Resources**.
   - Linux: el paquete `docker` con el servicio `docker` activo (`systemctl status docker`); tu usuario en el grupo `docker` para no necesitar `sudo`.
-  - Windows: no está soportado directamente. Usa **WSL2** con una distribución Linux (Ubuntu recomendado), Docker Desktop con la integración de WSL2 activada, y ejecuta todo lo de este runbook dentro de esa distribución (`wsl` desde una terminal), nunca desde PowerShell.
-- **Node 22** (`.node-version`) y **pnpm 10**. Con Corepack: `corepack enable`.
+  - Windows: Docker Desktop, con el backend de WSL2 activado (Settings › General). Con eso, todo lo de este runbook se ejecuta directamente desde PowerShell o `cmd.exe`; no hace falta abrir una distribución de WSL2 a mano. Ver la sección «Windows» más abajo para lo que es distinto ahí.
+- **Node 22** (`.node-version`) y **pnpm 10 o superior**. Con Corepack: `corepack enable`. `pnpm local:arrancar` comprueba la versión con la misma resolución que usa para lanzar pnpm (ver «Windows»), y avisa si difiere de la del `packageManager` de `package.json`.
 - Memoria: al menos 4 GB libres, 8 GB recomendados (PostgreSQL, Temporal, Centrifugo, Langfuse con ClickHouse y Redis, Silo, Mailpit, más `api`, `worker` y `web`).
 - Disco: al menos 3 GB libres, 10 GB recomendados. Los volúmenes de PostgreSQL y de ClickHouse son los que más crecen.
 - `pnpm local:arrancar` comprueba todo esto solo y para con un mensaje si algo falta; no hace falta comprobarlo a mano.
@@ -105,6 +105,39 @@ arriba). Detalle completo, incluida la matriz de modelos provisional mientras
 AWS no conceda acceso a Sonnet 5 y Opus 5:
 [`modelos-funciones-ausentes.md`](modelos-funciones-ausentes.md).
 
+## Windows
+
+Los guiones `pnpm local:*` corren directamente en Windows (PowerShell o
+`cmd.exe`), sin WSL2 a mano; Docker Desktop sigue usando WSL2 por debajo, pero
+eso es cosa suya, no tuya. Dos cosas se resuelven distinto ahí:
+
+- **pnpm 10 o superior, aunque solo exista como lanzador `.cmd` o `.ps1`.**
+  Desde la corrección de seguridad de abril de 2024 (CVE-2024-27980), Node se
+  niega a lanzar un `.cmd`/`.ps1`/`.bat` sin pedir explícitamente el intérprete
+  de comandos, y en Windows pnpm casi nunca es un `.exe` nativo (lo instale
+  Corepack o `npm install -g pnpm`). Los guiones ya lo resuelven solos: no
+  hace falta nada de tu parte más que tener `pnpm --version` funcionando en tu
+  terminal.
+- **`pnpm local:parar` para el árbol de procesos con `taskkill /PID <pid> /T
+/F`.** Windows no tiene grupos de procesos como Linux o macOS, así que no
+  hay un único «matar al grupo»: `taskkill` con `/T` (árbol) y `/F` (forzado)
+  es la forma documentada de parar un proceso y todo lo que lanzó (pnpm
+  arrastra `tsx` o `next`). Si algo no se pudo parar, `local:parar` lo dice
+  por su nombre y no borra `.aiw-local/procesos.json` — repítelo o para ese
+  proceso a mano desde el Administrador de tareas antes de volver a intentarlo,
+  para no perder el rastro de lo que sigue vivo.
+
+**Si ya tenías un `pnpm.exe` antiguo instalado** (por ejemplo, uno de una
+versión de Node anterior, o un `pnpm` global de `npm install -g pnpm` que
+Corepack no gestiona): `pnpm local:arrancar` para con un error claro si es
+menor que 10, y con un aviso — no un error — si es 10 o superior pero
+distinto del que fija `packageManager` en `package.json` (puede que tengas
+dos pnpm en el `PATH` y esté ganando el que no toca). Para saber cuál se está
+lanzando de verdad: `where.exe pnpm` (o `Get-Command pnpm` en PowerShell) lista
+todos por orden de `PATH`; el primero es el que ejecutan estos guiones.
+Quita o reordena el que sobre, o simplemente `corepack enable` y deja que
+Corepack ponga el suyo delante.
+
 ## Problemas comunes
 
 - **«El demonio de Docker no responde»**: arranca Docker Desktop (macOS) o
@@ -112,20 +145,24 @@ AWS no conceda acceso a Sonnet 5 y Opus 5:
 - **«Puertos ocupados»**: `pnpm local:arrancar` los comprueba todos antes de
   tocar Docker y te dice exactamente cuáles y con qué variable de `.env`
   cambiarlos (por ejemplo `POSTGRES_PORT`), en vez del error crudo de Docker a
-  medio arrancar. La causa más común no es un arranque anterior sin parar
-  bien (`pnpm local:parar` lo resuelve) sino otro proyecto tuyo que ya usa ese
-  puerto — otro Compose en 5432, un Java en 8080, un Node en 3001. Cambia la
-  variable correspondiente en `.env` (ver «Puertos que ocupa» arriba) y
-  repite; no hace falta parar el otro proyecto.
+  medio arrancar. Repetir `pnpm local:arrancar` con su propio Compose ya
+  levantado no cuenta como ocupado (reconoce sus propios contenedores); si de
+  verdad ves este error es porque otro proyecto tuyo ya usa ese puerto — otro
+  Compose en 5432, un Java en 8080, un Node en 3001 — o porque `api`/`web`
+  quedaron corriendo de un arranque anterior sin pasar por `pnpm local:parar`.
+  Cambia la variable correspondiente en `.env` (ver «Puertos que ocupa»
+  arriba) y repite; no hace falta parar el otro proyecto.
 - **La demo de sala no arranca (se agota el plazo)**: mira
   `.aiw-local/registros/worker-sala.log`. La causa más común es que la
   migración no ha terminado o que `DEMO_CONECTOR_SECRETO` falta en `.env`
   (bórralo y deja que `pnpm local:arrancar` lo regenere).
 - **`/panel/sala` o `/panel/contador` dan 404**: sus banderas
-  (`AIW_SALA_V0`, `AIW_PANEL_CONTADOR`) solo están encendidas en los procesos
-  que arranca `local:arrancar`, no en `.env`. Si arrancaste `api` o `web` a
-  mano con `pnpm --filter @aiw/api dev`, no las tendrán; usa
-  `pnpm local:arrancar`.
+  (`AIW_SALA_V0`, `AIW_SALA_V1`, `AIW_PANEL_CONTADOR`) solo están encendidas
+  en los procesos que arranca `local:arrancar`, no en `.env`. Si arrancaste
+  `api` o `web` a mano con `pnpm --filter @aiw/api dev`, no las tendrán; usa
+  `pnpm local:arrancar`. Si de verdad exportaste `AIW_SALA_V1=0` en tu
+  terminal antes de arrancar (para probar la v0 a propósito), esa exportación
+  manda sobre el valor por defecto: quítala y repite.
 - **`git pull --ff-only` falla en `local:actualizar`**: tu `main` local ha
   divergido de `origin/main` (algún commit propio sin subir). Resuélvelo a
   mano: `git log origin/main..main` para ver qué tienes de más.

@@ -114,19 +114,43 @@ export type BuscadorCentrifugo = (
   opciones: { method: string; headers: Record<string, string>; body: string },
 ) => Promise<Response>;
 
+/**
+ * Centrifugo rechazó la petición (canal desconocido, token inválido...): la API
+ * HTTP responde 200 igual, con `error` en el cuerpo en vez de `result` (fallo 5:
+ * antes esto se leía como «sin resultado» y se degradaba en silencio, sin que
+ * nada lo distinguiera de que de verdad no había nadie conectado).
+ */
+export class ErrorCentrifugo extends Error {
+  constructor(
+    public readonly codigo: number,
+    mensaje: string,
+  ) {
+    super(`Centrifugo rechazó la petición (${codigo}): ${mensaje}`);
+    this.name = 'ErrorCentrifugo';
+  }
+}
+
 async function llamarApi(
   configuracion: ConfiguracionCentrifugo,
   metodo: string,
   parametros: Record<string, unknown>,
   buscar: BuscadorCentrifugo,
-): Promise<{ result?: Record<string, unknown>; error?: { code: number; message: string } }> {
+): Promise<{ result?: Record<string, unknown> }> {
   const respuesta = await buscar(`${configuracion.urlApi.replace(/\/+$/, '')}/api`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': configuracion.claveApi },
     body: JSON.stringify({ method: metodo, params: parametros }),
   });
   const texto = await respuesta.text();
-  return texto.length > 0 ? (JSON.parse(texto) as { result?: Record<string, unknown> }) : {};
+  const cuerpo =
+    texto.length > 0
+      ? (JSON.parse(texto) as {
+          result?: Record<string, unknown>;
+          error?: { code: number; message: string };
+        })
+      : {};
+  if (cuerpo.error) throw new ErrorCentrifugo(cuerpo.error.code, cuerpo.error.message);
+  return cuerpo;
 }
 
 /**

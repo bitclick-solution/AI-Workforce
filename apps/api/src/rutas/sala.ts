@@ -36,6 +36,7 @@ import {
 // Aparte del índice del paquete: usa `node:crypto` y el índice lo importa el
 // paquete de flujos de Temporal, que se empaqueta para un entorno sin él.
 import {
+  ErrorCentrifugo,
   presenciaDeSala,
   publicarEnSala,
   tokenDeCanal,
@@ -682,7 +683,14 @@ export function puertoSala(
             buscarCentrifugo,
           );
           conectadas = new Set(presencia.map((p) => p.personaId));
-        } catch {
+        } catch (error) {
+          // Fallo 5: Centrifugo caído (fetch rechaza) es la caída de verdad que
+          // ya cubre este `catch` a propósito; que Centrifugo responda que no
+          // (canal rechazado, `ErrorCentrifugo`) es un fallo de configuración y
+          // se registra, nunca en silencio, aunque la sala siga degradando igual.
+          if (error instanceof ErrorCentrifugo) {
+            console.error(`[api] centrifugo rechazó la presencia de ${salaId}: ${error.message}`);
+          }
           conectadas = new Set();
         }
       }
@@ -766,17 +774,28 @@ export function puertoSala(
       // más lo recibe. No basta con que la interfaz lo esconda: aquí ni se llama
       // a Centrifugo.
       if (!(await mostrarPresencia(tenantId, personaId))) return;
-      await publicarEnSala(
-        configuracion.v1.centrifugo,
-        tenantId,
-        salaId,
-        {
-          tipo: 'escribiendo',
-          personaId,
-          hasta: new Date(Date.now() + DURACION_ESCRIBIENDO_MS).toISOString(),
-        },
-        buscarCentrifugo,
-      );
+      try {
+        // Mejor esfuerzo (decisión 6 de la especificación): un canal rechazado
+        // por Centrifugo (`ErrorCentrifugo`, fallo 5) o Centrifugo caído no
+        // rompe el aviso de que se escribe, solo lo deja sin repartir. Mismo
+        // patrón que `avisarSala` en apps/worker/src/actividades/contexto.ts.
+        await publicarEnSala(
+          configuracion.v1.centrifugo,
+          tenantId,
+          salaId,
+          {
+            tipo: 'escribiendo',
+            personaId,
+            hasta: new Date(Date.now() + DURACION_ESCRIBIENDO_MS).toISOString(),
+          },
+          buscarCentrifugo,
+        );
+      } catch (error) {
+        console.error(
+          `[api] centrifugo no repartió «escribiendo» en ${salaId}:`,
+          error instanceof Error ? error.message : error,
+        );
+      }
     },
 
     mostrarPresencia,

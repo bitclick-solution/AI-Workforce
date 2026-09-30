@@ -2,12 +2,14 @@
 // puertos libres, memoria y disco. Nunca modifica nada; solo informa.
 import { spawnSync } from 'node:child_process';
 import { freemem, totalmem } from 'node:os';
-import { statfsSync } from 'node:fs';
+import { readFileSync, statfsSync } from 'node:fs';
+import { join } from 'node:path';
 
-import { puertoOcupado, raiz, valorEntorno } from './local-comun.mjs';
+import { comandoPnpm, estadoServicios, puertoOcupado, raiz, valorEntorno } from './local-comun.mjs';
 
 const NODE_MAYOR_MINIMO = 22;
 const NODE_MAYOR_MAXIMO = 23; // exclusivo, como en package.json#engines
+const PNPM_MAYOR_MINIMO = 10;
 const MEMORIA_MINIMA_GB = 4;
 const MEMORIA_RECOMENDADA_GB = 8;
 const DISCO_MINIMO_GB = 3;
@@ -31,6 +33,59 @@ const VARIABLE_POR_PUERTO = {
 function comandoDisponible(mandato, argumentos) {
   const resultado = spawnSync(mandato, argumentos, { encoding: 'utf8' });
   return { ok: resultado.status === 0 && !resultado.error, salida: resultado.stdout?.trim() };
+}
+
+/** `pnpm --version`, resuelto igual que lo lanza `lanzarProceso` (fallo 2). */
+function pnpmDisponible({ plataforma = process.platform } = {}) {
+  const { mandato, argumentos, opciones } = comandoPnpm(['--version'], { plataforma });
+  const resultado = spawnSync(mandato, argumentos, { encoding: 'utf8', ...opciones });
+  return { ok: resultado.status === 0 && !resultado.error, salida: resultado.stdout?.trim() };
+}
+
+/** El `packageManager` de la raíz (`pnpm@10.33.0`), o undefined si no se puede leer. */
+function packageManagerDeclarado() {
+  try {
+    const paquete = JSON.parse(readFileSync(join(raiz, 'package.json'), 'utf8'));
+    const declarado = typeof paquete.packageManager === 'string' ? paquete.packageManager : '';
+    return declarado.startsWith('pnpm@') ? declarado.slice('pnpm@'.length) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * true si algún contenedor de nuestro propio Compose (fallo 3: `estadoServicios`
+ * solo puede listar contenedores de este proyecto, Docker los distingue por
+ * etiqueta de proyecto y no por puerto) ya publica ese puerto — un arranque
+ * anterior o a medio parar, no un conflicto con otro programa.
+ */
+export function puertoDeNuestroCompose(puerto, servicios) {
+  const texto = String(puerto);
+  return servicios.some((servicio) => {
+    const publicadores = Array.isArray(servicio.Publishers) ? servicio.Publishers : [];
+    if (publicadores.some((p) => String(p.PublishedPort ?? '') === texto)) return true;
+    return String(servicio.Ports ?? '').includes(`:${texto}->`);
+  });
+}
+
+/**
+ * `{ error?, aviso? }` para una versión de pnpm ya resuelta (fallo 1: pnpm 10 o
+ * superior; avisa si difiere del `packageManager` declarado, sin abortar por
+ * eso — decisión 4 de la especificación). Pura, para probarla sin lanzar pnpm.
+ */
+export function evaluarVersionPnpm(version, declarado) {
+  const mayor = Number(version.split('.')[0]);
+  if (!Number.isInteger(mayor) || mayor < PNPM_MAYOR_MINIMO) {
+    return {
+      error: `pnpm ${version || '(versión desconocida)'} no vale: hace falta pnpm ${PNPM_MAYOR_MINIMO} o superior.`,
+    };
+  }
+  if (declarado !== undefined && declarado !== version) {
+    return {
+      aviso: `pnpm ${version} difiere del \`packageManager\` de package.json (pnpm@${declarado}); puede haber dos pnpm instalados.`,
+    };
+  }
+  return {};
 }
 
 /**
@@ -68,14 +123,20 @@ export async function comprobarRequisitos(env, { puertoApi = '3002', puertoWeb =
     );
   }
 
-  const pnpm = comandoDisponible('pnpm', ['--version']);
+  const pnpm = pnpmDisponible();
   if (!pnpm.ok) {
-    errores.push('pnpm no está en el PATH. Con Corepack: `corepack enable`.');
+    errores.push('pnpm no está en el PATH (o no se pudo lanzar). Con Corepack: `corepack enable`.');
+  } else {
+    const { error, aviso } = evaluarVersionPnpm(pnpm.salida, packageManagerDeclarado());
+    if (error) errores.push(error);
+    if (aviso) avisos.push(aviso);
   }
 
+  const servicios = estadoServicios();
   const ocupados = [];
   for (const [variable, porDefecto] of Object.entries(VARIABLE_POR_PUERTO)) {
     const puerto = valorEntorno(env, variable, porDefecto);
+    if (puertoDeNuestroCompose(puerto, servicios)) continue;
     if (await puertoOcupado(puerto)) ocupados.push(`${puerto} (${variable})`);
   }
   const puertoApiReal = valorEntorno(env, 'AIW_API_PUERTO', puertoApi);
