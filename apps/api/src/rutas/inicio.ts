@@ -316,7 +316,7 @@ export function puertoInicio(
           select distinct on (puesto_id) puesto_id, id, resultado, creado_en
           from tarea
           where tenant_id = ${tenantId} and puesto_id in ${tx(puestoIds)}
-            and estado in ('en_curso', 'esperando_aprobacion')
+            and estado in ('pendiente', 'en_curso', 'esperando_aprobacion')
             and coalesce(tarea_raiz_id, id) = id
           order by puesto_id, creado_en desc
         `,
