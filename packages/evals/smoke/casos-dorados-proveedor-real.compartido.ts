@@ -14,8 +14,8 @@
  * Vertex. Conciliación es enteramente categórica (`facturaId`, `conciliado`),
  * así que sigue comparando por igualdad exacta con `evaluarCasoDoradoEstructurado`.
  */
-import { crearAdaptadorAnthropic, type ClienteDeMensajes } from '@aiw/models';
-import type { PlataformaModelo } from '@aiw/domain';
+import type { PapelModelo, PlataformaModelo } from '@aiw/domain';
+import { enrutadorDesdeEntorno, type ClienteDeMensajes, type PuertoEnrutado } from '@aiw/models';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -32,6 +32,44 @@ export interface ProveedorRealCasosDorados {
   plataforma: PlataformaModelo;
 }
 
+/**
+ * Enrutado de los dos puestos, tal como lo dicen sus plantillas certificadas
+ * (`apps/platform-agents/src/catalogo/plantillas.json`; un paquete no importa una
+ * aplicación, así que aquí se repite y lo vigila `siembra.test.ts` del trabajador).
+ * Los casos dorados pasan por el mismo enrutador que el trabajador, no por el
+ * adaptador suelto: lo que certifican es el enrutado de verdad.
+ */
+export const ENRUTADO_COBROS = { papel: 'sonnet5', papelRespaldo: 'haiku45' } as const;
+export const ENRUTADO_CONCILIACION = { papel: 'opus5', papelRespaldo: 'sonnet5' } as const;
+
+/**
+ * El puerto de un puesto, resuelto por el enrutador del trabajador con el cliente
+ * dado. Lo usan los casos contra el proveedor real y los evals de humo contra el
+ * servidor simulado: el mismo camino, distinto cliente.
+ */
+export function puestoConCliente(
+  cliente: ClienteDeMensajes,
+  plataforma: PlataformaModelo,
+  enrutado: { papel: PapelModelo; papelRespaldo: PapelModelo },
+): PuertoEnrutado {
+  const nombre = plataforma === 'vertex-eu' ? 'vertex-ue' : 'bedrock-ue';
+  const enrutador = enrutadorDesdeEntorno(
+    { AIW_PROVEEDOR_MODELOS: nombre },
+    { clientes: { [nombre]: cliente } },
+  );
+  const paso = enrutador.resolverPaso(enrutado);
+  if (paso.via !== 'puerto')
+    throw new Error(`El enrutado ${JSON.stringify(enrutado)} no va por el puerto real.`);
+  return paso.puerto;
+}
+
+function puestoEnrutado(
+  proveedor: ProveedorRealCasosDorados,
+  enrutado: { papel: PapelModelo; papelRespaldo: PapelModelo },
+): PuertoEnrutado {
+  return puestoConCliente(proveedor.crearCliente(), proveedor.plataforma, enrutado);
+}
+
 const decisionCobros = z.object({
   proponerNota: z.boolean(),
   motivo: z.string().min(1),
@@ -43,14 +81,10 @@ export function registrarCasoDoradoCobros(proveedor: ProveedorRealCasosDorados):
     : `caso dorado · Cobros · ${proveedor.nombre} — SALTADO. ${proveedor.motivoSalto}`;
 
   describe.skipIf(!proveedor.disponible)(titulo, () => {
-    it('opus5 (decision_escritura) propone una nota de seguimiento para una factura vencida hace 45 días', async () => {
-      const puesto = crearAdaptadorAnthropic(proveedor.crearCliente(), {
-        papel: 'opus5',
-        plataforma: proveedor.plataforma,
-        configuracion: { esfuerzoPorClasePaso: { decision_escritura: 'high' } },
-      });
+    it('sonnet5 (decision_escritura) propone una nota de seguimiento para una factura vencida hace 45 días', async () => {
+      const puesto = puestoEnrutado(proveedor, ENRUTADO_COBROS);
 
-      const resultado = await puesto.completar({
+      const { resultado } = await puesto.completar({
         clasePaso: 'decision_escritura',
         sistema:
           'Eres el puesto Cobros. Decides si proponer una nota de seguimiento por factura vencida.',
@@ -70,14 +104,10 @@ export function registrarCasoDoradoCobros(proveedor: ProveedorRealCasosDorados):
       expect(resultado.salida.motivo.length).toBeGreaterThan(0);
     }, 30_000);
 
-    it('opus5 (decision_escritura) no propone ninguna nota para una factura que todavía no ha vencido', async () => {
-      const puesto = crearAdaptadorAnthropic(proveedor.crearCliente(), {
-        papel: 'opus5',
-        plataforma: proveedor.plataforma,
-        configuracion: { esfuerzoPorClasePaso: { decision_escritura: 'high' } },
-      });
+    it('sonnet5 (decision_escritura) no propone ninguna nota para una factura que todavía no ha vencido', async () => {
+      const puesto = puestoEnrutado(proveedor, ENRUTADO_COBROS);
 
-      const resultado = await puesto.completar({
+      const { resultado } = await puesto.completar({
         clasePaso: 'decision_escritura',
         sistema:
           'Eres el puesto Cobros. Decides si proponer una nota de seguimiento por factura vencida.',
@@ -95,6 +125,66 @@ export function registrarCasoDoradoCobros(proveedor: ProveedorRealCasosDorados):
       if (resultado.tipo !== 'ok' || resultado.salida === undefined) return;
       expect(resultado.salida.proponerNota).toBe(false);
     }, 30_000);
+
+    it('sonnet5 pide la herramienta y sigue en una segunda vuelta con su resultado (el turno con razonamiento vuelve al proveedor)', async () => {
+      const puesto = puestoEnrutado(proveedor, ENRUTADO_COBROS);
+      const herramientas = [
+        {
+          nombre: 'listar_facturas_vencidas',
+          descripcion: 'Lee las facturas vencidas del ERP. Llámala siempre antes de decidir.',
+          esquemaJson: {
+            type: 'object',
+            properties: { limite: { type: 'integer', minimum: 1, maximum: 50 } },
+            required: [],
+          },
+        },
+      ];
+      const sistema =
+        'Eres el puesto Cobros. Para revisar las facturas vencidas llama primero a listar_facturas_vencidas.';
+      const encargo = { rol: 'user' as const, contenido: 'Revisa las facturas vencidas.' };
+
+      const primera = await puesto.completar({
+        clasePaso: 'negocio',
+        sistema,
+        cacheSistema: true,
+        mensajes: [encargo],
+        herramientas,
+        maxTokens: 1024,
+      });
+      expect(primera.resultado.tipo).toBe('ok');
+      if (primera.resultado.tipo !== 'ok') return;
+      const llamada = primera.resultado.llamadasHerramientas?.[0];
+      expect(llamada?.nombre).toBe('listar_facturas_vencidas');
+      if (!llamada) return;
+
+      const segunda = await puesto.completar({
+        clasePaso: 'negocio',
+        sistema,
+        cacheSistema: true,
+        mensajes: [
+          encargo,
+          {
+            rol: 'assistant',
+            contenido: primera.resultado.texto,
+            llamadas: [{ id: llamada.id, nombre: llamada.nombre, entrada: llamada.entrada }],
+            ...(primera.resultado.bloques ? { bloques: primera.resultado.bloques } : {}),
+          },
+          {
+            rol: 'user',
+            contenido: '',
+            resultados: [
+              {
+                llamadaId: llamada.id,
+                contenido: 'F-2026-014 · Cliente de prueba · 1200 € · vencida hace 45 días.',
+              },
+            ],
+          },
+        ],
+        herramientas,
+        maxTokens: 1024,
+      });
+      expect(segunda.resultado.tipo).toBe('ok');
+    }, 60_000);
   });
 }
 
@@ -119,13 +209,9 @@ export function registrarCasoDoradoConciliacion(proveedor: ProveedorRealCasosDor
   async function decidirConciliacion(
     movimiento: MovimientoBancario,
   ): Promise<DecisionConciliacion> {
-    const puesto = crearAdaptadorAnthropic(proveedor.crearCliente(), {
-      papel: 'opus5',
-      plataforma: proveedor.plataforma,
-      configuracion: { esfuerzoPorClasePaso: { conciliacion: 'high' } },
-    });
+    const puesto = puestoEnrutado(proveedor, ENRUTADO_CONCILIACION);
 
-    const resultado = await puesto.completar({
+    const { resultado } = await puesto.completar({
       clasePaso: 'conciliacion',
       sistema: 'Eres el puesto Conciliación. Decides qué factura casa con un movimiento bancario.',
       mensajes: [

@@ -24,6 +24,7 @@ import { NativeConnection } from '@temporalio/worker';
 import { BANDERA, leerConfiguracion } from './configuracion.js';
 import { decisionDePropuesta, mensajeDeSala } from './flujos/index.js';
 import { sembrarSala } from './semilla-sala.js';
+import { enrutadorDeLaDemo } from './actividades/contexto.js';
 import { montarTrabajador } from './trabajador.js';
 
 const SERVIR = process.argv.includes('--servir');
@@ -53,6 +54,8 @@ const conexionTemporal = await NativeConnection.connect({
   address: configuracion.temporal.direccion,
 });
 const montado = await montarTrabajador({
+  // Demostración determinista: `prueba` salvo que AIW_PROVEEDOR_MODELOS diga otra cosa.
+  enrutador: enrutadorDeLaDemo(),
   urlBaseDeDatos: configuracion.urlBaseDeDatos,
   cola,
   espacio: configuracion.temporal.espacio,

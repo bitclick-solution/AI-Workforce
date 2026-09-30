@@ -49,6 +49,7 @@ import { esProvisional, identificadorDeModelo } from '../identificadores.js';
 import type {
   HerramientaDeModelo,
   LlamadaHerramienta,
+  MensajeDeModelo,
   PeticionDeModelo,
   PuertoDeModelo,
   RespuestaDeModelo,
@@ -102,9 +103,13 @@ export interface OpcionesAdaptadorAnthropic {
   identificadorModelo?: string | undefined;
 }
 
+/**
+ * `input_tokens` de la API no incluye la caché: la leída va aparte y la escrita se
+ * suma a la entrada, porque el contador la factura como entrada normal (`uso.ts`).
+ */
 function aTokensDeUso(uso: Anthropic.Usage): TokensDeUso {
   return {
-    entrada: uso.input_tokens,
+    entrada: uso.input_tokens + (uso.cache_creation_input_tokens ?? 0),
     salida: uso.output_tokens,
     entradaCache: uso.cache_read_input_tokens ?? 0,
   };
@@ -129,8 +134,51 @@ function herramientasDe(peticion: PeticionDeModelo): Anthropic.Tool[] | undefine
     description: herramienta.descripcion,
     // Estricto (ADR-018): sin instrucción suelta para pedir el formato, esquema cerrado.
     strict: true,
-    input_schema: esquemaEstricto(herramienta.esquemaEntrada) as Anthropic.Tool.InputSchema,
+    input_schema: (herramienta.esquemaJson
+      ? transformJSONSchema(herramienta.esquemaJson)
+      : esquemaEstricto(herramienta.esquemaEntrada)) as Anthropic.Tool.InputSchema,
   }));
+}
+
+/**
+ * Traduce un turno del puerto a un mensaje de la API de Mensajes.
+ *
+ * Un turno del asistente con `bloques` se devuelve tal cual, con el razonamiento
+ * que trajo. Los resultados de herramienta van antes que cualquier texto del mismo
+ * turno del usuario, que es el orden que exige la API.
+ */
+function mensajeDeAnthropic(mensaje: MensajeDeModelo): Anthropic.MessageParam {
+  if (mensaje.rol === 'assistant' && mensaje.bloques && mensaje.bloques.length > 0) {
+    return { role: 'assistant', content: [...mensaje.bloques] as Anthropic.ContentBlockParam[] };
+  }
+  if (mensaje.rol === 'assistant' && mensaje.llamadas && mensaje.llamadas.length > 0) {
+    return {
+      role: 'assistant',
+      content: [
+        ...(mensaje.contenido === '' ? [] : [{ type: 'text' as const, text: mensaje.contenido }]),
+        ...mensaje.llamadas.map((llamada) => ({
+          type: 'tool_use' as const,
+          id: llamada.id,
+          name: llamada.nombre,
+          input: llamada.entrada,
+        })),
+      ],
+    };
+  }
+  if (mensaje.rol === 'user' && mensaje.resultados && mensaje.resultados.length > 0) {
+    return {
+      role: 'user',
+      content: [
+        ...mensaje.resultados.map((resultado) => ({
+          type: 'tool_result' as const,
+          tool_use_id: resultado.llamadaId,
+          content: resultado.contenido,
+        })),
+        ...(mensaje.contenido === '' ? [] : [{ type: 'text' as const, text: mensaje.contenido }]),
+      ],
+    };
+  }
+  return { role: mensaje.rol, content: mensaje.contenido };
 }
 
 /**
@@ -149,20 +197,24 @@ function llamadasHerramientaDe(
   const bloques = mensaje.content.filter(
     (bloque): bloque is Anthropic.ToolUseBlock => bloque.type === 'tool_use',
   );
-  return bloques.map((bloque) => {
+  return bloques.map((bloque): LlamadaHerramienta => {
     const herramienta = herramientas?.find((candidata) => candidata.nombre === bloque.name);
     if (!herramienta) {
       throw new Error(
         `${modelo} pidió la herramienta "${bloque.name}", que no estaba entre las declaradas en la petición.`,
       );
     }
+    // Con esquema JSON (herramienta de un servidor MCP) la entrada llega tal cual
+    // y la valida el gateway al ejecutarla; aquí no hay esquema Zod que aplicar.
+    if (!herramienta.esquemaEntrada)
+      return { id: bloque.id, nombre: bloque.name, entrada: bloque.input };
     const validado = herramienta.esquemaEntrada.safeParse(bloque.input);
     if (!validado.success) {
       throw new Error(
         `${modelo} pidió la herramienta "${bloque.name}" con una entrada que no cumple su esquema: ${validado.error.message}`,
       );
     }
-    return { nombre: bloque.name, entrada: validado.data };
+    return { id: bloque.id, nombre: bloque.name, entrada: validado.data };
   });
 }
 
@@ -197,11 +249,20 @@ export function crearAdaptadorAnthropic(
       const params: Anthropic.MessageCreateParamsNonStreaming = {
         model: modelo,
         max_tokens: peticion.maxTokens ?? opciones.maxTokens ?? MAX_TOKENS_POR_DEFECTO,
-        ...(peticion.sistema !== undefined ? { system: peticion.sistema } : {}),
-        messages: peticion.mensajes.map((mensaje) => ({
-          role: mensaje.rol,
-          content: mensaje.contenido,
-        })),
+        ...(peticion.sistema === undefined
+          ? {}
+          : {
+              system: peticion.cacheSistema
+                ? [
+                    {
+                      type: 'text' as const,
+                      text: peticion.sistema,
+                      cache_control: { type: 'ephemeral' as const },
+                    },
+                  ]
+                : peticion.sistema,
+            }),
+        messages: peticion.mensajes.map(mensajeDeAnthropic),
         ...(herramientas ? { tools: herramientas } : {}),
         output_config: {
           ...(sinPensamientoAdaptativo ? {} : { effort: esfuerzo }),
@@ -255,6 +316,8 @@ export function crearAdaptadorAnthropic(
         ...(llamadasHerramientas.length > 0 ? { llamadasHerramientas } : {}),
         tokens,
         modelo,
+        motivoFin: respuesta.stop_reason ?? 'end_turn',
+        bloques: respuesta.content,
       };
     },
   };

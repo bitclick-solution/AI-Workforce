@@ -52,7 +52,8 @@ export async function iniciarServidorSimulado(
         cuerpoRespuesta = respuestas;
       }
 
-      respuesta.writeHead(200, { 'content-type': 'application/json' });
+      const estado = (cuerpoRespuesta as { __estadoHttp?: number } | undefined)?.__estadoHttp;
+      respuesta.writeHead(estado ?? 200, { 'content-type': 'application/json' });
       respuesta.end(JSON.stringify(cuerpoRespuesta));
     });
   });
@@ -158,6 +159,22 @@ export function respuestaDeRechazo(
       output_tokens_details: null,
       server_tool_use: null,
       service_tier: 'standard',
+    },
+  };
+}
+
+/**
+ * Fixture de un error HTTP de la API (403 de permisos, 400...). Evita los
+ * estados que el SDK reintenta solo (429 y 5xx), que alargarían la prueba con
+ * sus esperas.
+ */
+export function respuestaDeErrorHttp(estado: 400 | 401 | 403 | 404, mensaje: string): unknown {
+  return {
+    __estadoHttp: estado,
+    type: 'error',
+    error: {
+      type: estado === 403 ? 'permission_error' : 'invalid_request_error',
+      message: mensaje,
     },
   };
 }

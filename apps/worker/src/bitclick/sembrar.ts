@@ -3,7 +3,9 @@
  *
  *   pnpm --filter @aiw/worker bitclick:sembrar
  *
- * Seguro de repetir: si ya existe, no crea nada nuevo y lo dice.
+ * Seguro de repetir: si ya existe, no crea nada nuevo y lo dice. Sí deja al día lo
+ * que un puesto sembrado antes necesita para usar el modelo real: el enrutado por
+ * papel de la plantilla y las tarifas de Anthropic que falten.
  */
 import { crearConexion } from '@aiw/db';
 
@@ -36,6 +38,14 @@ export async function principal(
     console.log(`  departamento:  ${resultado.departamentoId}`);
     console.log(`  puesto Cobros: ${resultado.puestoId}`);
     console.log(`  conector Odoo: ${resultado.conectorId}`);
+    if (resultado.enrutadoActualizado) {
+      console.log('— El puesto de Cobros pasa a enrutar por papel, como la plantilla certificada.');
+    }
+    if (resultado.tarifasCargadas > 0) {
+      console.log(
+        `— Tarifas de Anthropic (Bedrock y Vertex UE) dadas de alta en el tenant: ${String(resultado.tarifasCargadas)}.`,
+      );
+    }
     console.log('');
     console.log('Guardado en .aiw-local/bitclick.json (no se sube al repositorio).');
   } finally {

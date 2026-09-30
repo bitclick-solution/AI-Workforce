@@ -19,7 +19,14 @@
  *    texto al flujo, que es lo que acaba en el historial de Temporal.
  */
 import { uuidV7 } from '@aiw/db';
-import { acotarPresupuesto, contratoDelegacion, esquemas, type Nivel } from '@aiw/domain';
+import {
+  PLATAFORMAS_MODELO,
+  acotarPresupuesto,
+  contratoDelegacion,
+  esquemas,
+  type Nivel,
+  type PlataformaModelo,
+} from '@aiw/domain';
 import {
   cargaDeSenal,
   leerAprobacion,
@@ -27,15 +34,24 @@ import {
   registrarTareaRaiz,
   registrarUsoDeModelo,
   solicitarAprobacion,
+  tarifaVigente,
   vencerAprobaciones,
   anotar,
 } from '@aiw/ledger';
 import { leerEdicion, lineasDeMemoria } from '@aiw/learning';
 import {
   componerPrompt,
+  PROVEEDOR_DE_TARIFA,
+  darPasoConPuerto,
   darPasoDeModelo,
   mensajesParaElModelo,
+  mensajesParaElPuerto,
+  modeloDeTarifa,
   type HerramientaOfrecida,
+  type IntentoFallido,
+  type LlamadaPedida,
+  type TarifaEsperada,
+  type TokensParaElContador,
 } from '@aiw/models';
 import type postgres from 'postgres';
 
@@ -70,6 +86,146 @@ export const ACCIONES = {
   delegacionAbierta: 'delegacion.abierta',
   delegacionCerrada: 'delegacion.cerrada',
 } as const;
+
+/** Lo que necesita `pasoModelo` de un paso, venga del AI SDK (prueba) o del puerto real. */
+interface PasoDelModelo {
+  texto: string;
+  llamadas: readonly LlamadaPedida[];
+  tokens: TokensParaElContador;
+  duracionMs: number;
+  motivoFin: string;
+  /** Nombre del proveedor que sirvió el paso: `prueba`, `bedrock-ue`, `vertex-ue`. */
+  proveedor: string;
+  /** Plataforma real. Sin ella (proveedor de prueba), el contador usa la de por defecto. */
+  plataforma?: string | undefined;
+  /** Fila de `tarifa_modelo` con la que se cobra. */
+  tarifa: { proveedor: string; modelo: string };
+  bloques?: readonly unknown[] | undefined;
+  rechazo?: { categoria: string | null; explicacion: string | null } | undefined;
+  intentosCobrables: readonly IntentoFallido[];
+}
+
+/** La plataforma del contador es una de las de `PLATAFORMAS_MODELO`; una desconocida es un error de configuración. */
+function plataformaDeModelo(plataforma: string): PlataformaModelo {
+  if (!(PLATAFORMAS_MODELO as readonly string[]).includes(plataforma)) {
+    throw ApplicationFailure.create({
+      message: `Plataforma de modelo desconocida: ${plataforma}.`,
+      type: 'PlataformaDeModeloDesconocida',
+      nonRetryable: true,
+    });
+  }
+  return plataforma as PlataformaModelo;
+}
+
+/**
+ * Comprueba que el tenant tiene las tarifas con las que se va a cobrar. Falla sin
+ * reintento: no se arregla esperando, se arregla dando de alta la tarifa.
+ */
+async function tarifasQueFaltan(
+  contexto: ContextoDeActividades,
+  tenantId: string,
+  esperadas: readonly TarifaEsperada[],
+): Promise<TarifaEsperada[]> {
+  const faltan: TarifaEsperada[] = [];
+  for (const esperada of esperadas) {
+    const tarifa = await enTenant(contexto, tenantId, (tx) =>
+      tarifaVigente(
+        tx,
+        tenantId,
+        esperada.proveedor,
+        esperada.modelo,
+        new Date(),
+        esperada.plataforma,
+      ),
+    );
+    if (!tarifa) faltan.push(esperada);
+  }
+  return faltan;
+}
+
+async function exigirTarifas(
+  contexto: ContextoDeActividades,
+  tenantId: string,
+  esperadas: readonly TarifaEsperada[],
+): Promise<void> {
+  const [falta] = await tarifasQueFaltan(contexto, tenantId, esperadas);
+  if (falta) {
+    throw ApplicationFailure.create({
+      message:
+        `Sin tarifa vigente para ${falta.proveedor}/${falta.modelo} en ${falta.plataforma}: ` +
+        'da de alta las tarifas del tenant (registrarTarifa; `pnpm --filter @aiw/worker bitclick:sembrar` ' +
+        'carga las de Bitclick) antes de dar el paso.',
+      type: 'SinTarifa',
+      nonRetryable: true,
+    });
+  }
+}
+
+/**
+ * Manda a Langfuse lo que costó una tarea raíz completada, por modelo (ADR-018: el
+ * coste se mide por tarea completada, no por llamada). Sin claves de Langfuse el
+ * observador no hace nada, y si falla no tira la tarea: la verdad del coste vive en
+ * `uso_modelo`, esto es solo el panel de trazas. El proveedor de prueba no se manda.
+ */
+async function enviarCosteDeLaTarea(
+  contexto: ContextoDeActividades,
+  tenantId: string,
+  tareaId: string,
+): Promise<void> {
+  try {
+    const filas = await enTenant(
+      contexto,
+      tenantId,
+      (tx) => tx<
+        {
+          raiz: string;
+          puesto_id: string;
+          version_puesto_id: string;
+          modelo: string;
+          plataforma: string;
+          entrada: string;
+          salida: string;
+          cache: string;
+          coste: string;
+        }[]
+      >`
+        with esta as (
+          select coalesce(tarea_raiz_id, id) as raiz
+          from tarea
+          where tenant_id = ${tenantId} and id = ${tareaId} and tarea_padre_id is null
+        )
+        select u.tarea_raiz_id as raiz, u.puesto_id, u.version_puesto_id, u.modelo, u.plataforma,
+               sum(u.tokens_entrada) as entrada, sum(u.tokens_salida) as salida,
+               sum(u.tokens_entrada_cache) as cache, sum(u.coste_euros) as coste
+        from uso_modelo u, esta
+        where u.tenant_id = ${tenantId} and u.tarea_raiz_id = esta.raiz and u.proveedor <> 'prueba'
+        group by u.tarea_raiz_id, u.puesto_id, u.version_puesto_id, u.modelo, u.plataforma
+      `,
+    );
+    const completadaEn = new Date();
+    for (const fila of filas) {
+      await contexto.observadorDeCoste.registrarCosteDeTarea({
+        tareaRaizId: fila.raiz,
+        puestoId: fila.puesto_id,
+        versionPuestoId: fila.version_puesto_id,
+        modelo: fila.modelo,
+        plataforma: fila.plataforma,
+        tokens: {
+          entrada: Number(fila.entrada),
+          salida: Number(fila.salida),
+          entradaCache: Number(fila.cache),
+        },
+        costeEuros: Number(fila.coste),
+        completadaEn,
+      });
+    }
+  } catch (error) {
+    console.error(
+      '[worker] No se pudo mandar el coste de la tarea a Langfuse:',
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
 
 /** Herramienta del catálogo, con el mismo nombre de campos que usa el modelo. */
 function comoOfrecida(herramienta: {
@@ -431,48 +587,129 @@ export function crearActividades(contexto: ContextoDeActividades) {
         where tenant_id = ${peticion.tenantId} and id = ${peticion.puestoId}
       `,
       );
-      const { modelo, proveedor, modeloId } = contexto.enrutador.resolver(
-        puesto?.enrutado_modelo ?? {},
-      );
+      let resuelto = contexto.enrutador.resolverPaso(puesto?.enrutado_modelo ?? {});
+      const atributos = {
+        tenantId: peticion.tenantId,
+        puestoId: peticion.puestoId,
+        versionPuestoId: peticion.versionPuestoId,
+        tareaId: peticion.tareaId,
+      };
 
-      const paso = await darPasoDeModelo({
-        modelo,
-        sistema: peticion.sistema,
-        mensajes: mensajesParaElModelo(peticion.mensajes),
-        herramientas: peticion.herramientas.map(comoOfrecida),
-        atributos: {
-          tenantId: peticion.tenantId,
-          puestoId: peticion.puestoId,
-          versionPuestoId: peticion.versionPuestoId,
-          tareaId: peticion.tareaId,
-          proveedor,
-          modelo: modeloId,
-        },
-        trazas: contexto.trazas,
-        nombreTraza: 'agente.paso_modelo',
-      });
+      let paso: PasoDelModelo;
+      if (resuelto.via === 'modelo') {
+        const dado = await darPasoDeModelo({
+          modelo: resuelto.modelo,
+          sistema: peticion.sistema,
+          mensajes: mensajesParaElModelo(peticion.mensajes),
+          herramientas: peticion.herramientas.map(comoOfrecida),
+          atributos: { ...atributos, proveedor: resuelto.proveedor, modelo: resuelto.modeloId },
+          trazas: contexto.trazas,
+          nombreTraza: 'agente.paso_modelo',
+        });
+        paso = {
+          ...dado,
+          proveedor: resuelto.proveedor,
+          tarifa: { proveedor: resuelto.proveedor, modelo: resuelto.modeloId },
+          intentosCobrables: [],
+        };
+      } else {
+        // Sin tarifa no se llama: reintentar una llamada que no se puede cobrar la
+        // pagaría otra vez y no dejaría rastro en el contador.
+        await exigirTarifas(contexto, peticion.tenantId, resuelto.tarifasEsperadas);
+        // El paso puede acabar sirviéndolo el proveedor de respaldo, y esa respuesta
+        // también hay que poder cobrarla. Sin sus tarifas no se le pide nada: el paso
+        // sigue sin respaldo de proveedor en vez de pagar una llamada que no se anota.
+        const faltanDelRespaldo = await tarifasQueFaltan(
+          contexto,
+          peticion.tenantId,
+          resuelto.tarifasDelRespaldo,
+        );
+        if (faltanDelRespaldo.length > 0) {
+          console.warn(
+            '[worker] Sin respaldo de proveedor en este paso: faltan tarifas de ' +
+              faltanDelRespaldo.map((t) => `${t.modelo} en ${t.plataforma}`).join(', ') +
+              '.',
+          );
+          resuelto = contexto.enrutador.resolverPaso(puesto?.enrutado_modelo ?? {}, {
+            sinRespaldoDeProveedor: true,
+          });
+          if (resuelto.via !== 'puerto')
+            throw new Error('El enrutado cambió de vía a mitad de paso.');
+        }
+        const dado = await darPasoConPuerto({
+          puerto: resuelto.puerto,
+          clasePaso: peticion.herramientas.some((herramienta) => herramienta.tipo === 'escritura')
+            ? 'decision_escritura'
+            : 'negocio',
+          sistema: peticion.sistema,
+          mensajes: mensajesParaElPuerto(peticion.mensajes),
+          herramientas: peticion.herramientas.map(comoOfrecida),
+          atributos,
+          trazas: contexto.trazas,
+          nombreTraza: 'agente.paso_modelo',
+        });
+        paso = {
+          ...dado,
+          proveedor: dado.sirvio.proveedor,
+          plataforma: dado.sirvio.plataforma,
+          tarifa: {
+            proveedor: PROVEEDOR_DE_TARIFA,
+            modelo: modeloDeTarifa(dado.sirvio.papel, plataformaDeModelo(dado.sirvio.plataforma)),
+          },
+          intentosCobrables: dado.intentosFallidos.filter(
+            (intento) => intento.motivo === 'rechazo',
+          ),
+        };
+        // Última línea de defensa: las comprobaciones de antes de llamar ya cubren
+        // cada combinación de papel y proveedor, así que esto no debería disparar. Si
+        // lo hiciera, la llamada ya se hizo: falla sin reintento para no repetirla.
+        await exigirTarifas(contexto, peticion.tenantId, [
+          { ...paso.tarifa, plataforma: plataformaDeModelo(dado.sirvio.plataforma) },
+        ]);
+      }
 
       const guardias = crearGuardias(peticion.guardiasSalida);
       const revisado = revisarTodo(guardias, paso.texto);
+      const rechazado = paso.rechazo !== undefined;
 
-      return enTenant(contexto, peticion.tenantId, async (tx) => {
+      const salida = await enTenant(contexto, peticion.tenantId, async (tx) => {
         const escrito = await escribirPaso(tx, {
           tenantId: peticion.tenantId,
           tareaId: peticion.tareaId,
           versionPuestoId: peticion.versionPuestoId,
           numero: peticion.numeroPaso,
           tipo: 'modelo',
-          herramienta: proveedor,
+          herramienta: paso.proveedor,
           entrada: { herramientasOfrecidas: peticion.herramientas.length },
           salida: {
             motivoFin: paso.motivoFin,
             llamadas: paso.llamadas.map((llamada) => llamada.herramienta),
+            ...(paso.plataforma === undefined
+              ? {}
+              : { plataforma: paso.plataforma, modelo: paso.tarifa.modelo }),
+            ...(paso.rechazo === undefined ? {} : { rechazo: paso.rechazo }),
             ...(revisado.pasa ? {} : { guardias: revisado.hallazgos }),
           },
-          resultado: revisado.pasa ? 'exito' : 'parcial',
+          resultado: rechazado ? 'rechazado' : revisado.pasa ? 'exito' : 'parcial',
           costeEuros: 0,
           duracionMs: paso.duracionMs,
         });
+
+        // Un intento que el clasificador rechazó antes del respaldo se factura igual:
+        // cada uno con su clave, para que un reintento de la actividad no lo duplique.
+        for (const [indice, intento] of paso.intentosCobrables.entries()) {
+          await registrarUsoDeModelo(tx, peticion.tenantId, {
+            tareaId: peticion.tareaId,
+            pasoId: escrito.pasoId,
+            puestoId: peticion.puestoId,
+            versionPuestoId: peticion.versionPuestoId,
+            proveedor: PROVEEDOR_DE_TARIFA,
+            modelo: modeloDeTarifa(intento.papel, plataformaDeModelo(intento.plataforma)),
+            plataforma: intento.plataforma,
+            tokens: intento.tokens,
+            claveIdempotencia: `${peticion.claveIdempotencia}:rechazo-${String(indice)}`,
+          });
+        }
 
         // El coste del paso lo pone el contador con la tarifa vigente, y la clave
         // de idempotencia es lo que impide cobrarlo dos veces si la actividad se
@@ -483,8 +720,9 @@ export function crearActividades(contexto: ContextoDeActividades) {
           pasoId: escrito.pasoId,
           puestoId: peticion.puestoId,
           versionPuestoId: peticion.versionPuestoId,
-          proveedor,
-          modelo: modeloId,
+          proveedor: paso.tarifa.proveedor,
+          modelo: paso.tarifa.modelo,
+          ...(paso.plataforma === undefined ? {} : { plataforma: paso.plataforma }),
           tokens: paso.tokens,
           claveIdempotencia: peticion.claveIdempotencia,
         });
@@ -499,11 +737,26 @@ export function crearActividades(contexto: ContextoDeActividades) {
           costeEuros: uso.costeEuros,
           gastadoEuros: await costeDeLaTarea(tx, peticion.tenantId, peticion.tareaId),
           motivoFin: paso.motivoFin,
+          ...(paso.bloques === undefined ? {} : { bloques: [...paso.bloques] }),
           ...(revisado.pasa
             ? {}
             : { guardiaDisparada: revisado.hallazgos[0]?.guardia ?? 'sin_secretos' }),
         };
       });
+
+      // El rechazo del clasificador es un paso fallido no reintentable (ADR-018): ya
+      // quedó en el libro y cobrado, y repetirlo con el mismo modelo daría lo mismo.
+      if (paso.rechazo !== undefined) {
+        throw ApplicationFailure.create({
+          message:
+            'El clasificador del proveedor rechazó la petición' +
+            (paso.rechazo.categoria === null ? '' : ` (${paso.rechazo.categoria})`) +
+            ' y el puesto no tiene un papel de respaldo que la sirva.',
+          type: 'RechazoDelClasificador',
+          nonRetryable: true,
+        });
+      }
+      return salida;
     },
 
     /**
@@ -837,6 +1090,9 @@ export function crearActividades(contexto: ContextoDeActividades) {
           where tenant_id = ${peticion.tenantId} and id = ${peticion.tareaId}
         `;
       });
+      if (peticion.estado === 'completada') {
+        await enviarCosteDeLaTarea(contexto, peticion.tenantId, peticion.tareaId);
+      }
     },
 
     /**

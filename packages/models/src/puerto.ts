@@ -13,17 +13,58 @@ import type { z } from 'zod';
 
 export type MensajeRol = 'user' | 'assistant';
 
-export interface MensajeDeModelo {
-  rol: MensajeRol;
+/** Una llamada a herramienta que el asistente hizo en un turno anterior. */
+export interface LlamadaPrevia {
+  id: string;
+  nombre: string;
+  entrada: unknown;
+}
+
+/** Lo que devolvió una herramienta a una llamada anterior del asistente. */
+export interface ResultadoDeHerramienta {
+  llamadaId: string;
   contenido: string;
 }
 
-export interface HerramientaDeModelo {
+export interface MensajeDeModelo {
+  rol: MensajeRol;
+  contenido: string;
+  /**
+   * Turno del asistente que pidió herramientas. Sin `bloques`, el adaptador
+   * reconstruye el turno con el texto y estas llamadas.
+   */
+  llamadas?: readonly LlamadaPrevia[] | undefined;
+  /**
+   * Contenido original del turno del asistente tal como lo devolvió el modelo
+   * (`RespuestaDeModeloOk.bloques`), con su razonamiento. Opaco: se devuelve al
+   * modelo sin tocarlo, que es lo que exige la API para continuar un turno con
+   * herramientas y razonamiento adaptativo.
+   */
+  bloques?: readonly unknown[] | undefined;
+  /** Turno del usuario que contesta a las llamadas del turno anterior del asistente. */
+  resultados?: readonly ResultadoDeHerramienta[] | undefined;
+}
+
+interface HerramientaBase {
   nombre: string;
   descripcion: string;
-  /** Esquema Zod de la entrada. Se traduce a JSON Schema estricto (ADR-018: sin instrucción suelta). */
-  esquemaEntrada: z.ZodType;
 }
+
+/**
+ * Herramienta ofrecida al modelo. Con esquema Zod (`esquemaEntrada`) la entrada de
+ * cada llamada se vuelve a validar aquí; con esquema JSON (`esquemaJson`, el que
+ * publica un servidor MCP) el JSON Schema viaja tal cual y valida quien ejecuta la
+ * herramienta, que en el bucle del agente es el gateway. Se da uno de los dos.
+ */
+export type HerramientaDeModelo = HerramientaBase &
+  (
+    | {
+        /** Esquema Zod de la entrada. Se traduce a JSON Schema estricto (ADR-018: sin instrucción suelta). */
+        esquemaEntrada: z.ZodType;
+        esquemaJson?: undefined;
+      }
+    | { esquemaJson: Record<string, unknown>; esquemaEntrada?: undefined }
+  );
 
 /**
  * Llamada a una herramienta que hizo el modelo, con la entrada ya validada contra
@@ -34,6 +75,8 @@ export interface HerramientaDeModelo {
  * comprobar el adaptador al recibir la llamada.
  */
 export interface LlamadaHerramienta {
+  /** Identificador de la llamada: el resultado de la herramienta vuelve con él (`ResultadoDeHerramienta.llamadaId`). */
+  id: string;
   /** Nombre de la herramienta, tal como se declaró en `herramientas`. */
   nombre: string;
   /** Entrada ya validada (`esquemaEntrada.safeParse`), no el JSON crudo del modelo. */
@@ -53,6 +96,11 @@ export interface PeticionDeModelo<T = unknown> {
    */
   esquemaSalida?: z.ZodType<T> | undefined;
   maxTokens?: number | undefined;
+  /**
+   * Marca el prompt de sistema como reutilizable en la caché del proveedor. El de
+   * una versión de puesto es inmutable y se repite en cada paso de cada tarea.
+   */
+  cacheSistema?: boolean | undefined;
 }
 
 export interface TokensDeUso {
@@ -74,6 +122,13 @@ export interface RespuestaDeModeloOk<T = unknown> {
   llamadasHerramientas?: readonly LlamadaHerramienta[] | undefined;
   tokens: TokensDeUso;
   modelo: string;
+  /** Motivo de parada tal como lo da el proveedor (`end_turn`, `tool_use`, `max_tokens`...). */
+  motivoFin?: string | undefined;
+  /**
+   * Contenido original del turno, para devolverlo en el turno siguiente
+   * (`MensajeDeModelo.bloques`). Opaco: no lo interpretes.
+   */
+  bloques?: readonly unknown[] | undefined;
 }
 
 /**

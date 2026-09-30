@@ -145,3 +145,23 @@ export function esProvisional(papel: PapelModelo, plataforma: PlataformaModelo):
 export function nombreCanonico(papel: PapelModelo): string {
   return IDENTIFICADOR_DESNUDO_OBJETIVO[papel];
 }
+
+/**
+ * El modelo tal como lo tarifa el contador: el que sirve de verdad ese papel en esa
+ * plataforma, sin el prefijo del perfil de inferencia ni la fecha ni la versión de
+ * la plataforma (`eu.anthropic.claude-haiku-4-5-20251001-v1:0` y
+ * `claude-haiku-4-5@20251001` son `claude-haiku-4-5`).
+ *
+ * Es el coste real: mientras Bedrock sirve `opus5` con Sonnet 4.6, se cobra la fila
+ * de `claude-sonnet-4-6` del catálogo de tarifas, que Modelos v1 cargó justo para
+ * eso. Cuando llegue la cuota, cambiar la fila de esta tabla cambia también lo que
+ * se cobra, sin tocar nada más. Distinto de `nombreCanonico`, que es el objetivo
+ * del ADR-018 y no lo que se sirvió.
+ */
+export function modeloDeTarifa(papel: PapelModelo, plataforma: PlataformaModelo): string {
+  return identificadorDeModelo(papel, plataforma)
+    .replace(/^(?:eu\.)?anthropic\./, '')
+    .replace(/-\d{8}-v\d+:\d+$/, '')
+    .replace(/-v\d+:\d+$/, '')
+    .replace(/@\d{8}$/, '');
+}
