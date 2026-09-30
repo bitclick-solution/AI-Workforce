@@ -16,7 +16,7 @@ import {
 } from '@aiw/db/pruebas';
 import { NOMBRE_SALA_GENERAL } from '@aiw/rooms';
 import type postgres from 'postgres';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { BuscadorCentrifugo } from '@aiw/rooms/centrifugo';
 import { puertoSala, type ClienteDeFlujos, type ConfiguracionSala } from '../rutas/sala';
@@ -268,6 +268,22 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       const puerto = puertoSala(conexion.cliente, flujos, configuracionV1, buscar);
       const miembros = await puerto.miembrosDeSala(tenantId, salaId);
       expect(miembros.find((m) => m.id === personaId)?.estado).toBe('anadido');
+    });
+
+    it('si Centrifugo rechaza el canal, se registra el error y la sala igual sigue funcionando (fallo 5)', async () => {
+      const buscar: BuscadorCentrifugo = async () =>
+        new Response(JSON.stringify({ error: { code: 102, message: 'unknown channel' } }), {
+          status: 200,
+        });
+      const espia = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        const puerto = puertoSala(conexion.cliente, flujos, configuracionV1, buscar);
+        const miembros = await puerto.miembrosDeSala(tenantId, salaId);
+        expect(miembros.find((m) => m.id === personaId)?.estado).toBe('anadido');
+        expect(espia).toHaveBeenCalledWith(expect.stringContaining('unknown channel'));
+      } finally {
+        espia.mockRestore();
+      }
     });
 
     it('emite el token de conexión y de canal solo a un miembro de la sala', async () => {

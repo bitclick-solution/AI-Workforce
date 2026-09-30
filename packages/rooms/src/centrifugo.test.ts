@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  ErrorCentrifugo,
   firmaValida,
   presenciaDeSala,
   publicarEnSala,
@@ -124,5 +125,20 @@ describe('llamadas al API HTTP de Centrifugo', () => {
   it('sin presencia (sala vacía o Centrifugo sin datos) devuelve una lista vacía', async () => {
     const buscar: BuscadorCentrifugo = vi.fn(async () => new Response('{}', { status: 200 }));
     expect(await presenciaDeSala(configuracion(), TENANT, SALA, buscar)).toEqual([]);
+  });
+
+  it('un canal rechazado lanza ErrorCentrifugo en vez de degradarse en silencio (fallo 5)', async () => {
+    const buscar: BuscadorCentrifugo = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: { code: 102, message: 'unknown channel' } }), {
+          status: 200,
+        }),
+    );
+    await expect(presenciaDeSala(configuracion(), TENANT, SALA, buscar)).rejects.toThrow(
+      ErrorCentrifugo,
+    );
+    await expect(presenciaDeSala(configuracion(), TENANT, SALA, buscar)).rejects.toThrow(
+      /102.*unknown channel/,
+    );
   });
 });

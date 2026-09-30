@@ -36,6 +36,7 @@ import {
 // Aparte del índice del paquete: usa `node:crypto` y el índice lo importa el
 // paquete de flujos de Temporal, que se empaqueta para un entorno sin él.
 import {
+  ErrorCentrifugo,
   presenciaDeSala,
   publicarEnSala,
   tokenDeCanal,
@@ -663,7 +664,14 @@ export function puertoSala(
             buscarCentrifugo,
           );
           conectadas = new Set(presencia.map((p) => p.personaId));
-        } catch {
+        } catch (error) {
+          // Fallo 5: Centrifugo caído (fetch rechaza) es la caída de verdad que
+          // ya cubre este `catch` a propósito; que Centrifugo responda que no
+          // (canal rechazado, `ErrorCentrifugo`) es un fallo de configuración y
+          // se registra, nunca en silencio, aunque la sala siga degradando igual.
+          if (error instanceof ErrorCentrifugo) {
+            console.error(`[api] centrifugo rechazó la presencia de ${salaId}: ${error.message}`);
+          }
           conectadas = new Set();
         }
       }
