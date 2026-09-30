@@ -259,12 +259,12 @@ export class Enrutador {
         esperado !== undefined && todos.indexOf(esperado) === indice,
     );
 
+    // Dos papeles pueden servirse con el mismo modelo (`opus5` y `sonnet5` en Bedrock):
+    // una fila por modelo, no por papel.
     const tarifasEn = (plataforma: PlataformaModelo): TarifaEsperada[] =>
-      papelesEsperados.map((esperado) => ({
-        proveedor: PROVEEDOR_DE_TARIFA,
-        modelo: modeloDeTarifa(esperado, plataforma),
-        plataforma,
-      }));
+      [...new Set(papelesEsperados.map((esperado) => modeloDeTarifa(esperado, plataforma)))].map(
+        (modelo) => ({ proveedor: PROVEEDOR_DE_TARIFA, modelo, plataforma }),
+      );
 
     return {
       via: 'puerto',

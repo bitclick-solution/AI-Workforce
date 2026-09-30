@@ -41,7 +41,7 @@ Un solo valor, `AIW_PROVEEDOR_MODELOS`, decide con qué modelo trabaja cada proc
    pnpm --filter @aiw/worker bitclick:sembrar
    ```
 
-   Pone el enrutado por papel de la plantilla certificada en el puesto de Cobros y da de alta en el tenant las tarifas de Anthropic (Bedrock y Vertex UE) que falten. Sin tarifa, el trabajador se niega a llamar al modelo (`SinTarifa`): una llamada que no se puede cobrar no se hace.
+   Pone el enrutado por papel de la plantilla certificada en el puesto de Cobros y da de alta en el tenant las tarifas de Anthropic (Bedrock y Vertex UE) que falten. Ojo: repetir la siembra **sobrescribe** el enrutado del puesto de Cobros con el de la plantilla certificada; si lo habías ajustado a mano, lo pierdes. Sin tarifa, el trabajador se niega a llamar al modelo (`SinTarifa`): una llamada que no se puede cobrar no se hace.
 
 3. Lanza la tarea como en `bitclick-cobros-odoo.md`, paso 6. Al arrancar, el trabajador imprime `proveedor de modelos: bedrock-ue (respaldo: vertex-ue)`. Si dice `prueba`, la variable no llegó.
 

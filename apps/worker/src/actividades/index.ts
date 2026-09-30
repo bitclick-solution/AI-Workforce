@@ -660,6 +660,9 @@ export function crearActividades(contexto: ContextoDeActividades) {
             (intento) => intento.motivo === 'rechazo',
           ),
         };
+        // Última línea de defensa: las comprobaciones de antes de llamar ya cubren
+        // cada combinación de papel y proveedor, así que esto no debería disparar. Si
+        // lo hiciera, la llamada ya se hizo: falla sin reintento para no repetirla.
         await exigirTarifas(contexto, peticion.tenantId, [
           { ...paso.tarifa, plataforma: plataformaDeModelo(dado.sirvio.plataforma) },
         ]);
