@@ -2,7 +2,7 @@ VIGENTE
 
 # Especificación · Sala del departamento: moderador y Director con paso de modelo real
 
-- Rebanada: [Notion](<pendiente de crear — ver nota de la sesión del Planificador, 2026-09-30>) · Ciclo 2 · Tipo Producto · Paquetes `packages/rooms`, `apps/platform-agents`, `apps/worker` (más `packages/evals`) · P0
+- Rebanada: [Notion](https://app.notion.com/p/3eb53066189881b48591c0e5723ae77d) · Ciclo 2 · Tipo Producto · Paquetes `packages/rooms`, `apps/platform-agents`, `apps/worker` (más `packages/evals`) · P0
 - Rama: `rebanada/sala-departamento-moderador-modelo`
 - Plan de referencia: [ADR-004](../adr/ADR-004.md) («moderador que decide intervenciones, límite de una o dos por mensaje humano»; «presupuesto propio del moderador»; «coste de sala visible aparte»); [ADR-006](../adr/ADR-006.md) (operaciones de organización como propuesta que pasa por el motor de políticas); [ADR-019](../adr/ADR-019.md) (prompts de plataforma versionados y revisados por Jesús). Punto de partida: [Sala v0](sala-v0.md) (moderador y Director puros, decisión 2: «sin modelo en v0»), [Sala v1 · salas por equipo y presencia en vivo](sala-v1-presencia.md) (la sala de departamento ya existe), `packages/rooms/src/moderador.ts`, `apps/platform-agents/src/director.ts`, `apps/worker/src/actividades/sala.ts`.
 - Depende de: **«Proveedor real en el bucle del agente»** (en curso). Esta rebanada no arranca antes de que esa esté fusionada: reutiliza su forma de llamar a `packages/models` desde código de plataforma (credenciales, reintentos, tarifas, observabilidad de Langfuse) en vez de inventar una segunda.
