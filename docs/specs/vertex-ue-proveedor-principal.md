@@ -14,6 +14,7 @@ Jesús habilitó Vertex AI en el proyecto de Google Cloud de Bitclick con Opus 5
 ## Paquetes tocados
 
 - `packages/models`: tabla de identificadores de Vertex UE, comprobación de residencia UE al arrancar, selector de proveedor principal/respaldo en una línea (por defecto `bedrock-ue`/`vertex-ue`), prueba de integración real de Vertex. La tabla de Bedrock y los ajustes provisionales de esfuerzo de `anthropic.ts` no se tocan.
+- `packages/evals`: casos dorados reales de Cobros y Conciliación contra Vertex UE (`smoke/cobros-modelos-v1.vertex.integracion.test.ts`, `conciliacion-modelos-v1.vertex.integracion.test.ts`), gateados igual que la prueba de integración de `@aiw/models`.
 - `docs`: runbook nuevo de Vertex + WIF (con los comandos de Cloud Shell para cuando haya cuota, no para ejecutar ahora), runbook de funciones ausentes actualizado, ADR-023 sincronizado.
 - `deploy`/`.github`: job **Vertex UE · integración (manual, sin cuota)** en `ci.yml` — solo `workflow_dispatch`, sin el cron semanal que sí lleva el de Bedrock —, variables de repositorio documentadas.
 

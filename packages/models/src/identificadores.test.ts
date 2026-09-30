@@ -14,7 +14,7 @@ describe('identificadorDeModelo', () => {
     expect(identificadorDeModelo('sonnet5', 'primera-parte')).toBe('claude-sonnet-5');
   });
 
-  it('en Vertex UE (ADR-023, proveedor principal), opus5 lo sirve Opus 5.5, no el objetivo desnudo del ADR-018', () => {
+  it('en Vertex UE (ADR-023, implementado, respaldo por defecto), opus5 lo sirve Opus 5.5, no el objetivo desnudo del ADR-018', () => {
     expect(identificadorDeModelo('opus5', 'vertex-eu')).toBe('claude-opus-5-5');
     expect(identificadorDeModelo('sonnet5', 'vertex-eu')).toBe('claude-sonnet-5');
   });
