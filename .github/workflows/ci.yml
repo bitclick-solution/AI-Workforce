@@ -419,6 +419,16 @@ jobs:
             curl -fsS "http://127.0.0.1:${AIW_WEB_PUERTO:-3000}/$ruta" > /dev/null
             echo "OK /$ruta"
           done
+      - name: Centrifugo reparte presencia en un canal sala: real
+        # Criterio 6 de «demo local en Windows»: las pruebas unitarias simulan
+        # Centrifugo (por eso no vieron el fallo 5); esto se suscribe de verdad
+        # al Centrifugo del propio Compose y lee la presencia.
+        if: steps.cambios.outputs.arrancar == 'true'
+        run: |
+          set -a
+          source .env
+          set +a
+          pnpm --filter @aiw/worker comprobar:centrifugo
       - name: Estado de los servicios
         if: always() && steps.cambios.outputs.arrancar == 'true'
         run: docker compose --env-file .env -f deploy/compose/docker-compose.dev.yml ps
