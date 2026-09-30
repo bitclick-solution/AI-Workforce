@@ -12,6 +12,7 @@ import {
   clienteBedrockMantleDesdeEntorno,
   clientePrimeraParteDesdeEntorno,
   clienteVertexDesdeEntorno,
+  esRegionVertexUEValida,
 } from './clientes.js';
 
 /**
@@ -84,5 +85,24 @@ describe('clientes reales contra el servidor simulado', () => {
     expect(() => clienteBedrockMantleDesdeEntorno({})).toThrow(/AIW_BEDROCK_REGION_UE/);
     expect(() => clienteVertexDesdeEntorno({})).toThrow(/AIW_VERTEX_REGION_UE/);
     expect(() => clientePrimeraParteDesdeEntorno({})).toThrow(/ANTHROPIC_API_KEY/);
+  });
+
+  describe('residencia UE de Vertex (ADR-017, ADR-023)', () => {
+    // Se prueba la validación pura (esRegionVertexUEValida), no clienteVertexDesdeEntorno con
+    // una región válida: AnthropicVertex intenta resolver credenciales de Google (ADC) en
+    // cuanto se construye, incluso sin hacer ninguna llamada, y en este entorno sin ADC eso
+    // deja una promesa rechazada sin capturar (ver el comentario de cabecera de este archivo).
+    it('acepta la multirregión "eu" y una región concreta "europe-*"', () => {
+      expect(esRegionVertexUEValida('eu')).toBe(true);
+      expect(esRegionVertexUEValida('europe-west1')).toBe(true);
+    });
+
+    it('rechaza "global", "us" y cualquier región fuera de la UE', () => {
+      for (const region of ['global', 'us', 'us-east5', 'asia-southeast1']) {
+        expect(() =>
+          clienteVertexDesdeEntorno({ AIW_VERTEX_REGION_UE: region, AIW_VERTEX_PROJECT_ID: 'p' }),
+        ).toThrow(/no es una ubicación de la UE/);
+      }
+    });
   });
 });

@@ -92,6 +92,52 @@ jobs:
           echo "Falta la variable de repositorio AWS_ROLE_ARN, nada que probar todavía."
           echo "Ver docs/runbooks/bedrock-iam-oidc.md."
 
+  vertex-integracion:
+    name: Vertex UE · integración (manual, sin cuota)
+    # Vertex UE queda implementado y documentado, pero inactivo (ADR-023, revisado
+    # el 29-9-2026: Google tampoco concede cuota de la familia 5 — Bedrock UE
+    # clásico vuelve a ser el principal). Por eso este job es solo manual, sin el
+    # cron semanal que sí lleva "Bedrock UE · integración": no tiene sentido pagar
+    # una comprobación semanal de un proveedor que hoy no puede completar ninguna
+    # petición. En cuanto Google conceda la cuota, añadir aquí el mismo evento
+    # 'schedule' que usa el job de Bedrock es el único cambio (docs/runbooks/vertex-wif.md).
+    # Solo sobre main — la condición de confianza de la federación de identidades
+    # de aiw-ci-vertex solo admite ese ref, así que en un PR fallaría al cambiar el
+    # token de identidad de GitHub por credenciales de Google Cloud.
+    # Sin credenciales guardadas: la cuenta de servicio aiw-ci-vertex se asume por
+    # federación de identidades (WIF), como con Bedrock y OIDC.
+    # Sin AIW_VERTEX_WIF_PROVIDER todavía, el job no falla: solo dice que no hay
+    # nada que probar.
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - name: Asumir aiw-ci-vertex por federación de identidades
+        if: vars.AIW_VERTEX_WIF_PROVIDER != ''
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.AIW_VERTEX_WIF_PROVIDER }}
+          service_account: ${{ vars.AIW_VERTEX_WIF_SERVICE_ACCOUNT }}
+      - name: Vertex UE real
+        if: vars.AIW_VERTEX_WIF_PROVIDER != ''
+        env:
+          AIW_VERTEX_REGION_UE: ${{ vars.AIW_VERTEX_REGION_UE }}
+          AIW_VERTEX_PROJECT_ID: ${{ vars.AIW_VERTEX_PROJECT_ID }}
+        run: |
+          pnpm --filter @aiw/models test:integracion:vertex
+          pnpm --filter @aiw/evals exec vitest run smoke/cobros-modelos-v1.vertex.integracion.test.ts smoke/conciliacion-modelos-v1.vertex.integracion.test.ts
+      - name: Sin AIW_VERTEX_WIF_PROVIDER todavía
+        if: vars.AIW_VERTEX_WIF_PROVIDER == ''
+        run: |
+          echo "Falta la variable de repositorio AIW_VERTEX_WIF_PROVIDER, nada que probar todavía."
+          echo "Ver docs/runbooks/vertex-wif.md."
+
   base-de-datos:
     name: Base de datos
     runs-on: ${{ fromJSON(vars.AIW_RUNS_ON || '["ubuntu-24.04"]') }}
