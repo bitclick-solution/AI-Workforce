@@ -419,7 +419,7 @@ jobs:
             curl -fsS "http://127.0.0.1:${AIW_WEB_PUERTO:-3000}/$ruta" > /dev/null
             echo "OK /$ruta"
           done
-      - name: Centrifugo reparte presencia en un canal sala: real
+      - name: "Centrifugo reparte presencia en un canal sala: real"
         # Criterio 6 de «demo local en Windows»: las pruebas unitarias simulan
         # Centrifugo (por eso no vieron el fallo 5); esto se suscribe de verdad
         # al Centrifugo del propio Compose y lee la presencia.
