@@ -2,6 +2,26 @@
   "_nota": "Respuestas grabadas del MCP dinámico contra la instancia de pruebas de Odoo. Datos inventados: ninguna persona, empresa, factura o importe real. Fecha de referencia de las pruebas: 2026-09-21.",
   "search_records": [
     {
+      "argumentos": { "limit": 3 },
+      "carga": {
+        "success": true,
+        "count": 1,
+        "result": [
+          {
+            "id": 46,
+            "name": "F-2026-0430",
+            "partner_id": [13, "Distribuciones de Muestra SL"],
+            "amount_residual": 980.0,
+            "currency_id": [1, "EUR"],
+            "invoice_date": "2026-08-01",
+            "invoice_date_due": "2026-08-31"
+          }
+        ],
+        "smart_fields_applied": false,
+        "fields_used": ["name", "partner_id", "amount_residual", "currency_id", "invoice_date", "invoice_date_due"]
+      }
+    },
+    {
       "carga": {
         "records": [
           {
@@ -49,7 +69,16 @@
     { "argumentos": { "res_id": 999999 }, "error": "Record does not exist: account.move(999999,)" },
     { "argumentos": { "res_id": 888888 }, "error": "Access denied for model account.move" },
     { "argumentos": { "res_id": 777777 }, "error": "Read timed out after 60s talking to Odoo" },
-    { "carga": { "message_id": 9001, "create_date": "2026-09-21 08:30:00" } }
+    {
+      "carga": {
+        "success": true,
+        "mode": "direct",
+        "model": "account.move",
+        "record_id": 42,
+        "approval_required": false,
+        "result": 9001
+      }
+    }
   ],
   "preview_write": [
     { "carga": { "payload": { "model": "mail.activity", "operation": "create" } } }
@@ -64,6 +93,15 @@
     }
   ],
   "execute_approved_write": [
-    { "carga": { "activity_id": 5501, "create_date": "2026-09-21 08:31:00" } }
+    {
+      "carga": {
+        "success": true,
+        "tool": "execute_approved_write",
+        "model": "mail.activity",
+        "operation": "create",
+        "result": 5501,
+        "instance": "pruebas"
+      }
+    }
   ]
 }

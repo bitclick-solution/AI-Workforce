@@ -93,7 +93,8 @@ describe('crear_nota_seguimiento', () => {
       id: 9001,
       factura_id: 42,
       tipo: 'nota',
-      creado_en: '2026-09-21T08:30:00.000Z',
+      // El `chatter_post` real no devuelve fecha de creación: se usa la del conector.
+      creado_en: DIA_DE_LA_GRABACION.toISOString(),
     });
     expect(cliente.llamadas[0]?.herramienta).toBe('chatter_post');
   });

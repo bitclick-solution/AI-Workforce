@@ -42,12 +42,21 @@ describe('contrato sobre respuestas grabadas', () => {
     verificarLista(await herramientas.listarFacturasVencidas({ dias_vencida_minimo: 2 }), 2);
   });
 
+  it('listar_facturas_vencidas cumple el contrato con la envolvente «result» del MCP real', async () => {
+    // El servidor real (FastMCP) devuelve la lista bajo «result», no «records»;
+    // esta grabación la usa para que la CI no dependa de una forma supuesta.
+    verificarLista(await herramientas.listarFacturasVencidas({ limite: 3 }), 1);
+  });
+
   it('crear_nota_seguimiento cumple el contrato', async () => {
     const salida = await herramientas.crearNotaSeguimiento({
       factura_id: 42,
       texto: 'Nota de contrato.',
     });
-    expect(SalidaCrearNotaSeguimiento.parse(salida).factura_id).toBe(42);
+    // El `chatter_post` real devuelve `record_id` (la factura) junto al
+    // identificador creado bajo `result`: el `id` de la salida debe ser este
+    // último, no la factura sobre la que se escribió.
+    expect(SalidaCrearNotaSeguimiento.parse(salida)).toMatchObject({ id: 9001, factura_id: 42 });
   });
 
   it('las grabaciones no llevan datos personales reales', () => {

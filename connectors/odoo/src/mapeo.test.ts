@@ -98,6 +98,10 @@ describe('envolventes del MCP dinámico', () => {
     expect(leerRegistros({ data: { results: [REGISTRO] } })).toHaveLength(1);
   });
 
+  it('saca la lista de la envolvente «result» del MCP dinámico real (FastMCP)', () => {
+    expect(leerRegistros({ success: true, count: 1, result: [REGISTRO] })).toEqual([REGISTRO]);
+  });
+
   it('una respuesta sin lista falla en vez de devolver vacío', () => {
     expect(() => leerRegistros({ mensaje: 'vale' })).toThrow(ErrorConector);
   });
@@ -107,6 +111,21 @@ describe('envolventes del MCP dinámico', () => {
     expect(leerIdentificador({ result: { id: 5501 } })).toBe(5501);
     expect(leerIdentificador([{ id: 7 }])).toBe(7);
     expect(() => leerIdentificador({ hecho: true })).toThrow(ErrorConector);
+  });
+
+  it('prefiere el identificador de «result» al «record_id» que solo repite el argumento', () => {
+    // Forma real de `chatter_post`: `record_id` es la factura sobre la que se
+    // escribe, no el mensaje creado, que va en `result`.
+    expect(
+      leerIdentificador({
+        success: true,
+        mode: 'direct',
+        model: 'account.move',
+        record_id: 42,
+        approval_required: false,
+        result: 9001,
+      }),
+    ).toBe(9001);
   });
 
   it('prefiere la fecha de creación del ERP y si no la hay usa la del conector', () => {
