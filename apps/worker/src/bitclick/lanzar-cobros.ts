@@ -11,20 +11,21 @@
  * decisión real de Jesús por correo, con `AIW_APROBACION_CORREO=1`.
  *
  * Cada tarea paga con el modelo que diga el `enrutado_modelo` de la plantilla
- * certificada `finanzas.reclamacion-de-cobros` (`./siembra.ts`): hoy el proveedor
- * de prueba determinista, porque el bucle del agente todavía no tiene un
- * proveedor real de Bedrock o Vertex registrado en su enrutador (paquete
- * `@aiw/models`, ruta «Modelos v1» — sección aparte del runbook). El conector de
- * Odoo sí es el real: la parte que importa para los criterios de hecho de esta
- * rebanada corre contra la empresa de pruebas de verdad.
+ * certificada `finanzas.reclamacion-de-cobros` (`./siembra.ts`): un papel (`sonnet5`
+ * con respaldo `haiku45`) que el proveedor de `AIW_PROVEEDOR_MODELOS` —Bedrock UE
+ * por defecto— sirve con el modelo real y cobra con tokens y tarifa reales. Con
+ * `AIW_PROVEEDOR_MODELOS=prueba` corre con el guion determinista y cuesta 0 €.
+ * Sin las credenciales del proveedor elegido, el lanzamiento falla antes de crear la
+ * tarea. El conector de Odoo es siempre el real.
  */
 import { conTenant } from '@aiw/db';
 import { verificarCadenaEnBase } from '@aiw/ledger';
+import { enrutadorDesdeEntorno, type Enrutador } from '@aiw/models';
 import { NativeConnection } from '@temporalio/worker';
 import { Client, Connection } from '@temporalio/client';
 import type postgres from 'postgres';
 
-import { enrutadorDeDemostracion, registroDeOdooPorProceso } from '../actividades/contexto.js';
+import { registroDeOdooPorProceso } from '../actividades/contexto.js';
 import { crearTareaRaiz } from '../semilla.js';
 import { tareaAgente } from '../flujos/index.js';
 import { montarTrabajador } from '../trabajador.js';
@@ -93,6 +94,15 @@ export async function principal(
     return;
   }
 
+  let enrutador: Enrutador;
+  try {
+    enrutador = enrutadorDesdeEntorno(entorno);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+    return;
+  }
+
   const cola = `aiw-bitclick-cobros-${String(Date.now())}`;
   const conexionTemporal = await NativeConnection.connect({
     address: entorno['AIW_TEMPORAL_DIRECCION'] ?? 'localhost:7233',
@@ -111,10 +121,9 @@ export async function principal(
     espacio: espacioTemporal,
     conexion: conexionTemporal,
     registro,
-    // Documentado arriba: el proveedor real de modelo todavía no está cableado en
-    // el enrutador del bucle. El conector de Odoo, que es lo que exige esta
-    // rebanada, sí es el real.
-    enrutador: enrutadorDeDemostracion(),
+    // El proveedor de modelos sale del entorno: Bedrock UE salvo que
+    // AIW_PROVEEDOR_MODELOS diga otra cosa (`prueba` para una pasada sin coste).
+    enrutador,
   });
 
   const clienteTemporal = new Client({

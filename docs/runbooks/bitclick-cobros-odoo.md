@@ -12,28 +12,19 @@ con dobles: lo que prueba la integración continua es el código, nunca el Odoo
 real. Los pasos 2 a 9 de este runbook los ejecuta el Probador (o Jesús) en su
 propia máquina, después de fusionar, con sus propias credenciales.
 
-## Aviso: el modelo de esta tarea no es todavía Bedrock real
+## Aviso: el modelo de la tarea depende de `AIW_PROVEEDOR_MODELOS`
 
-La plantilla certificada `finanzas.reclamacion-de-cobros`
-(`@aiw/platform-agents`) fija su propio `enrutadoModelo`
-(`{ proveedor: 'prueba', modelo: 'deterministico' }`), y esta rebanada no la
-toca. El bucle del agente (`apps/worker`) resuelve ese enrutado con
-`@aiw/models/enrutado.ts`, que hoy solo tiene registrado el proveedor de
-prueba: el puente que instalaría ahí un proveedor real de Bedrock o Vertex
-(`crearAdaptadorAnthropic` de la ruta «Modelos v1», ya construida para los
-casos dorados y los evals, pero nunca conectada al enrutador del bucle) no
-existe todavía en el repositorio. Es un hueco de arquitectura previo a esta
-rebanada, no algo que se decidiera aquí.
+La plantilla certificada `finanzas.reclamacion-de-cobros` enruta por papel
+(`sonnet5`, con respaldo `haiku45`) y el trabajador registra al arrancar el
+proveedor que diga `AIW_PROVEEDOR_MODELOS`: Bedrock UE por defecto, o `prueba`
+si lo escribes (guion determinista, 0 €). Con Bedrock, cada paso de modelo suma
+al contador con tokens y tarifa reales, y el paso 5 deja al día el puesto y sus
+tarifas. Cómo elegir el proveedor, qué falla si falta algo y cuánto cuesta una
+tarea: [`proveedor-real-local.md`](proveedor-real-local.md).
 
-Consecuencia práctica: lanzar la tarea con este runbook **no gasta en
-Bedrock**, aunque tengas `AWS_ACCESS_KEY_ID` en tu `.env` — esas credenciales
-las usan los casos dorados de Cobros (`pnpm --filter @aiw/evals evals:smoke`,
-job **Bedrock UE · integración** de la CI) y no el lanzamiento de esta
-organización. El conector de Odoo sí es el real de punta a punta: los
-criterios de hecho 1, 3, 4, 5 y 6 se verifican contra Odoo de verdad, y eso es
-lo que este runbook comprueba. Propón en Notion, como rebanada aparte, cablear
-el proveedor real de Bedrock o Vertex en el enrutador del bucle si quieres que
-la decisión de Cobros la tome un modelo de verdad.
+Ojo con el cobro: **con `bedrock-ue` la tarea gasta dinero de verdad**, unos
+céntimos por tarea (estimación en el runbook). Si solo quieres comprobar Odoo,
+el correo y el libro, deja `AIW_PROVEEDOR_MODELOS=prueba` en tu `.env`.
 
 ## 1. Requisitos previos
 
@@ -65,18 +56,19 @@ SES, Brevo…) o el que ya use Bitclick—, el código no distingue entre ellos.
 | `AIW_CORREO_SMTP_CONTRASENA` | Contraseña o token SMTP.                                                                                                                               |
 | `AIW_SENAL_PROVEEDOR`        | `temporal` (no `memoria`): sin esto, la decisión no llega al flujo real.                                                                               |
 
-### Bedrock, para el modelo (de los casos dorados y los evals; ver el aviso de arriba)
+### Bedrock, para el modelo (solo si eliges `bedrock-ue`; ver el aviso de arriba)
 
 Las credenciales del usuario IAM local `aiw-dev`, o lo que diga
 [`docs/runbooks/modelos-funciones-ausentes.md`](modelos-funciones-ausentes.md)
-si ya cambiaron. Ninguna de estas variables hace que la tarea de Cobros gaste:
-ver el aviso de arriba.
+si ya cambiaron. Con `AIW_PROVEEDOR_MODELOS=bedrock-ue` son obligatorias: sin
+ellas, `bitclick:cobros` falla antes de crear la tarea y dice cuál falta.
 
-| Variable                | Qué es                                     |
-| ----------------------- | ------------------------------------------ |
-| `AIW_BEDROCK_REGION_UE` | Región de Bedrock UE, hoy `eu-north-1`.    |
-| `AWS_ACCESS_KEY_ID`     | Clave de acceso del usuario IAM `aiw-dev`. |
-| `AWS_SECRET_ACCESS_KEY` | Clave secreta del mismo usuario.           |
+| Variable                | Qué es                                               |
+| ----------------------- | ---------------------------------------------------- |
+| `AIW_PROVEEDOR_MODELOS` | `bedrock-ue` para el modelo real; `prueba` para 0 €. |
+| `AIW_BEDROCK_REGION_UE` | Región de Bedrock UE, hoy `eu-north-1`.              |
+| `AWS_ACCESS_KEY_ID`     | Clave de acceso del usuario IAM `aiw-dev`.           |
+| `AWS_SECRET_ACCESS_KEY` | Clave secreta del mismo usuario.                     |
 
 ### El resto del entorno local
 
@@ -152,8 +144,8 @@ Arranca un trabajador de Temporal con el conector real de Odoo (el proceso
 hijo que lanza este guion habla con la empresa de pruebas, nunca con otra) y
 lanza una tarea nueva sobre el puesto ya sembrado. Es repetible: cada
 ejecución crea una tarea raíz nueva. **Lánzala a mano, y como mucho una vez al
-día si decides programarla — nunca en bucle.** El coste queda en el contador
-del tenant (paso 8).
+día si decides programarla — nunca en bucle.** Con `bedrock-ue`, cada tarea
+paga con el modelo real; el coste queda en el contador del tenant (paso 8).
 
 Deja la terminal abierta: el trabajador corre en ese proceso hasta que la
 tarea termina.

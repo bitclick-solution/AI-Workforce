@@ -22,6 +22,7 @@ import { verificarCadenaEnBase } from '@aiw/ledger';
 import type postgres from 'postgres';
 
 import { BANDERA, aprendizajeEncendido, leerConfiguracion } from './configuracion.js';
+import { enrutadorDeLaDemo } from './actividades/contexto.js';
 import { montarTrabajador } from './trabajador.js';
 import { crearTareaRaiz, sembrarDemostracion } from './semilla.js';
 import { tareaAgente } from './flujos/index.js';
@@ -52,6 +53,8 @@ const conexionTemporal = await NativeConnection.connect({
   address: configuracion.temporal.direccion,
 });
 const montado = await montarTrabajador({
+  // Demostración determinista: `prueba` salvo que AIW_PROVEEDOR_MODELOS diga otra cosa.
+  enrutador: enrutadorDeLaDemo(),
   urlBaseDeDatos: configuracion.urlBaseDeDatos,
   cola,
   espacio: configuracion.temporal.espacio,

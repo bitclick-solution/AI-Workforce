@@ -216,7 +216,12 @@ export async function ejecutarBucle(
     cuenta.pasos += 1;
     gastado = salida.gastadoEuros;
     resumen = salida.texto || resumen;
-    mensajes.push({ papel: 'agente', texto: salida.texto });
+    mensajes.push({
+      papel: 'agente',
+      texto: salida.texto,
+      ...(salida.llamadas.length > 0 ? { llamadas: salida.llamadas } : {}),
+      ...(salida.bloques === undefined ? {} : { bloques: salida.bloques }),
+    });
 
     if (salida.guardiaDisparada !== undefined) {
       // Un guardia que salta es una señal de aprendizaje, no solo un incidente: el

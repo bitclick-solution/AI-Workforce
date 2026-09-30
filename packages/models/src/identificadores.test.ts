@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { esProvisional, identificadorDeModelo, nombreCanonico } from './identificadores.js';
+import {
+  esProvisional,
+  identificadorDeModelo,
+  modeloDeTarifa,
+  nombreCanonico,
+} from './identificadores.js';
 
 describe('identificadorDeModelo', () => {
   it('en Bedrock usa el perfil de inferencia UE de la integración clásica, con fecha en Haiku 4.5 (excepción del ADR-018)', () => {
@@ -49,5 +54,22 @@ describe('identificadorDeModelo', () => {
       expect(esProvisional('haiku45', 'bedrock-eu')).toBe(false);
       expect(esProvisional('haiku45', 'vertex-eu')).toBe(false);
     });
+  });
+});
+
+describe('modeloDeTarifa', () => {
+  it('cobra en Bedrock el modelo que sirve de verdad, sin perfil, fecha ni versión', () => {
+    expect(modeloDeTarifa('opus5', 'bedrock-eu')).toBe('claude-sonnet-4-6');
+    expect(modeloDeTarifa('sonnet5', 'bedrock-eu')).toBe('claude-sonnet-4-6');
+    expect(modeloDeTarifa('haiku45', 'bedrock-eu')).toBe('claude-haiku-4-5');
+  });
+
+  it('quita la fecha del identificador de Vertex', () => {
+    expect(modeloDeTarifa('haiku45', 'vertex-eu')).toBe('claude-haiku-4-5');
+    expect(modeloDeTarifa('opus5', 'vertex-eu')).toBe('claude-opus-5-5');
+  });
+
+  it('en primera parte coincide con el nombre canónico', () => {
+    expect(modeloDeTarifa('sonnet5', 'primera-parte')).toBe('claude-sonnet-5');
   });
 });

@@ -380,7 +380,9 @@ describe('esquemas estrictos: quita las palabras clave no admitidas y valida al 
 
     expect(resultado.tipo).toBe('ok');
     if (resultado.tipo !== 'ok') return;
-    expect(resultado.llamadasHerramientas).toEqual([{ nombre: 'buscar_movimiento', entrada }]);
+    expect(resultado.llamadasHerramientas).toEqual([
+      { id: 'toolu_simulado_01', nombre: 'buscar_movimiento', entrada },
+    ]);
   });
 
   it('rechaza una entrada de herramienta que no cumple su esquema, aunque la API ya no lo comprueba', async () => {
