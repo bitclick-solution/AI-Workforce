@@ -35,7 +35,7 @@ Guía completa: `.claude/skills/vigilar-pr/SKILL.md`.
 5. Nada se fusiona sin integración continua en verde, veredicto del Revisor y lista de hecho rellena; en zonas críticas, además, la aprobación de Jesús.
 6. Toda decisión del miércoles es un ADR en **Decisiones** y en `docs/adr/` antes de 24 horas.
 7. Tres rebanadas en curso como máximo.
-8. Cada rebanada tiene presupuesto de tokens y registra el consumo real.
+8. Cada rebanada tiene presupuesto de tokens y registra el consumo real. Si monta o retira infraestructura compartida (ejecutores, servidores, proxies), su runbook simula antes cada cambio de paquetes o servicios del sistema, por ejemplo con `apt-get install -s`.
 9. Cada riesgo tiene una señal medible.
 10. La retro de cada ciclo produce un solo cambio en estas reglas.
 
