@@ -55,7 +55,9 @@ describe('principal (validación de entorno, sin tocar Temporal ni la base)', ()
 
   it('exige AIW_CONECTOR_ODOO=1 aunque las cuatro variables de Odoo estén', async () => {
     await principal({ DATABASE_URL: 'postgres://x', ...ENTORNO_ODOO_COMPLETO });
-    expect(salida.join('\n')).toContain('AIW_CONECTOR_ODOO');
+    const mensaje = salida.join('\n');
+    expect(mensaje).toContain('AIW_CONECTOR_ODOO');
+    expect(mensaje).not.toContain(CLAVE_DE_PRUEBA);
     expect(process.exitCode).toBe(1);
   });
 
@@ -65,7 +67,9 @@ describe('principal (validación de entorno, sin tocar Temporal ni la base)', ()
       AIW_CONECTOR_ODOO: '1',
       ...ENTORNO_ODOO_COMPLETO,
     });
-    expect(salida.join('\n')).toContain('bitclick:sembrar');
+    const mensaje = salida.join('\n');
+    expect(mensaje).toContain('bitclick:sembrar');
+    expect(mensaje).not.toContain(CLAVE_DE_PRUEBA);
     expect(process.exitCode).toBe(1);
   });
 });
