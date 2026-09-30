@@ -17,10 +17,11 @@
  * identificador concreto lo resuelve `identificadores.ts` según el proveedor elegido.
  */
 import type { LanguageModelV4 } from '@ai-sdk/provider';
-import { esquemas, type PapelModelo } from '@aiw/domain';
+import { esquemas, type PapelModelo, type PlataformaModelo } from '@aiw/domain';
 import { z } from 'zod';
 
 import { crearPuertoEnrutado, type ProveedorDePuertos, type PuertoEnrutado } from './respaldo.js';
+import { modeloDeTarifa } from './identificadores.js';
 import type { PuertoDeModelo } from './puerto.js';
 import { PROVEEDOR_PRUEBA, crearProveedorDePrueba, type Guion } from './proveedor-prueba.js';
 
@@ -75,6 +76,16 @@ export class ProveedorNoRegistrado extends Error {
 /** Crea el puerto de un papel en un proveedor real. Se llama en cada paso: tiene que ser barata. */
 export type FabricaDePuerto = (papel: PapelModelo) => PuertoDeModelo;
 
+/** Proveedor con el que el catálogo de tarifas (`tarifa_modelo`) da de alta los modelos de Anthropic. */
+export const PROVEEDOR_DE_TARIFA = 'anthropic';
+
+/** Una fila de `tarifa_modelo` que tiene que existir para poder cobrar un paso. */
+export interface TarifaEsperada {
+  proveedor: string;
+  modelo: string;
+  plataforma: PlataformaModelo;
+}
+
 /** Qué proveedores usa el proceso: el principal y, opcionalmente, el de respaldo. */
 export interface EleccionDeProveedores {
   principal: string;
@@ -89,11 +100,22 @@ export type PasoResuelto =
       proveedor: string;
       modeloId: string;
     }
-  | { via: 'puerto'; puerto: PuertoEnrutado; proveedor: string; papel: PapelModelo };
+  | {
+      via: 'puerto';
+      puerto: PuertoEnrutado;
+      proveedor: string;
+      papel: PapelModelo;
+      /**
+       * Tarifas que hacen falta en el proveedor principal para cobrar el paso, el papel
+       * y el de respaldo. Se comprueban antes de llamar: una llamada que no se puede
+       * cobrar no se hace, porque reintentarla la pagaría otra vez.
+       */
+      tarifasEsperadas: TarifaEsperada[];
+    };
 
 export class Enrutador {
   readonly #fabricas = new Map<string, FabricaDeModelo>();
-  readonly #puertos = new Map<string, FabricaDePuerto>();
+  readonly #puertos = new Map<string, { fabrica: FabricaDePuerto; plataforma: PlataformaModelo }>();
   #eleccion: EleccionDeProveedores | undefined;
 
   registrar(proveedor: string, fabrica: FabricaDeModelo): this {
@@ -102,8 +124,8 @@ export class Enrutador {
   }
 
   /** Registra un proveedor real, servido por el puerto de Modelos v1 (Bedrock UE, Vertex UE). */
-  registrarPuerto(proveedor: string, fabrica: FabricaDePuerto): this {
-    this.#puertos.set(proveedor, fabrica);
+  registrarPuerto(proveedor: string, plataforma: PlataformaModelo, fabrica: FabricaDePuerto): this {
+    this.#puertos.set(proveedor, { fabrica, plataforma });
     return this;
   }
 
@@ -211,15 +233,24 @@ export class Enrutador {
         ? eleccion.respaldo
         : undefined;
     const respaldo = nombreRespaldo === undefined ? undefined : this.#puertos.get(nombreRespaldo);
-    const comoProveedor = (proveedor: string, puerto: FabricaDePuerto): ProveedorDePuertos => ({
-      proveedor,
-      puerto,
-    });
+    const comoProveedor = (
+      proveedor: string,
+      registrado: { fabrica: FabricaDePuerto },
+    ): ProveedorDePuertos => ({ proveedor, puerto: registrado.fabrica });
+    const papelesEsperados = [papel, configuracion.papelRespaldo].filter(
+      (esperado, indice, todos): esperado is PapelModelo =>
+        esperado !== undefined && todos.indexOf(esperado) === indice,
+    );
 
     return {
       via: 'puerto',
       proveedor: eleccion.principal,
       papel,
+      tarifasEsperadas: papelesEsperados.map((esperado) => ({
+        proveedor: PROVEEDOR_DE_TARIFA,
+        modelo: modeloDeTarifa(esperado, principal.plataforma),
+        plataforma: principal.plataforma,
+      })),
       puerto: crearPuertoEnrutado({
         papel,
         papelRespaldo: configuracion.papelRespaldo,

@@ -49,22 +49,32 @@ describe('enrutado del puesto', () => {
   });
 
   it('un enrutado por papel sin proveedor elegido en el proceso falla', () => {
-    const enrutador = new Enrutador().registrarPuerto('bedrock-ue', (papel) => puertoFalso(papel));
+    const enrutador = new Enrutador().registrarPuerto('bedrock-ue', 'bedrock-eu', (papel) =>
+      puertoFalso(papel),
+    );
     expect(() => enrutador.resolverPaso({ papel: 'sonnet5' })).toThrow(/AIW_PROVEEDOR_MODELOS/);
   });
 
   it('enruta por papel al proveedor real elegido, sin registrar el de prueba', () => {
     const enrutador = new Enrutador()
-      .registrarPuerto('bedrock-ue', (papel) => puertoFalso(`bedrock:${papel}`))
+      .registrarPuerto('bedrock-ue', 'bedrock-eu', (papel) => puertoFalso(`bedrock:${papel}`))
       .elegir({ principal: 'bedrock-ue' });
     const paso = enrutador.resolverPaso({ papel: 'sonnet5', papelRespaldo: 'haiku45' });
-    expect(paso).toMatchObject({ via: 'puerto', proveedor: 'bedrock-ue', papel: 'sonnet5' });
+    expect(paso).toMatchObject({
+      via: 'puerto',
+      proveedor: 'bedrock-ue',
+      papel: 'sonnet5',
+      tarifasEsperadas: [
+        { proveedor: 'anthropic', modelo: 'claude-sonnet-4-6', plataforma: 'bedrock-eu' },
+        { proveedor: 'anthropic', modelo: 'claude-haiku-4-5', plataforma: 'bedrock-eu' },
+      ],
+    });
     expect(enrutador.proveedores).toEqual(['bedrock-ue']);
   });
 
   it('un puesto sembrado con prueba falla con la lista de lo registrado si el proceso eligió Bedrock', () => {
     const enrutador = new Enrutador()
-      .registrarPuerto('bedrock-ue', (papel) => puertoFalso(papel))
+      .registrarPuerto('bedrock-ue', 'bedrock-eu', (papel) => puertoFalso(papel))
       .elegir({ principal: 'bedrock-ue' });
     expect(() => enrutador.resolverPaso({ proveedor: 'prueba', modelo: 'deterministico' })).toThrow(
       ProveedorNoRegistrado,
@@ -76,7 +86,7 @@ describe('enrutado del puesto', () => {
 
   it('resolver, la forma del AI SDK, rechaza un puesto que va a un proveedor real', () => {
     const enrutador = new Enrutador()
-      .registrarPuerto('bedrock-ue', (papel) => puertoFalso(papel))
+      .registrarPuerto('bedrock-ue', 'bedrock-eu', (papel) => puertoFalso(papel))
       .elegir({ principal: 'bedrock-ue' });
     expect(() => enrutador.resolver({ papel: 'opus5' })).toThrow(/resolverPaso/);
   });

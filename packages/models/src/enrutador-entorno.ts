@@ -125,7 +125,7 @@ export function enrutadorDesdeEntorno(
 
   const enrutador = new Enrutador();
   for (const proveedor of new Set<ProveedorModelos>([principal, respaldo])) {
-    enrutador.registrarPuerto(proveedor, (papel) =>
+    enrutador.registrarPuerto(proveedor, plataformaDelProveedor(proveedor), (papel) =>
       crearAdaptadorAnthropic(cliente(proveedor), {
         papel,
         plataforma: plataformaDelProveedor(proveedor),
