@@ -60,6 +60,31 @@ describe('tokens de Centrifugo', () => {
     expect(partesDe(deOtraSala)['carga']['channel']).not.toBe(carga['channel']);
   });
 
+  it('sin ocultarPresencia, el de canal no lleva override: Centrifugo cuenta la conexión', () => {
+    const token = tokenDeCanal(SECRETO, {
+      personaId: PERSONA,
+      tenantId: TENANT,
+      salaId: SALA,
+      ttlSegundos: 300,
+    });
+    expect(partesDe(token)['carga']['override']).toBeUndefined();
+  });
+
+  it('con ocultarPresencia, el de canal apaga presence y join_leave (ADR-026)', () => {
+    const token = tokenDeCanal(SECRETO, {
+      personaId: PERSONA,
+      tenantId: TENANT,
+      salaId: SALA,
+      ttlSegundos: 300,
+      ocultarPresencia: true,
+    });
+    const { carga } = partesDe(token);
+    expect(carga['override']).toEqual({
+      presence: { value: false },
+      join_leave: { value: false },
+    });
+  });
+
   it('caduca a los segundos pedidos, no antes ni mucho después', () => {
     const ahora = 1_700_000_000_000;
     const token = tokenDeConexion(SECRETO, {

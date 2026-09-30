@@ -132,6 +132,9 @@ function puertoFalso(estadoPropuesta = 'pendiente') {
       avisosDeEscritura.push({ tenantId, salaId, personaId });
       return Promise.resolve();
     },
+    // El ajuste de verdad (ADR-026) lo aplica `puertoSala`, no `atenderSala`: se
+    // prueba con Postgres real en `apps/api/src/pruebas/sala-puerto.test.ts`.
+    mostrarPresencia: () => Promise.resolve(true),
   };
   return { puerto, arrancados, senales, marcadosLeidos, avisosDeEscritura };
 }
