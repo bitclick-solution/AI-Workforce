@@ -138,16 +138,80 @@ export function evaluarMemoriaCandidata(candidata: VersionCandidata): ResultadoE
   };
 }
 
+/** Más pasos o comprobaciones que esto en una habilidad es una que no cabe en un paso. */
+export const MAXIMO_PASOS_HABILIDAD = 20;
+
+/**
+ * Comprueba la lista de habilidades congeladas candidata: la habilidad nueva tiene
+ * casos y pasos, no repite nombre y no nombra ninguna herramienta fuera de la
+ * lista blanca del puesto (docs/specs/habilidades-en-el-bucle-y-catalogo-finanzas.md,
+ * decisión 4). No se pronuncia sobre el contenido normativo: eso lo certifican los
+ * casos dorados propios de cada habilidad, no esta función genérica.
+ */
+export function evaluarHabilidadCandidata(candidata: VersionCandidata): ResultadoEval {
+  const fallos: string[] = [];
+  if (candidata.parametros.clase !== 'habilidad') {
+    fallos.push('esta comprobación es solo para promociones de clase «habilidad»');
+  }
+  const habilidades = candidata.habilidadesCongeladas ?? [];
+  const nombres = habilidades.map((habilidad) => habilidad.nombre);
+  if (new Set(nombres).size !== nombres.length) {
+    fallos.push('una habilidad aparece dos veces en las habilidades congeladas');
+  }
+  const nueva = habilidades.find((habilidad) => habilidad.nombre === candidata.parametros.destino);
+  if (!nueva) {
+    fallos.push(`la habilidad «${candidata.parametros.destino}» no está en la candidata`);
+  } else {
+    if (nueva.casosQueAplican.length === 0) {
+      fallos.push(`«${nueva.nombre}» no declara ningún caso que aplica`);
+    }
+    if (nueva.pasos.length === 0) {
+      fallos.push(`«${nueva.nombre}» no declara ningún paso`);
+    }
+    if (nueva.pasos.length > MAXIMO_PASOS_HABILIDAD) {
+      fallos.push(`«${nueva.nombre}» tendría ${nueva.pasos.length} pasos`);
+    }
+    const listaBlanca = new Set(candidata.listaBlancaHerramientas ?? []);
+    const fueraDeLista = nueva.herramientas.filter((herramienta) => !listaBlanca.has(herramienta));
+    if (fueraDeLista.length > 0) {
+      fallos.push(
+        `«${nueva.nombre}» nombra herramientas fuera de la lista blanca del puesto: ` +
+          fueraDeLista.join(', '),
+      );
+    }
+    if (
+      contieneDatosPersonales(nueva.pasos.join(' ')) ||
+      contieneDatosPersonales(nueva.comprobaciones.join(' '))
+    ) {
+      fallos.push(`«${nueva.nombre}» tiene datos personales en su cuerpo`);
+    }
+  }
+  const superado = fallos.length === 0;
+  return {
+    id: 'habilidad-candidata',
+    superado,
+    puntuacion: superado ? 1 : 0,
+    diagnostico: superado
+      ? 'habilidad-candidata: superado'
+      : `habilidad-candidata: ${fallos.join('; ')}`,
+  };
+}
+
 /**
  * Puerta del Evaluador para una promoción. Certifica solo si todo pasa: los casos
- * dorados de los puestos no bajan y la memoria candidata respeta las reglas.
+ * dorados de los puestos no bajan (criterio 8 de la especificación) y, según la
+ * clase de la lección, la memoria candidata o las habilidades candidatas respetan
+ * sus reglas. Las dos evaluaciones son mutuamente excluyentes: una promoción es de
+ * una clase o de otra, nunca de las dos.
  */
 export const certificarPromocion: PuertaDeEvaluacion = (candidata): ResultadoDeLaPuerta => {
   const casos = [
     ejecutarCasoCobros(),
     ejecutarCasoConciliacion(),
     ejecutarCasoAprendizaje(),
-    evaluarMemoriaCandidata(candidata),
+    candidata.parametros.clase === 'habilidad'
+      ? evaluarHabilidadCandidata(candidata)
+      : evaluarMemoriaCandidata(candidata),
   ].map((resultado) => ({ ...resultado }));
   return {
     certificada: casos.every((caso) => caso.superado),

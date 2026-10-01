@@ -103,6 +103,7 @@ const internas = proxyActivities<
     | 'leerDecision'
     | 'vencerAprobacion'
     | 'anotarPaso'
+    | 'cargarHabilidad'
     | 'senalDeAprendizaje'
     | 'proyectarEstado'
     | 'abrirDelegacion'
@@ -282,6 +283,7 @@ export async function tareaAgente(entrada: EntradaTareaAgente): Promise<Resultad
     },
 
     anotarPaso: (peticion) => internas.anotarPaso(peticion),
+    cargarHabilidad: (peticion) => internas.cargarHabilidad(peticion),
     senalDeAprendizaje: (peticion) => internas.senalDeAprendizaje(peticion),
     aprenderDeEdicion:
       entrada.aprendizaje === true
@@ -451,6 +453,7 @@ export async function delegacion(entrada: EntradaDelegacion): Promise<ResultadoD
         motivo: 'Un flujo hijo no espera decisiones humanas: el padre tiene su plazo',
       }),
     anotarPaso: (peticion) => internas.anotarPaso(peticion),
+    cargarHabilidad: (peticion) => internas.cargarHabilidad(peticion),
     senalDeAprendizaje: (peticion) => internas.senalDeAprendizaje(peticion),
   };
 

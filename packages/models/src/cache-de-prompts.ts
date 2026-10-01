@@ -91,6 +91,12 @@ export interface PiezasDelPrompt {
     | undefined;
   /** Memoria congelada de la versión, ya resumida. No entra nada personal. */
   memoria?: readonly string[] | undefined;
+  /**
+   * Índice de las habilidades congeladas de la versión: una línea por habilidad
+   * (nombre y casos que aplican), nunca el cuerpo. El cuerpo lo pide el agente con
+   * `cargar_habilidad` (docs/specs/habilidades-en-el-bucle-y-catalogo-finanzas.md).
+   */
+  habilidades?: readonly string[] | undefined;
 }
 
 /**
@@ -118,6 +124,14 @@ export function componerPrompt(piezas: PiezasDelPrompt): string {
 
   if (piezas.memoria && piezas.memoria.length > 0) {
     bloques.push(`Lo que ya sabes:\n${piezas.memoria.map((linea) => `- ${linea}`).join('\n')}`);
+  }
+
+  if (piezas.habilidades && piezas.habilidades.length > 0) {
+    bloques.push(
+      'Habilidades que puedes cargar con `cargar_habilidad` cuando el caso lo pida ' +
+        '(preparan y comprueban; nunca deciden por la persona):\n' +
+        piezas.habilidades.map((linea) => `- ${linea}`).join('\n'),
+    );
   }
 
   return bloques.join('\n\n');

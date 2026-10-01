@@ -37,18 +37,28 @@ import type {
   MensajeDeConversacion,
   PeticionAbrirDelegacion,
   PeticionAnotarPaso,
+  PeticionCargarHabilidad,
   PeticionDeAprobacion,
   PeticionPasoHerramienta,
   PeticionPasoModelo,
   PeticionSenalDeAprendizaje,
   ResultadoDelegacionHija,
   ResultadoTareaAgente,
+  SalidaCargaHabilidad,
   SalidaPasoHerramienta,
   SalidaPasoModelo,
 } from './tipos.js';
 
 /** Clase de acción con la que se anota la parada por presupuesto. */
 export const CLASE_AMPLIACION = 'presupuesto.ampliacion';
+
+/**
+ * Nombre de la herramienta sintética `cargar_habilidad`. `leerContexto` solo la
+ * añade al catálogo cuando la versión tiene habilidades congeladas (criterio 1 de
+ * docs/specs/habilidades-en-el-bucle-y-catalogo-finanzas.md): sin habilidades, el
+ * contexto no cambia respecto a antes de esta rebanada.
+ */
+export const NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD = 'cargar_habilidad';
 
 /** Tope de vueltas por defecto. Un modelo que no sabe parar no para la tarea. */
 export const MAX_PASOS_POR_DEFECTO = 8;
@@ -70,6 +80,15 @@ export interface OperacionesDelBucle {
   esperarDecision(aprobacionId: string, validezSegundos: number): Promise<DecisionRecibida>;
   anotarPaso(peticion: PeticionAnotarPaso): Promise<void>;
   senalDeAprendizaje(peticion: PeticionSenalDeAprendizaje): Promise<void>;
+  /**
+   * Carga el cuerpo de una habilidad congelada, por su nombre. No pasa por el
+   * gateway: es un paso interno del bucle (decisión 2 de la especificación).
+   * Opcional porque solo hace falta cuando la versión tiene habilidades
+   * congeladas; sin ellas, `cargar_habilidad` no aparece en el catálogo y esta
+   * operación nunca se llama.
+   */
+  cargarHabilidad?:
+    ((peticion: PeticionCargarHabilidad) => Promise<SalidaCargaHabilidad>) | undefined;
   /**
    * Aprendizaje v0: lanza el flujo que convierte la edición de esta aprobación en
    * señal y lección. Sin él, la edición se anota como señal genérica del bucle.
@@ -472,6 +491,36 @@ export async function ejecutarBucle(
         return 'Aprobado. Al ser N0, la acción la ejecuta la persona y no el agente.';
       }
       nivel = veredicto.nivelAplicado;
+    }
+
+    if (herramienta.nombre === NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD) {
+      // No pasa por el gateway: es un paso interno del bucle que solo lee lo ya
+      // congelado en la versión (decisión 2 de la especificación). Si la actividad
+      // no está montada —contexto sin habilidades, la herramienta ni aparecería—
+      // se trata como si no se encontrara la habilidad, nunca como una llamada al
+      // gateway.
+      const pasoCarga = siguientePaso();
+      const nombrePedido = String((argumentos as { nombre?: unknown })['nombre'] ?? '');
+      const salida = operaciones.cargarHabilidad
+        ? await operaciones.cargarHabilidad({
+            ...identidad,
+            nombre: nombrePedido,
+            numeroPaso: pasoCarga,
+            guardiasSalida: contexto.guardiasSalida,
+          })
+        : {
+            encontrada: false,
+            pasos: [],
+            comprobaciones: [],
+            motivo: 'No hay un cargador de habilidades montado en este proceso.',
+          };
+      if (!salida.encontrada) {
+        return `No se cargó ninguna habilidad: ${salida.motivo}`;
+      }
+      return (
+        `Pasos:\n${salida.pasos.map((paso) => `- ${paso}`).join('\n')}\n\n` +
+        `Comprobaciones:\n${salida.comprobaciones.map((c) => `- ${c}`).join('\n')}`
+      );
     }
 
     const pasoHerramienta = siguientePaso();
