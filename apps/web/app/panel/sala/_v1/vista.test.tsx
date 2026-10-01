@@ -94,6 +94,32 @@ describe('VistaDeSalaV1', () => {
     });
   });
 
+  it('confirma una propuesta de verdad: decidirPropuesta cambia su estado', async () => {
+    const fuente = crearFuenteSimulada({ escrituraEnVivo: false });
+    render(<VistaDeSalaV1 salaInicial="finanzas" fuente={fuente} />);
+
+    const tarjeta = await screen.findByTestId('tarjeta-propuesta');
+    fireEvent.click(within(tarjeta).getByRole('button', { name: 'Confirmar' }));
+
+    await waitFor(() => {
+      expect(within(tarjeta).getByRole('status').textContent).toBe('Contratado');
+    });
+    expect(within(tarjeta).queryByRole('button', { name: 'Confirmar' })).toBeNull();
+    expect(within(tarjeta).queryByRole('button', { name: 'Descartar' })).toBeNull();
+  });
+
+  it('descarta una propuesta de verdad: decidirPropuesta también cambia su estado al rechazarla', async () => {
+    const fuente = crearFuenteSimulada({ escrituraEnVivo: false });
+    render(<VistaDeSalaV1 salaInicial="finanzas" fuente={fuente} />);
+
+    const tarjeta = await screen.findByTestId('tarjeta-propuesta');
+    fireEvent.click(within(tarjeta).getByRole('button', { name: 'Descartar' }));
+
+    await waitFor(() => {
+      expect(within(tarjeta).getByRole('status').textContent).toBe('Descartada');
+    });
+  });
+
   it('oculta y vuelve a abrir el panel de miembros', async () => {
     render(<VistaDeSalaV1 salaInicial="finanzas" fuente={crearFuenteSimulada()} />);
     fireEvent.click(await screen.findByTestId('ocultar-miembros'));

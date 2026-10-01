@@ -258,6 +258,11 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
   const [errorEnvio, establecerErrorEnvio] = useState<string | undefined>(undefined);
   const [decidiendo, establecerDecidiendo] = useState<Record<string, boolean>>({});
   const ultimoAviso = useRef(0);
+  // `recargarConversacion` delega siempre en la última `cargarConversacion` que
+  // creó el efecto de abajo: así hereda su mismo guardado por `vigente` y queda
+  // atada a la sala vigente en cada momento, sin pisar la conversación de una
+  // sala con la respuesta tardía de otra (criterio de hecho).
+  const cargarConversacionRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     establecerPanelAbierto(window.matchMedia(PANEL_ABIERTO_DESDE).matches);
@@ -284,6 +289,12 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
     establecerMiembros({ estado: 'cargando' });
     establecerEscribiendo({});
     establecerConversacion({ estado: 'cargando' });
+    // Al cambiar de sala, nada de la anterior se queda a medias viéndose en la
+    // nueva: ni un error de envío ni un botón «cargando» de una decisión que ya
+    // no es de esta sala.
+    establecerErrorEnvio(undefined);
+    establecerEnviando(false);
+    establecerDecidiendo({});
 
     const cargarConversacion = () => {
       fuente.mensajes(salaId).then(
@@ -295,6 +306,7 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
         },
       );
     };
+    cargarConversacionRef.current = cargarConversacion;
 
     fuente.miembros(salaId).then(
       (datos) => {
@@ -384,14 +396,13 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
 
   // Reutiliza el mismo camino que la vista v0 (`GET /api/sala`, `POST /api/sala/
   // mensajes`): la fuente llama a esos manejadores de ruta, nunca a la API
-  // directamente (criterio «reutiliza» de la rebanada).
+  // directamente (criterio «reutiliza» de la rebanada). Delega en
+  // `cargarConversacionRef`, la misma función que usa el efecto de arriba, para
+  // compartir su guardado por `vigente`/sala: si la persona cambia de sala antes
+  // de que `enviarMensaje`/`decidirPropuesta` respondan, esto recarga la sala
+  // vigente en ese momento, nunca pisa su conversación con datos de la anterior.
   const recargarConversacion = () => {
-    fuente.mensajes(salaId).then(
-      (datos) => {
-        establecerConversacion({ estado: 'listo', datos });
-      },
-      () => undefined,
-    );
+    cargarConversacionRef.current();
   };
 
   const enviar = (evento: FormEvent<HTMLFormElement>) => {
