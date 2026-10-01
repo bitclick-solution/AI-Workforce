@@ -58,6 +58,5 @@ export type HabilidadDelCatalogo = z.infer<typeof habilidadDelCatalogo>;
 export type CatalogoHabilidades = z.infer<typeof catalogoHabilidades>;
 
 /** El catálogo validado. Un JSON que no cumple el esquema no llega a cargarse. */
-export const CATALOGO_DE_HABILIDADES: CatalogoHabilidades = catalogoHabilidades.parse(
-  catalogoDeHabilidades,
-);
+export const CATALOGO_DE_HABILIDADES: CatalogoHabilidades =
+  catalogoHabilidades.parse(catalogoDeHabilidades);

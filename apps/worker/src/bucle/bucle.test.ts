@@ -6,7 +6,11 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-import { NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD, ejecutarBucle, type OperacionesDelBucle } from './bucle.js';
+import {
+  NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD,
+  ejecutarBucle,
+  type OperacionesDelBucle,
+} from './bucle.js';
 import type {
   ContextoDeEjecucion,
   EntradaTareaAgente,
@@ -49,7 +53,9 @@ function pasoModeloQuePide(nombre: string) {
     llamado = true;
     return {
       texto: '',
-      llamadas: [{ id: 'l1', herramienta: NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD, argumentos: { nombre } }],
+      llamadas: [
+        { id: 'l1', herramienta: NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD, argumentos: { nombre } },
+      ],
       costeEuros: 0,
       gastadoEuros: 0,
       motivoFin: 'tool_use',
@@ -108,7 +114,13 @@ describe('paso interno cargar_habilidad', () => {
       llamado = true;
       return {
         texto: '',
-        llamadas: [{ id: 'l1', herramienta: NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD, argumentos: { nombre: 'inventada' } }],
+        llamadas: [
+          {
+            id: 'l1',
+            herramienta: NOMBRE_HERRAMIENTA_CARGAR_HABILIDAD,
+            argumentos: { nombre: 'inventada' },
+          },
+        ],
         costeEuros: 0,
         gastadoEuros: 0,
         motivoFin: 'tool_use',

@@ -88,8 +88,7 @@ export interface OperacionesDelBucle {
    * operación nunca se llama.
    */
   cargarHabilidad?:
-    | ((peticion: PeticionCargarHabilidad) => Promise<SalidaCargaHabilidad>)
-    | undefined;
+    ((peticion: PeticionCargarHabilidad) => Promise<SalidaCargaHabilidad>) | undefined;
   /**
    * Aprendizaje v0: lanza el flujo que convierte la edición de esta aprobación en
    * señal y lección. Sin él, la edición se anota como señal genérica del bucle.

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { buscarHabilidadCongelada, leerHabilidadesCongeladas, lineasDeHabilidades } from './habilidades.js';
+import {
+  buscarHabilidadCongelada,
+  leerHabilidadesCongeladas,
+  lineasDeHabilidades,
+} from './habilidades.js';
 
 const ITEM = {
   habilidadId: 'h1',

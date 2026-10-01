@@ -45,7 +45,9 @@ describe('catálogo de habilidades — esquema', () => {
       pasos: ['un paso'],
       comprobaciones: ['una comprobación'],
       normativa: true,
-      fuentes: [{ titulo: 'Calendario del contribuyente', url: 'https://sede.agenciatributaria.gob.es' }],
+      fuentes: [
+        { titulo: 'Calendario del contribuyente', url: 'https://sede.agenciatributaria.gob.es' },
+      ],
     });
     expect(habilidad.fuentes).toHaveLength(1);
   });

@@ -605,7 +605,9 @@ export async function promocionarLeccion(
       leccionId: leccion.id,
       parametros,
       memoria,
-      ...(habilidadesCandidatas === undefined ? {} : { habilidadesCongeladas: habilidadesCandidatas }),
+      ...(habilidadesCandidatas === undefined
+        ? {}
+        : { habilidadesCongeladas: habilidadesCandidatas }),
       ...(listaBlancaHerramientas === undefined ? {} : { listaBlancaHerramientas }),
     });
 

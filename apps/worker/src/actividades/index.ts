@@ -38,7 +38,12 @@ import {
   vencerAprobaciones,
   anotar,
 } from '@aiw/ledger';
-import { buscarHabilidadCongelada, leerEdicion, lineasDeHabilidades, lineasDeMemoria } from '@aiw/learning';
+import {
+  buscarHabilidadCongelada,
+  leerEdicion,
+  lineasDeHabilidades,
+  lineasDeMemoria,
+} from '@aiw/learning';
 import {
   componerPrompt,
   PROVEEDOR_DE_TARIFA,

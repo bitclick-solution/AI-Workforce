@@ -179,7 +179,10 @@ export function evaluarHabilidadCandidata(candidata: VersionCandidata): Resultad
           fueraDeLista.join(', '),
       );
     }
-    if (contieneDatosPersonales(nueva.pasos.join(' ')) || contieneDatosPersonales(nueva.comprobaciones.join(' '))) {
+    if (
+      contieneDatosPersonales(nueva.pasos.join(' ')) ||
+      contieneDatosPersonales(nueva.comprobaciones.join(' '))
+    ) {
       fallos.push(`«${nueva.nombre}» tiene datos personales en su cuerpo`);
     }
   }
