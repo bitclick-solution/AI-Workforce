@@ -4,13 +4,23 @@
  * Igual que el contador: el navegador habla con los manejadores de ruta de Next y
  * son ellos los que ponen el token del panel y reenvían la cookie de sesión. El
  * tenant y la persona los decide la API al validar esa sesión («Acceso al panel»);
- * Next no manda ninguno. Los tipos de la sala v0 son una copia declarada del
- * contrato JSON de la API, no un `import`; los de la sala v1 sí son un `import`,
- * porque `sala-contrato.ts` es justo el contrato que el Diseñador y esta rebanada
+ * Next no manda ninguno. Desde «Sala v1 · conversación real», los tipos de los
+ * mensajes y las propuestas son un `import` de `sala-contrato.ts` (el contrato
+ * ganó la conversación); los de las salas, los miembros y la presencia ya lo
+ * eran, porque `sala-contrato.ts` es justo lo que el Diseñador y esta rebanada
  * comparten (ADR-022).
  */
 import { conectarACentrifugo, type ConexionCentrifugo } from './centrifugo-cliente';
-import type { CambioDeSala, FuenteDeSala, MiembroDeSala, ResumenDeSala } from './sala-contrato';
+import type {
+  AdjuntoDeSala,
+  CambioDeSala,
+  EfectosDeContratacion,
+  FuenteDeSala,
+  MensajeDeSala,
+  MiembroDeSala,
+  PropuestaDeSala,
+  ResumenDeSala,
+} from './sala-contrato';
 
 export const BANDERA_SALA = 'AIW_SALA_V0';
 
@@ -24,42 +34,14 @@ export const BANDERA_SALA = 'AIW_SALA_V0';
  */
 export const SONDEO_SALA_MS = 2_000;
 
-export interface AdjuntoDeLaVista {
-  tipo: string;
-  agente?: string;
-  decision?: string;
-  motivo?: string;
-  propuestaId?: string;
-  estado?: string;
-}
-
-export interface MensajeDeLaSala {
-  id: string;
-  cuerpo: string;
-  autor: { tipo: 'persona' | 'puesto' | 'plataforma'; nombre: string };
-  adjuntos: AdjuntoDeLaVista[];
-  creadoEn: string;
-}
-
-export interface EfectosDeContratacion {
-  puesto?: { nombre?: string; ficha?: { mision?: string; tareas?: string[]; limites?: string[] } };
-  herramientas?: {
-    disponibles?: { nombre: string; descripcion: string; conectorNombre?: string }[];
-    porConectar?: { nombre: string; descripcion: string }[];
-  };
-  guardrails?: { clase: string; regla: string }[];
-  coste?: { tareasMes: number; eurosMesCliente: number; eurosMesModelo: number };
-  reversion?: { descripcion?: string };
-}
-
-export interface PropuestaDeLaSala {
-  id: string;
-  resumen: string;
-  estado: string;
-  nivelExigido: string;
-  costeEstimadoEuros: number;
-  efectos: EfectosDeContratacion;
-}
+// `AdjuntoDeLaVista`, `MensajeDeLaSala` y `PropuestaDeLaSala` son alias de los
+// tipos del contrato (`sala-contrato.ts`): desde la rebanada «Sala v1 ·
+// conversación real», el contrato es la copia declarada del JSON de la API, y
+// este fichero ya no redefine su forma por separado.
+export type AdjuntoDeLaVista = AdjuntoDeSala;
+export type MensajeDeLaSala = MensajeDeSala;
+export type { EfectosDeContratacion };
+export type PropuestaDeLaSala = PropuestaDeSala;
 
 export interface DatosDeLaSala {
   salaId: string;
@@ -241,6 +223,23 @@ async function miembrosDeLaSala(salaId: string): Promise<MiembroDeSala[]> {
   return miembros;
 }
 
+/**
+ * `POST` a los mismos manejadores de ruta que ya usa la vista v0
+ * (`apps/web/app/api/sala/**`, sin duplicar el camino): si la respuesta no es
+ * `ok`, lanza con el motivo que da la API o, si no viene, con el estado HTTP.
+ */
+async function postSala(ruta: string, cuerpo: unknown): Promise<void> {
+  const respuesta = await fetch(ruta, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(cuerpo),
+    cache: 'no-store',
+  });
+  if (respuesta.ok) return;
+  const leido = (await respuesta.json().catch(() => ({}))) as { error?: string };
+  throw new Error(leido.error ?? `La API de la sala respondió ${respuesta.status}.`);
+}
+
 export function crearFuenteDeSala(): FuenteDeSala {
   return {
     async salas() {
@@ -311,6 +310,30 @@ export function crearFuenteDeSala(): FuenteDeSala {
         method: 'POST',
         cache: 'no-store',
       }).catch(() => undefined);
+    },
+
+    // Sala v1: conversación real. Reutiliza el mismo proxy que ya usa la vista
+    // v0 (`apps/web/app/api/sala/**`, que a su vez llama a `apps/api/src/rutas/
+    // sala.ts`) en vez de abrir un camino nuevo: `GET /api/sala?salaId=` para
+    // leer, `POST /api/sala/mensajes` para enviar y `POST /api/sala/propuestas/
+    // :id/decision` para confirmar o descartar.
+
+    async mensajes(salaId) {
+      const datos = await pedirJson<{
+        mensajes: MensajeDeSala[];
+        propuestas: PropuestaDeSala[];
+      }>(`/api/sala?salaId=${encodeURIComponent(salaId)}`);
+      return { mensajes: datos.mensajes, propuestas: datos.propuestas };
+    },
+
+    async enviarMensaje(salaId, texto) {
+      await postSala('/api/sala/mensajes', { texto, salaId });
+    },
+
+    async decidirPropuesta(propuestaId, sentido) {
+      await postSala(`/api/sala/propuestas/${encodeURIComponent(propuestaId)}/decision`, {
+        sentido,
+      });
     },
   };
 }

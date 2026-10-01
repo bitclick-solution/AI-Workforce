@@ -29,14 +29,13 @@ import {
 } from '@aiw/ui';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
-import type { FuenteDeSala, MiembroDeSala, ResumenDeSala } from '../../../../lib/sala-contrato';
-import {
-  ID_DE_QUIEN_MIRA,
-  conversacionDeSala,
-  crearFuente,
-  type AutorDeEjemplo,
-  type MensajeDeEjemplo,
-} from '../../../../lib/sala-fuente';
+import type {
+  ConversacionDeSala,
+  FuenteDeSala,
+  MiembroDeSala,
+  ResumenDeSala,
+} from '../../../../lib/sala-contrato';
+import { ID_DE_QUIEN_MIRA, crearFuente } from '../../../../lib/sala-fuente';
 import {
   aMiembroVisible,
   aplicarPresencia,
@@ -44,6 +43,7 @@ import {
   escribiendoAhora,
   resumenDePresencia,
 } from './presentacion';
+import { aMensajesVisibles, type AutorVisible, type MensajeVisible } from './traduccion';
 
 /** Cada cuánto se avisa como mucho de que la persona escribe. */
 const AVISO_DE_ESCRITURA_MS = 3_000;
@@ -56,7 +56,7 @@ function hrefDeSala(id: string): string {
   return `/panel/sala?sala=${encodeURIComponent(id)}`;
 }
 
-function Autor({ autor, hora }: { autor: AutorDeEjemplo; hora: string }) {
+function Autor({ autor, hora }: { autor: AutorVisible; hora: string }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-2">
       <span className="font-semibold text-texto">{autor.nombre}</span>
@@ -68,7 +68,7 @@ function Autor({ autor, hora }: { autor: AutorDeEjemplo; hora: string }) {
   );
 }
 
-function AvatarDeAutor({ autor }: { autor: AutorDeEjemplo }) {
+function AvatarDeAutor({ autor }: { autor: AutorVisible }) {
   return autor.tipo === 'agente' ? (
     <AvatarDeAgente nombre={autor.nombre} tamano="pequeno" color={colorDeAgente(autor.id)} />
   ) : (
@@ -76,9 +76,98 @@ function AvatarDeAutor({ autor }: { autor: AutorDeEjemplo }) {
   );
 }
 
-function Mensaje({ mensaje }: { mensaje: MensajeDeEjemplo }) {
+/**
+ * La tarjeta de aprobación no cita ninguna propuesta de operación: Sala v0 no
+ * emite ese adjunto todavía (aprobaciones desde la intervención es de _De
+ * conversación a trabajo_), así que aquí «Aprobar» solo resuelve la vista, sin
+ * llamar a la API. Cuando esa rebanada exista, se conecta igual que la
+ * propuesta de más abajo.
+ */
+function TarjetaDeAprobacion({
+  mensaje,
+}: {
+  mensaje: Extract<MensajeVisible, { tipo: 'aprobacion' }>;
+}) {
   const [resuelta, establecerResuelta] = useState(false);
+  if (resuelta) {
+    return (
+      <p
+        role="status"
+        className="rounded-lg bg-correcto-suave px-3 py-2 text-sm text-texto-correcto"
+      >
+        Aprobado por ti.
+      </p>
+    );
+  }
+  return (
+    <AvisoDeAprobacion
+      titulo={mensaje.titulo}
+      data-testid="tarjeta-aprobacion"
+      alAprobar={() => {
+        establecerResuelta(true);
+      }}
+    >
+      <p>{mensaje.resumen}</p>
+      {mensaje.porque ? (
+        <Porque id={`porque-${mensaje.id}`} className="mt-2">
+          {mensaje.porque}
+        </Porque>
+      ) : null}
+    </AvisoDeAprobacion>
+  );
+}
 
+function TarjetaDeLaPropuesta({
+  mensaje,
+  decidiendo,
+  decidir,
+}: {
+  mensaje: Extract<MensajeVisible, { tipo: 'propuesta' }>;
+  decidiendo: boolean;
+  decidir: (propuestaId: string, sentido: 'aprobada' | 'rechazada') => void;
+}) {
+  return (
+    <TarjetaDePropuesta
+      titulo={mensaje.titulo}
+      datos={mensaje.datos}
+      data-testid="tarjeta-propuesta"
+      {...(mensaje.resuelta ? { resuelta: mensaje.resuelta } : {})}
+      acciones={
+        mensaje.resuelta ? undefined : (
+          <>
+            <Boton
+              cargando={decidiendo}
+              onClick={() => {
+                decidir(mensaje.propuestaId, 'aprobada');
+              }}
+            >
+              Confirmar
+            </Boton>
+            <Boton
+              tono="secundario"
+              disabled={decidiendo}
+              onClick={() => {
+                decidir(mensaje.propuestaId, 'rechazada');
+              }}
+            >
+              Descartar
+            </Boton>
+          </>
+        )
+      }
+    />
+  );
+}
+
+function Mensaje({
+  mensaje,
+  decidiendo,
+  decidirPropuesta,
+}: {
+  mensaje: MensajeVisible;
+  decidiendo: boolean;
+  decidirPropuesta: (propuestaId: string, sentido: 'aprobada' | 'rechazada') => void;
+}) {
   if (mensaje.tipo === 'nota') {
     return (
       <p className="py-1 text-center text-xs text-texto-3">
@@ -95,44 +184,12 @@ function Mensaje({ mensaje }: { mensaje: MensajeDeEjemplo }) {
       <div className="flex min-w-0 flex-1 flex-col gap-2 text-sm">
         <Autor autor={mensaje.autor} hora={mensaje.hora} />
         <p className="text-texto">{mensaje.texto}</p>
-        {mensaje.tipo === 'aprobacion' ? (
-          resuelta ? (
-            <p
-              role="status"
-              className="rounded-lg bg-correcto-suave px-3 py-2 text-sm text-texto-correcto"
-            >
-              {mensaje.resuelta}
-            </p>
-          ) : (
-            <AvisoDeAprobacion
-              titulo={mensaje.titulo}
-              data-testid="tarjeta-aprobacion"
-              alAprobar={() => {
-                establecerResuelta(true);
-              }}
-            >
-              <p>{mensaje.resumen}</p>
-              <Porque id={`porque-${mensaje.id}`} className="mt-2">
-                {mensaje.porque}
-              </Porque>
-            </AvisoDeAprobacion>
-          )
-        ) : null}
+        {mensaje.tipo === 'aprobacion' ? <TarjetaDeAprobacion mensaje={mensaje} /> : null}
         {mensaje.tipo === 'propuesta' ? (
-          <TarjetaDePropuesta
-            titulo={mensaje.titulo}
-            datos={mensaje.datos}
-            data-testid="tarjeta-propuesta"
-            {...(resuelta ? { resuelta: mensaje.resuelta } : {})}
-            acciones={
-              <Boton
-                onClick={() => {
-                  establecerResuelta(true);
-                }}
-              >
-                Contratar
-              </Boton>
-            }
+          <TarjetaDeLaPropuesta
+            mensaje={mensaje}
+            decidiendo={decidiendo}
+            decidir={decidirPropuesta}
           />
         ) : null}
       </div>
@@ -194,8 +251,28 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
   const [panelAbierto, establecerPanelAbierto] = useState(false);
   const [hoja, establecerHoja] = useState<'miembros' | 'salas' | null>(null);
   const [borrador, establecerBorrador] = useState('');
-  const [enviados, establecerEnviados] = useState<Record<string, MensajeDeEjemplo[]>>({});
+  const [conversacion, establecerConversacion] = useState<Carga<ConversacionDeSala>>({
+    estado: 'cargando',
+  });
+  const [enviando, establecerEnviando] = useState(false);
+  const [errorEnvio, establecerErrorEnvio] = useState<string | undefined>(undefined);
+  const [decidiendo, establecerDecidiendo] = useState<Record<string, boolean>>({});
   const ultimoAviso = useRef(0);
+  // `recargarConversacion` delega siempre en la última `cargarConversacion` que
+  // creó el efecto de abajo: así hereda su mismo guardado por `vigente` y queda
+  // atada a la sala vigente en cada momento, sin pisar la conversación de una
+  // sala con la respuesta tardía de otra (criterio de hecho).
+  const cargarConversacionRef = useRef<() => void>(() => undefined);
+  // Mismo guardado por `vigente` para el error de un envío o una decisión que
+  // responde tarde: si la persona ya cambió de sala, el error de la sala
+  // anterior no se escribe en la sala nueva. A diferencia de
+  // `cargarConversacionRef` (que siempre recarga la sala vigente, venga de
+  // donde venga), aquí además hace falta comprobar que la sala de la que vino
+  // el error (`deSalaId`) sigue siendo la sala vigente: el mensaje es de una
+  // acción concreta, no algo que tenga sentido repetir en otra sala.
+  const informarErrorDeEnvioRef = useRef<(deSalaId: string, mensaje: string) => void>(
+    () => undefined,
+  );
 
   useEffect(() => {
     establecerPanelAbierto(window.matchMedia(PANEL_ABIERTO_DESDE).matches);
@@ -221,6 +298,29 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
     let vigente = true;
     establecerMiembros({ estado: 'cargando' });
     establecerEscribiendo({});
+    establecerConversacion({ estado: 'cargando' });
+    // Al cambiar de sala, nada de la anterior se queda a medias viéndose en la
+    // nueva: ni un error de envío ni un botón «cargando» de una decisión que ya
+    // no es de esta sala.
+    establecerErrorEnvio(undefined);
+    establecerEnviando(false);
+    establecerDecidiendo({});
+
+    const cargarConversacion = () => {
+      fuente.mensajes(salaId).then(
+        (datos) => {
+          if (vigente) establecerConversacion({ estado: 'listo', datos });
+        },
+        () => {
+          if (vigente) establecerConversacion({ estado: 'error' });
+        },
+      );
+    };
+    cargarConversacionRef.current = cargarConversacion;
+    informarErrorDeEnvioRef.current = (deSalaId, mensaje) => {
+      if (vigente && deSalaId === salaId) establecerErrorEnvio(mensaje);
+    };
+
     fuente.miembros(salaId).then(
       (datos) => {
         if (vigente) establecerMiembros({ estado: 'listo', datos });
@@ -229,6 +329,12 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
         if (vigente) establecerMiembros({ estado: 'error' });
       },
     );
+    cargarConversacion();
+
+    // En vivo (criterio de hecho): el cambio `mensaje` lo emite Centrifugo (o su
+    // caída a consulta periódica, `SONDEO_SALA_MS` en `lib/sala.ts`) cada vez que
+    // alguien escribe en la sala o se decide una propuesta; aquí solo se vuelve a
+    // pedir la conversación, sin sondeo propio.
     const darseDeBaja = fuente.suscribir(salaId, (cambio) => {
       if (!vigente || cambio.salaId !== salaId) return;
       if (cambio.tipo === 'presencia') {
@@ -240,6 +346,8 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
       } else if (cambio.tipo === 'escribiendo') {
         establecerAhora(Date.now());
         establecerEscribiendo((actual) => ({ ...actual, [cambio.miembroId]: cambio.hasta }));
+      } else if (cambio.tipo === 'mensaje') {
+        cargarConversacion();
       }
     });
     return () => {
@@ -285,7 +393,10 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
     ID_DE_QUIEN_MIRA,
     ahora,
   );
-  const conversacion = [...conversacionDeSala(salaId), ...(enviados[salaId] ?? [])];
+  const mensajesVisibles: MensajeVisible[] =
+    conversacion.estado === 'listo'
+      ? aMensajesVisibles(conversacion.datos.mensajes, conversacion.datos.propuestas)
+      : [];
 
   const alEscribir = (texto: string) => {
     establecerBorrador(texto);
@@ -296,21 +407,65 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
     }
   };
 
+  // Reutiliza el mismo camino que la vista v0 (`GET /api/sala`, `POST /api/sala/
+  // mensajes`): la fuente llama a esos manejadores de ruta, nunca a la API
+  // directamente (criterio «reutiliza» de la rebanada). Delega en
+  // `cargarConversacionRef`, la misma función que usa el efecto de arriba, para
+  // compartir su guardado por `vigente`/sala: si la persona cambia de sala antes
+  // de que `enviarMensaje`/`decidirPropuesta` respondan, esto recarga la sala
+  // vigente en ese momento, nunca pisa su conversación con datos de la anterior.
+  const recargarConversacion = () => {
+    cargarConversacionRef.current();
+  };
+
   const enviar = (evento: FormEvent<HTMLFormElement>) => {
     evento.preventDefault();
     const texto = borrador.trim();
-    if (!texto) return;
-    const yo = datosDeMiembros.find((miembro) => miembro.id === ID_DE_QUIEN_MIRA);
-    const hora = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-    const mensaje: MensajeDeEjemplo = {
-      tipo: 'texto',
-      id: `local-${instanteUnico()}`,
-      autor: { id: ID_DE_QUIEN_MIRA, nombre: yo?.nombre ?? 'Tú', tipo: 'persona' },
-      hora,
-      texto,
-    };
-    establecerEnviados((actual) => ({ ...actual, [salaId]: [...(actual[salaId] ?? []), mensaje] }));
-    establecerBorrador('');
+    if (!texto || enviando) return;
+    const deSalaId = salaId;
+    establecerEnviando(true);
+    establecerErrorEnvio(undefined);
+    void fuente
+      .enviarMensaje(salaId, texto)
+      .then(
+        () => {
+          establecerBorrador('');
+          recargarConversacion();
+        },
+        (error: unknown) => {
+          informarErrorDeEnvioRef.current(
+            deSalaId,
+            error instanceof Error ? error.message : 'No se pudo enviar el mensaje.',
+          );
+        },
+      )
+      .finally(() => {
+        establecerEnviando(false);
+      });
+  };
+
+  const decidirPropuesta = (propuestaId: string, sentido: 'aprobada' | 'rechazada') => {
+    const deSalaId = salaId;
+    establecerDecidiendo((actual) => ({ ...actual, [propuestaId]: true }));
+    void fuente
+      .decidirPropuesta(propuestaId, sentido)
+      .then(
+        () => {
+          recargarConversacion();
+        },
+        (error: unknown) => {
+          informarErrorDeEnvioRef.current(
+            deSalaId,
+            error instanceof Error ? error.message : 'No se pudo registrar la decisión.',
+          );
+        },
+      )
+      .finally(() => {
+        establecerDecidiendo((actual) => {
+          const { [propuestaId]: _quitado, ...resto } = actual;
+          return resto;
+        });
+      });
   };
 
   if (salas.estado === 'error') {
@@ -471,7 +626,24 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
           className="flex-1 overflow-y-auto px-4 py-4 lg:px-6"
           data-testid="conversacion"
         >
-          {conversacion.length === 0 ? (
+          {conversacion.estado === 'error' ? (
+            <Aviso
+              tipo="error"
+              titulo="No hemos podido abrir la conversación"
+              data-testid="error-conversacion"
+              accion={
+                <Boton
+                  onClick={() => {
+                    establecerIntento((n) => n + 1);
+                  }}
+                >
+                  Reintentar
+                </Boton>
+              }
+            >
+              Nada se ha perdido: los mensajes siguen guardados.
+            </Aviso>
+          ) : mensajesVisibles.length === 0 ? (
             <Aviso
               tipo="vacio"
               titulo={`Todavía no hay mensajes en #${nombreDeSala}`}
@@ -490,9 +662,15 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
             </Aviso>
           ) : (
             <ol className="mx-auto flex max-w-3xl flex-col gap-5">
-              {conversacion.map((mensaje) => (
+              {mensajesVisibles.map((mensaje) => (
                 <li key={mensaje.id}>
-                  <Mensaje mensaje={mensaje} />
+                  <Mensaje
+                    mensaje={mensaje}
+                    decidiendo={
+                      mensaje.tipo === 'propuesta' && decidiendo[mensaje.propuestaId] === true
+                    }
+                    decidirPropuesta={decidirPropuesta}
+                  />
                 </li>
               ))}
             </ol>
@@ -501,6 +679,11 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
 
         <footer className="border-t border-linea bg-superficie px-4 pb-3 pt-1 lg:px-6">
           <div className="mx-auto max-w-3xl">
+            {errorEnvio ? (
+              <p role="alert" className="mb-2 text-xs text-peligro">
+                {errorEnvio}
+              </p>
+            ) : null}
             <IndicadorDeEscritura nombres={nombresEscribiendo} />
             <form className="flex items-center gap-2" onSubmit={enviar}>
               <label htmlFor="compositor" className="sr-only">
@@ -516,7 +699,12 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
                 autoComplete="off"
                 className="min-h-11 flex-1 rounded-lg border border-linea bg-superficie px-3 text-sm text-texto placeholder:text-texto-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-acento"
               />
-              <Boton type="submit" className="min-h-11">
+              <Boton
+                type="submit"
+                className="min-h-11"
+                cargando={enviando}
+                disabled={borrador.trim().length === 0}
+              >
                 Enviar
               </Boton>
             </form>
@@ -582,10 +770,4 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
       </HojaMovil>
     </div>
   );
-}
-
-let contador = 0;
-function instanteUnico(): string {
-  contador += 1;
-  return `${Date.now()}-${contador}`;
 }

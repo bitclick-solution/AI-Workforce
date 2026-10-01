@@ -373,4 +373,79 @@ describe('crearFuenteDeSala: la fuente real de la sala v1', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     expect(cambios).toHaveLength(1);
   });
+
+  it('mensajes() pide la conversación y las propuestas de la sala por GET', async () => {
+    const propuesta = {
+      id: 'p1',
+      resumen: 'r',
+      estado: 'pendiente',
+      nivelExigido: 'n1',
+      costeEstimadoEuros: 0,
+      efectos: {},
+    };
+    const buscar = vi.fn(async (url: string) => {
+      if (url === `/api/sala?salaId=${SALA_ID}`) {
+        return respuestaJson({ mensajes: [mensaje({ id: 'm1' })], propuestas: [propuesta] });
+      }
+      throw new Error(`URL inesperada: ${url}`);
+    });
+    vi.stubGlobal('fetch', buscar);
+
+    const conversacion = await crearFuenteDeSala().mensajes(SALA_ID);
+    expect(conversacion).toEqual({ mensajes: [mensaje({ id: 'm1' })], propuestas: [propuesta] });
+  });
+
+  it('enviarMensaje() publica el texto y la sala por POST a /api/sala/mensajes', async () => {
+    const buscar = vi.fn(async (url: string, opciones: RequestInit) => {
+      expect(url).toBe('/api/sala/mensajes');
+      expect(opciones.method).toBe('POST');
+      expect(JSON.parse(opciones.body as string)).toEqual({ texto: 'hola', salaId: SALA_ID });
+      return respuestaJson({ mensajeId: 'x' }, 202);
+    });
+    vi.stubGlobal('fetch', buscar);
+
+    await expect(crearFuenteDeSala().enviarMensaje(SALA_ID, 'hola')).resolves.toBeUndefined();
+    expect(buscar).toHaveBeenCalledTimes(1);
+  });
+
+  it('enviarMensaje() lanza con el motivo de la API cuando la respuesta no es ok', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => respuestaJson({ error: 'Texto vacío.' }, 400)),
+    );
+    await expect(crearFuenteDeSala().enviarMensaje(SALA_ID, '')).rejects.toThrow('Texto vacío.');
+  });
+
+  it('enviarMensaje() lanza con el estado HTTP cuando la respuesta no trae {error} válido', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('no es json', { status: 500 })),
+    );
+    await expect(crearFuenteDeSala().enviarMensaje(SALA_ID, 'hola')).rejects.toThrow(
+      'La API de la sala respondió 500.',
+    );
+  });
+
+  it('decidirPropuesta() publica el sentido por POST a /api/sala/propuestas/:id/decision', async () => {
+    const buscar = vi.fn(async (url: string, opciones: RequestInit) => {
+      expect(url).toBe('/api/sala/propuestas/p1/decision');
+      expect(opciones.method).toBe('POST');
+      expect(JSON.parse(opciones.body as string)).toEqual({ sentido: 'aprobada' });
+      return respuestaJson({ ok: true });
+    });
+    vi.stubGlobal('fetch', buscar);
+
+    await expect(crearFuenteDeSala().decidirPropuesta('p1', 'aprobada')).resolves.toBeUndefined();
+    expect(buscar).toHaveBeenCalledTimes(1);
+  });
+
+  it('decidirPropuesta() también lanza con el motivo de la API cuando la respuesta no es ok', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => respuestaJson({ error: 'Ya decidida.' }, 409)),
+    );
+    await expect(crearFuenteDeSala().decidirPropuesta('p1', 'rechazada')).rejects.toThrow(
+      'Ya decidida.',
+    );
+  });
 });
