@@ -2,12 +2,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { clienteGrabado, type ClienteFactusol, type RespuestaFactusol } from './cliente.js';
-import {
-  DIA_DE_LA_GRABACION,
-  cargarGrabaciones,
-  vencimientoDePrueba,
-} from './grabaciones/index.js';
-import { crearHerramientas, lineaDeObservacion, sinVencimiento } from './herramientas.js';
+import { DIA_DE_LA_GRABACION, cargarGrabaciones } from './grabaciones/index.js';
+import { crearHerramientas, lineaDeObservacion } from './herramientas.js';
+import { sinVencimiento } from './vencimiento.js';
 
 function montar(
   opciones: Partial<Parameters<typeof crearHerramientas>[0]> = {},
@@ -19,7 +16,6 @@ function montar(
     herramientas: crearHerramientas({
       cliente,
       ahora: () => DIA_DE_LA_GRABACION,
-      vencimiento: vencimientoDePrueba,
       registrar: (mensaje) => registro.push(mensaje),
       ...opciones,
     }),
@@ -27,12 +23,16 @@ function montar(
 }
 
 describe('listar_facturas_vencidas', () => {
-  it('devuelve las vencidas de más a menos días, con ids nativos', async () => {
+  it('devuelve las vencidas de más a menos días, con ids nativos y el pendiente derivado', async () => {
     const { herramientas } = montar();
     const salida = await herramientas.listarFacturasVencidas({});
-    expect(salida.total).toBe(2);
-    expect(salida.facturas.map((factura) => factura.id)).toEqual(['1-000101', '1-000102']);
-    expect(salida.facturas[0]).toEqual({
+    expect(salida.total).toBe(3);
+    expect(salida.facturas.map((factura) => factura.id)).toEqual([
+      '1-000104',
+      '1-000101',
+      '1-000106',
+    ]);
+    expect(salida.facturas[1]).toEqual({
       id: '1-000101',
       numero: '1-000101',
       cliente: { id: '12', nombre: 'EJEMPLO UNO S.L.' },
@@ -44,10 +44,36 @@ describe('listar_facturas_vencidas', () => {
     });
   });
 
+  it('una factura con cobro parcial devuelve total menos cobros', async () => {
+    const { herramientas } = montar();
+    const { facturas } = await herramientas.listarFacturasVencidas({});
+    expect(facturas[0]).toMatchObject({
+      id: '1-000104',
+      importe_pendiente: 7.1,
+      cliente: { id: '17', nombre: 'EJEMPLO DOS' },
+      fecha_vencimiento: '2026-07-20',
+      dias_vencida: 63,
+    });
+  });
+
+  it('descarta y cuenta lo que no puede derivar con seguridad', async () => {
+    const { herramientas, registro } = montar();
+    const { facturas } = await herramientas.listarFacturasVencidas({});
+    const ids = facturas.map((factura) => factura.id);
+    expect(ids).not.toContain('1-000102'); // 120 días: aún no vence
+    expect(ids).not.toContain('1-000103'); // a 30 días desde el 15-9
+    expect(ids).not.toContain('1-000105'); // con un abono sin enlazar: el pendiente no es fiable
+    expect(ids).not.toContain('1-000107'); // 30.60.90: varios vencimientos
+    const todo = registro.join('\n');
+    expect(todo).toContain('pendientes=7');
+    expect(todo).toContain('facturas_sin_vencimiento=1');
+    expect(todo).toContain('con_abonos=1');
+  });
+
   it('nunca devuelve una factura no vencida ni por debajo del mínimo pedido', async () => {
     const { herramientas } = montar();
     const salida = await herramientas.listarFacturasVencidas({ dias_vencida_minimo: 30 });
-    expect(salida.facturas.map((factura) => factura.id)).toEqual(['1-000101']);
+    expect(salida.facturas.map((factura) => factura.id)).toEqual(['1-000104', '1-000101']);
     // dias_vencida_minimo 0 sigue exigiendo al menos un día.
     const conCero = await herramientas.listarFacturasVencidas({ dias_vencida_minimo: 0 });
     expect(conCero.facturas.every((factura) => factura.dias_vencida >= 1)).toBe(true);
@@ -58,24 +84,34 @@ describe('listar_facturas_vencidas', () => {
     expect((await herramientas.listarFacturasVencidas({ limite: 1 })).total).toBe(1);
   });
 
-  it('sin vencimiento derivable no devuelve la factura y la cuenta en el registro', async () => {
+  it('sin vencimiento derivable no devuelve ninguna factura y las cuenta en el registro', async () => {
     const { herramientas, registro } = montar({ vencimiento: sinVencimiento });
     const salida = await herramientas.listarFacturasVencidas({});
     expect(salida).toEqual({ facturas: [], total: 0 });
-    expect(registro.join('\n')).toContain('facturas_sin_vencimiento=4');
+    expect(registro.join('\n')).toContain('facturas_sin_vencimiento=7');
   });
 
-  it('una factura con cobros sin importe legible no se devuelve y se cuenta', async () => {
-    const { herramientas, registro } = montar();
-    await herramientas.listarFacturasVencidas({});
-    expect(registro.join('\n')).toContain('con_cobros_sin_importe=1');
+  it('cobros que no sabe sumar: la factura no se devuelve y se cuenta', async () => {
+    const grabaciones = cargarGrabaciones();
+    const detalle = (grabaciones['get_factura'] ?? []).map((g) =>
+      g.argumentos?.['numero'] === 104
+        ? { ...g, texto: (g.texto ?? '').replace('(cobro)', '(devolución)') }
+        : g,
+    );
+    const { herramientas, registro } = montar(
+      {},
+      clienteGrabado({ ...grabaciones, get_factura: detalle }),
+    );
+    const { facturas } = await herramientas.listarFacturasVencidas({});
+    expect(facturas.map((factura) => factura.id)).not.toContain('1-000104');
+    expect(registro.join('\n')).toContain('con_cobros_ilegibles=1');
   });
 
   it('el registro lleva recuentos, nunca nombres, NIF ni importes', async () => {
     const { herramientas, registro } = montar();
     await herramientas.listarFacturasVencidas({});
     const todo = registro.join('\n');
-    expect(todo).not.toMatch(/EJEMPLO|MUESTRA|B00000001|121/);
+    expect(todo).not.toMatch(/EJEMPLO|MUESTRA|PRUEBA|B00000001|121/);
   });
 
   it('una entrada fuera de rango es invalido y no llega a Factusol', async () => {
@@ -135,8 +171,19 @@ function clienteConObservaciones(inicial: string): ClienteFactusol & {
         return {
           texto: '',
           estructurado: {
-            draft_id: id,
-            cambios: { observaciones: { valor_actual: inicial } },
+            borrador: {
+              draft_id: id,
+              cuerpo: {
+                campos: [
+                  {
+                    nombre: 'Observaciones',
+                    valor_actual: inicial,
+                    valor_nuevo: String(argumentos['observaciones']),
+                    cambia: true,
+                  },
+                ],
+              },
+            },
           },
         };
       }
@@ -238,7 +285,7 @@ describe('crear_nota_seguimiento', () => {
   it('un borrador con otra forma es invalido y no deja nada pendiente', async () => {
     const grabaciones = {
       ...cargarGrabaciones(),
-      draft_modificar_cliente: [{ estructurado: { estado: 'raro' } }],
+      draft_modificar_cliente: [{ estructurado: { texto: 'raro' } }],
     };
     await expect(
       montar({}, clienteGrabado(grabaciones)).herramientas.crearNotaSeguimiento(entrada),

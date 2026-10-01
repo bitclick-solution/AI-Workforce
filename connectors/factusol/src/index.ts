@@ -33,7 +33,9 @@ export { CODIGO_POR_MOTIVO, ErrorConector, MOTIVOS, motivoDeMensaje } from './er
 export type { Motivo } from './errores.js';
 export * from './esquemas.js';
 export { ESQUEMA_ENTRADA_LISTAR, ESQUEMA_ENTRADA_NOTA } from './esquema-json.js';
-export { NOMBRES, almacenEnMemoria, crearHerramientas, sinVencimiento } from './herramientas.js';
-export type { Herramientas, ResolutorDeVencimiento } from './herramientas.js';
+export { NOMBRES, almacenEnMemoria, crearHerramientas } from './herramientas.js';
+export type { Herramientas } from './herramientas.js';
+export { diasDePlazo, resolutorPorFormaDePago, sinVencimiento } from './vencimiento.js';
+export type { ResolutorDeVencimiento } from './vencimiento.js';
 export { esProcesoPrincipal } from './proceso.js';
 export { CATALOGO, crearServidor, montarConector } from './servidor.js';

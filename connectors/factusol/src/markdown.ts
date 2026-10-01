@@ -21,9 +21,27 @@ export interface FacturaDeLista {
   readonly total: number;
 }
 
+export interface FormaDePago {
+  readonly codigo: string;
+  /** Sin nombre configurado, Factusol MCP escribe solo el código. */
+  readonly nombre?: string;
+}
+
+/** Cobros de una factura: ninguno, un total legible o algo que el adaptador no sabe sumar. */
+export type CobrosDeFactura =
+  | { readonly tipo: 'ninguno' }
+  | { readonly tipo: 'importe'; readonly total: number }
+  | { readonly tipo: 'ilegible' };
+
 export interface DetalleDeFactura extends FacturaDeLista {
-  /** `true` con `- ninguno registrado` bajo `**Cobros:**`; `false` si hay alguno. */
-  readonly sinCobros: boolean;
+  /** `- Forma de pago: COD · NOMBRE`. Ausente si Factusol dice «ninguna» o no la trae. */
+  readonly formaDePago?: FormaDePago;
+  readonly cobros: CobrosDeFactura;
+  /**
+   * `**Abonos:**`: los importes de la factura no restan abonos. `ninguno` solo con la línea
+   * «ninguno enlazado…»; cualquier otra cosa es `hay`, y `sin_seccion` si no viene.
+   */
+  readonly abonos: 'ninguno' | 'hay' | 'sin_seccion';
 }
 
 export interface ClienteDeFactusol {
@@ -119,22 +137,102 @@ export function analizarListaDeFacturas(texto: string): FacturaDeLista[] {
   return bloques.map(({ cabecera, lineas }) => aFactura(cabecera, lineas));
 }
 
-/** Respuesta de `get_factura`: la lista de un bloque más el estado de los cobros. */
+const CABECERA_DE_SECCION = /^\*\*([^*]+):\*\*\s*$/;
+const LINEA_DE_COBRO =
+  /^-\s+(\d{4}-\d{2}-\d{2}):\s+(-?\d+(?:\.\d{1,4})?)\s*€\s+\(cobro\)(?:\s+—.*)?$/;
+
+function formaDePagoDe(valor: string | undefined): FormaDePago | undefined {
+  if (valor === undefined || valor.trim() === '' || /^ninguna$/i.test(valor.trim())) {
+    return undefined;
+  }
+  const [codigo, ...resto] = valor.split(' · ');
+  const nombre = resto.join(' · ').trim();
+  return { codigo: (codigo ?? '').trim(), ...(nombre === '' ? {} : { nombre }) };
+}
+
+function leerCobros(lineas: readonly string[], id: string): CobrosDeFactura {
+  if (lineas.length === 0) return fallo(`el bloque «**Cobros:**» de ${id} viene vacío`);
+  if (lineas.length === 1 && /^-\s+ninguno registrado\s*$/i.test(lineas[0] ?? '')) {
+    return { tipo: 'ninguno' };
+  }
+  let centimos = 0;
+  for (const linea of lineas) {
+    const coincide = LINEA_DE_COBRO.exec(linea);
+    if (coincide === null) return { tipo: 'ilegible' };
+    centimos += Math.round(Number(coincide[2]) * 100);
+  }
+  return { tipo: 'importe', total: centimos / 100 };
+}
+
+/**
+ * Respuesta de `get_factura`: la cabecera, la forma de pago y las secciones `**Líneas:**`,
+ * `**Cobros:**` y `**Abonos:**`. Las líneas que el adaptador no usa se ignoran; sin la
+ * sección de cobros es `invalido`.
+ */
 export function analizarDetalleDeFactura(texto: string): DetalleDeFactura {
   const bloques = bloquesDeFactura(texto);
   if (bloques.length !== 1) return fallo('el detalle no trae exactamente una factura');
   const [bloque] = bloques;
   if (bloque === undefined) return fallo('el detalle no trae ninguna factura');
-  const factura = aFactura(bloque.cabecera, bloque.lineas);
-  const indice = bloque.lineas.findIndex((linea) => /^\*\*Cobros:\*\*\s*$/.test(linea.trim()));
-  if (indice < 0) return fallo(`a la factura ${factura.id} le falta el bloque «**Cobros:**»`);
-  const cobros = bloque.lineas
-    .slice(indice + 1)
-    .map((linea) => linea.trim())
-    .filter((linea) => linea.startsWith('- '));
-  if (cobros.length === 0) return fallo(`el bloque «**Cobros:**» de ${factura.id} viene vacío`);
-  const sinCobros = cobros.length === 1 && /^-\s+ninguno registrado\s*$/i.test(cobros[0] ?? '');
-  return { ...factura, sinCobros };
+
+  // Los campos de cabecera son solo los anteriores a la primera sección: el texto libre de
+  // líneas y cobros no puede pisarlos.
+  const cabecera: string[] = [];
+  const secciones = new Map<string, string[]>();
+  let actual: string[] = cabecera;
+  for (const linea of bloque.lineas) {
+    const seccion = CABECERA_DE_SECCION.exec(linea.trim());
+    if (seccion !== null) {
+      actual = [];
+      secciones.set((seccion[1] ?? '').trim(), actual);
+    } else if (linea.trim().startsWith('- ')) {
+      actual.push(linea.trim());
+    }
+  }
+
+  const factura = aFactura(bloque.cabecera, cabecera);
+  const cobros = secciones.get('Cobros');
+  if (cobros === undefined)
+    return fallo(`a la factura ${factura.id} le falta el bloque «**Cobros:**»`);
+  const abonos = secciones.get('Abonos');
+  const forma = formaDePagoDe(campos(cabecera).get('Forma de pago'));
+  return {
+    ...factura,
+    ...(forma === undefined ? {} : { formaDePago: forma }),
+    cobros: leerCobros(cobros, factura.id),
+    abonos:
+      abonos === undefined
+        ? 'sin_seccion'
+        : abonos.length === 1 && /^-\s+ninguno enlazado/i.test(abonos[0] ?? '')
+          ? 'ninguno'
+          : 'hay',
+  };
+}
+
+export interface FormaDePagoListada {
+  readonly codigo: string;
+  readonly nombre: string;
+  readonly vencimientos: number;
+}
+
+/** Respuesta de `get_formas_de_pago`: una línea ``- **NOMBRE** (`COD`) · N vencimiento(s)`` por forma. */
+export function analizarFormasDePago(texto: string): Map<string, FormaDePagoListada> {
+  const formas = new Map<string, FormaDePagoListada>();
+  for (const linea of texto.split(/\r?\n/)) {
+    if (linea.trim() === '') continue;
+    const coincide =
+      /^-\s+\*\*(.+)\*\*\s+\(`([A-Za-z0-9]+)`\)\s+·\s+(\d+)\s+vencimiento\(s\)\s*$/.exec(
+        linea.trim(),
+      );
+    if (coincide === null) return fallo('una línea de formas de pago no encaja');
+    formas.set(coincide[2] ?? '', {
+      codigo: coincide[2] ?? '',
+      nombre: (coincide[1] ?? '').trim(),
+      vencimientos: Number(coincide[3]),
+    });
+  }
+  if (formas.size === 0) return fallo('no trae ninguna forma de pago');
+  return formas;
 }
 
 /** Respuesta de `get_cliente` buscando por NIF: un único `**NOMBRE** (NIF · NIE)` y `- Código: N`. */

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   analizarCliente,
   analizarDetalleDeFactura,
+  analizarFormasDePago,
   analizarListaDeFacturas,
   esNoEncontrado,
   leerImporte,
@@ -23,18 +24,29 @@ const LISTA = [
   '- Total: 1234.50 €',
 ].join('\n');
 
-const DETALLE = (cobros: string): string =>
+const DETALLE = (
+  cobros: string,
+  abonos = '- ninguno enlazado a esta factura y ninguno sin enlazar que la cite en su referencia',
+): string =>
   [
     '**Factura 1-000123**',
     '- Cliente: EJEMPLO S.L. (B00000001)',
     '- Fecha: 2026-09-22',
     '- Estado: pendiente',
     '- Total: 1.21 €',
+    '- Almacén: GEN',
+    '- Forma de pago: 001 · RECIBO A 30 DIAS',
     '- Base imponible: 1.00 € · IVA: 0.21 €',
+    '',
     '**Líneas:**',
-    '- Concepto — 1.0 x 1.00 € = 1.00 €',
+    '- Artículo de ejemplo (ART001) — 1.0 x 1.00 € = 1.00 € · sin origen registrado',
+    '- CONCEPTO SUELTO — 1.0 x 30.00 € = 30.00 €',
+    '',
     '**Cobros:**',
     cobros,
+    '',
+    '**Abonos:**',
+    abonos,
   ].join('\n');
 
 describe('analizarListaDeFacturas', () => {
@@ -84,26 +96,108 @@ describe('analizarListaDeFacturas', () => {
 });
 
 describe('analizarDetalleDeFactura', () => {
-  it('sin cobros', () => {
+  it('sin cobros ni abonos, con su forma de pago', () => {
     expect(analizarDetalleDeFactura(DETALLE('- ninguno registrado'))).toMatchObject({
       id: '1-000123',
       total: 1.21,
-      sinCobros: true,
+      formaDePago: { codigo: '001', nombre: 'RECIBO A 30 DIAS' },
+      cobros: { tipo: 'ninguno' },
+      abonos: 'ninguno',
     });
   });
 
-  it('con algún cobro no es sinCobros', () => {
-    expect(analizarDetalleDeFactura(DETALLE('- Cobro de prueba 0.50 €')).sinCobros).toBe(false);
+  it('suma los cobros legibles', () => {
+    const cobros = [
+      '- 2026-06-01: 69.76 € (cobro) — Cobro factura nº:3-000045, remesa:1',
+      '- 2026-09-15: 0.24 € (cobro) — COBRO FACTURA Nº: 3 - 000045',
+    ].join('\n');
+    expect(analizarDetalleDeFactura(DETALLE(cobros)).cobros).toEqual({
+      tipo: 'importe',
+      total: 70,
+    });
+  });
+
+  it('un cobro que no sabe leer es ilegible, no un error del listado', () => {
+    expect(analizarDetalleDeFactura(DETALLE('- 2026-06-01: 5.00 € (devolución)')).cobros).toEqual({
+      tipo: 'ilegible',
+    });
+    expect(analizarDetalleDeFactura(DETALLE('- cobro raro')).cobros).toEqual({ tipo: 'ilegible' });
+  });
+
+  it('los abonos no se mezclan con los cobros y cualquier abono lo marca', () => {
+    const conAbono = DETALLE(
+      '- ninguno registrado',
+      '- Posible abono sin enlazar: 1-000045 · 2026-09-22 · 1.21 € · devuelta · en su referencia dice «Factura 123»\n- Los importes de arriba (total y cobros) no restan abonos.',
+    );
+    expect(analizarDetalleDeFactura(conAbono)).toMatchObject({
+      cobros: { tipo: 'ninguno' },
+      abonos: 'hay',
+    });
+  });
+
+  it('forma de pago: solo el código, «ninguna» o ausente', () => {
+    const sin = (linea: string): string =>
+      DETALLE('- ninguno registrado').replace('- Forma de pago: 001 · RECIBO A 30 DIAS', linea);
+    expect(analizarDetalleDeFactura(sin('- Forma de pago: DOS')).formaDePago).toEqual({
+      codigo: 'DOS',
+    });
+    expect(analizarDetalleDeFactura(sin('- Forma de pago: ninguna')).formaDePago).toBeUndefined();
+    expect(analizarDetalleDeFactura(sin('- Almacén: GEN')).formaDePago).toBeUndefined();
+  });
+
+  it('el texto libre de líneas y cobros no pisa los campos de cabecera', () => {
+    const texto = DETALLE('- ninguno registrado').replace(
+      '- CONCEPTO SUELTO',
+      '- Estado: cobrada — CONCEPTO SUELTO',
+    );
+    expect(analizarDetalleDeFactura(texto).estado).toBe('pendiente');
   });
 
   it('sin el bloque de cobros o vacío es invalido', () => {
-    const sinBloque = DETALLE('- ninguno registrado').replace('**Cobros:**\n', '');
+    const sinBloque = DETALLE('- ninguno registrado').replace(
+      '**Cobros:**\n- ninguno registrado',
+      '',
+    );
     expect(() => analizarDetalleDeFactura(sinBloque)).toThrowError(/Cobros/);
     expect(() => analizarDetalleDeFactura(DETALLE(''))).toThrowError(/vacío/);
   });
 
+  it('sin la sección de abonos se marca, no se supone', () => {
+    const texto = DETALLE('- ninguno registrado').split('\n**Abonos:**')[0] ?? '';
+    expect(analizarDetalleDeFactura(texto).abonos).toBe('sin_seccion');
+  });
+
   it('dos facturas en el detalle es invalido', () => {
     expect(() => analizarDetalleDeFactura(LISTA)).toThrowError(
+      expect.objectContaining({ motivo: 'invalido' }),
+    );
+  });
+});
+
+describe('analizarFormasDePago', () => {
+  const TEXTO = [
+    '- **CONTADO** (`000`) · 1 vencimiento(s)',
+    '- **RECIBO A 30 DIAS** (`001`) · 1 vencimiento(s)',
+    '- **30.60.90** (`369`) · 3 vencimiento(s)',
+    '- **CHEQUE** (`CHE`) · 1 vencimiento(s)',
+  ].join('\n');
+
+  it('lee código, nombre y número de vencimientos', () => {
+    const formas = analizarFormasDePago(TEXTO);
+    expect(formas.get('001')).toEqual({
+      codigo: '001',
+      nombre: 'RECIBO A 30 DIAS',
+      vencimientos: 1,
+    });
+    expect(formas.get('369')?.vencimientos).toBe(3);
+    expect(formas.get('CHE')?.nombre).toBe('CHEQUE');
+  });
+
+  it.each([
+    ['vacío', ''],
+    ['una línea que no encaja', `${TEXTO}\nOtra cosa`],
+  ])('%s es invalido', (_caso, texto) => {
+    expect(() => analizarFormasDePago(texto)).toThrowError(
       expect.objectContaining({ motivo: 'invalido' }),
     );
   });

@@ -11,11 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { clienteGrabado } from './cliente.js';
 import { CODIGO_POR_MOTIVO, esReintentable } from './errores.js';
 import { ESQUEMA_ENTRADA_LISTAR, ESQUEMA_ENTRADA_NOTA } from './esquema-json.js';
-import {
-  DIA_DE_LA_GRABACION,
-  cargarGrabaciones,
-  vencimientoDePrueba,
-} from './grabaciones/index.js';
+import { DIA_DE_LA_GRABACION, cargarGrabaciones } from './grabaciones/index.js';
 import { NOMBRES, crearHerramientas } from './herramientas.js';
 import { CATALOGO, crearServidor } from './servidor.js';
 
@@ -24,7 +20,6 @@ async function conectar(): Promise<Client> {
     herramientas: crearHerramientas({
       cliente: clienteGrabado(cargarGrabaciones()),
       ahora: () => DIA_DE_LA_GRABACION,
-      vencimiento: vencimientoDePrueba,
       registrar: () => undefined,
     }),
   });
@@ -58,7 +53,7 @@ describe('resultados y errores por el protocolo', () => {
     const cliente = await conectar();
     const resultado = await cliente.callTool({ name: NOMBRES.listar, arguments: {} });
     expect(resultado.isError).toBeUndefined();
-    expect((resultado.structuredContent as { total: number }).total).toBe(2);
+    expect((resultado.structuredContent as { total: number }).total).toBe(3);
     await cliente.close();
   });
 
