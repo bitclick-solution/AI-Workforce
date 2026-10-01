@@ -9,7 +9,7 @@ import { composeArgs, pararProcesosRegistrados, raiz, tieneBandera } from './loc
 const argumentos = process.argv.slice(2);
 
 console.log('— Parando api, web y el worker de la demo');
-const { todosParados } = pararProcesosRegistrados();
+const { todosParados } = await pararProcesosRegistrados();
 
 console.log('— Parando el Compose de desarrollo');
 const extra = tieneBandera(argumentos, 'volumenes') ? ['--volumes'] : [];

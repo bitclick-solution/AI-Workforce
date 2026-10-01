@@ -249,10 +249,128 @@ export function guardarProcesos(procesos) {
   writeFileSync(rutaProcesos, JSON.stringify(procesos, null, 2));
 }
 
-export function registrarProceso(nombre, pid, rutaRegistro) {
+/**
+ * `puerto` es opcional (el worker de la demo no escucha ninguno): con él,
+ * `pararServicio` puede comprobar que de verdad ha dejado de escuchar en vez de
+ * fiarse solo de lo que diga `taskkill`/`kill` (criterio 3 y segundo seguimiento
+ * del Probador), y `comprobarRequisitos` puede reconocer que ese puerto es suyo.
+ */
+export function registrarProceso(nombre, pid, rutaRegistro, puerto) {
   const procesos = leerProcesos().filter((p) => p.nombre !== nombre);
-  procesos.push({ nombre, pid, rutaRegistro, iniciadoEn: new Date().toISOString() });
+  procesos.push({ nombre, pid, rutaRegistro, puerto, iniciadoEn: new Date().toISOString() });
   guardarProcesos(procesos);
+}
+
+/**
+ * true si ese pid sigue vivo. En POSIX, la señal 0 no mata nada: solo comprueba
+ * que el proceso existe y es accesible. En Windows no hay señal 0, así que se usa
+ * `tasklist` filtrado por PID (misma familia de herramientas que `taskkill`).
+ * Inyectable para probarla en los dos sentidos sin depender de la plataforma real.
+ */
+export function procesoVivo(
+  pid,
+  { plataforma = process.platform, matar = process.kill, ejecutar = spawnSync } = {},
+) {
+  if (plataforma === 'win32') {
+    const resultado = ejecutar('tasklist', ['/FI', `PID eq ${pid}`, '/NH'], { encoding: 'utf8' });
+    if (resultado.status !== 0 || resultado.error) return false;
+    return (resultado.stdout ?? '').includes(String(pid));
+  }
+  try {
+    matar(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code !== 'ESRCH';
+  }
+}
+
+/**
+ * Un servicio registrado (`{ pid, puerto }`) cuenta como vivo si su pid existe y,
+ * cuando tiene puerto propio (api, web; el worker no), ese puerto sigue
+ * escuchando. Sin esto, un `pid` reciclado por el sistema operativo para otro
+ * programa cualquiera se confundiría con «sigue arrancado».
+ */
+export async function servicioVivo(
+  { pid, puerto },
+  {
+    plataforma = process.platform,
+    ejecutar = spawnSync,
+    matar = process.kill,
+    comprobarPuerto = puertoOcupado,
+  } = {},
+) {
+  if (!procesoVivo(pid, { plataforma, matar, ejecutar })) return false;
+  if (puerto === undefined) return true;
+  return comprobarPuerto(puerto);
+}
+
+/** `{cola, tenantId}` de la línea `SEMILLA_SALA` que escribe `demo-sala.ts --servir`, o undefined si no está. */
+export function extraerSemillaSala(texto) {
+  const cola = texto.match(/SEMILLA_SALA\b.*\bcola=(\S+)/)?.[1];
+  const tenantId = texto.match(/SEMILLA_SALA\b.*\btenant=(\S+)/)?.[1];
+  return cola && tenantId ? { cola, tenantId } : undefined;
+}
+
+/**
+ * Pids de `netstat -ano` que escuchan (`LISTENING`) en ese puerto TCP. Pura sobre
+ * el texto ya leído, para probar el parseo sin lanzar `netstat` de verdad.
+ */
+export function pidsDeNetstat(texto, puerto) {
+  const objetivo = `:${puerto}`;
+  const pids = new Set();
+  for (const linea of texto.split(/\r?\n/)) {
+    const columnas = linea.trim().split(/\s+/);
+    if (columnas.length < 4) continue;
+    const [protocolo, local, , estado, pid] = columnas;
+    if (!/^TCPv?4?$/i.test(protocolo)) continue;
+    if (estado !== 'LISTENING') continue;
+    if (!local.endsWith(objetivo)) continue;
+    const numero = Number(pid);
+    if (Number.isInteger(numero)) pids.add(numero);
+  }
+  return [...pids];
+}
+
+/**
+ * Pids que escuchan un puerto TCP local, con la herramienta de cada plataforma
+ * (`netstat` en Windows, `lsof` en POSIX). Devuelve `[]` si la herramienta no
+ * está disponible o no encuentra a nadie: quien llama no puede distinguir los dos
+ * casos, así que trata la ausencia de la herramienta como «no se puede rematar»,
+ * nunca como «ya está libre».
+ */
+export function pidsEnPuerto(puerto, { plataforma = process.platform, ejecutar = spawnSync } = {}) {
+  if (plataforma === 'win32') {
+    const resultado = ejecutar('netstat', ['-ano', '-p', 'TCP'], { encoding: 'utf8' });
+    if (resultado.status !== 0 || resultado.error) return [];
+    return pidsDeNetstat(resultado.stdout ?? '', puerto);
+  }
+  const resultado = ejecutar('lsof', ['-ti', `tcp:${puerto}`, '-sTCP:LISTEN'], {
+    encoding: 'utf8',
+  });
+  if (resultado.status !== 0 || resultado.error) return [];
+  return (resultado.stdout ?? '')
+    .split(/\r?\n/)
+    .map((linea) => linea.trim())
+    .filter(Boolean)
+    .map(Number)
+    .filter((pid) => Number.isInteger(pid));
+}
+
+/** Mata un pid concreto (no su árbol: ya se intentó y no bastó). */
+export function matarPid(
+  pid,
+  { plataforma = process.platform, ejecutar = spawnSync, matar = process.kill } = {},
+) {
+  if (plataforma === 'win32') {
+    const resultado = ejecutar('taskkill', ['/PID', String(pid), '/F'], { encoding: 'utf8' });
+    return resultado.status === 0;
+  }
+  try {
+    matar(pid, 'SIGKILL');
+    return true;
+  } catch (error) {
+    return error.code === 'ESRCH';
+  }
 }
 
 /**
@@ -286,12 +404,69 @@ export function pararArbolDeProcesos(
   }
 }
 
+/**
+ * Para el árbol de un proceso registrado y, si tenía puerto propio, comprueba que
+ * de verdad ha dejado de escuchar antes de darlo por parado. Segundo seguimiento
+ * del Probador: en Windows, `taskkill /PID <pid> /T /F` en la raíz devuelve éxito
+ * y aun así quedan vivos `cmd.exe /c tsx watch`, `next dev` o `demo-sala` — el
+ * relanzamiento interno de pnpm por la versión del `packageManager` rompe la
+ * cadena de procesos por el medio y `/T` no llega a esos nietos. Si el puerto
+ * sigue ocupado, remata en concreto a quien lo escucha; si no se puede identificar
+ * (herramienta ausente o puerto que sigue ocupado sin que nadie aparezca), lo dice
+ * y no lo da por parado — nunca se borra `procesos.json` sobre una mentira.
+ *
+ * Antes de darlo por atascado, da un margen (`intentos` × `esperaMs`, 2 s por
+ * defecto) a que el puerto se libere solo: ni `SIGTERM` ni `taskkill` esperan a
+ * que el proceso termine de verdad, así que comprobar el puerto justo después es
+ * una carrera — visto de verdad en la CI (Linux): «parado» el árbol, el puerto
+ * seguía ocupado un instante, y para cuando se miraba con `lsof` ya no había
+ * nadie que identificar («no se ha podido identificar quién lo tiene abierto»,
+ * aunque `local:parar` sí lo había parado). Sin este margen, el remate por
+ * puerto confunde una parada normal con un huérfano real.
+ */
+export async function pararServicio(
+  { pid, puerto },
+  {
+    plataforma = process.platform,
+    matar = process.kill,
+    ejecutar = spawnSync,
+    comprobarPuerto = puertoOcupado,
+    intentos = 10,
+    esperaMs = 200,
+    dormir = (ms) => new Promise((resuelve) => setTimeout(resuelve, ms)),
+  } = {},
+) {
+  const arbol = pararArbolDeProcesos(pid, { plataforma, matar, ejecutar });
+  if (!arbol.parado || puerto === undefined) return arbol;
+  let sigueOcupado = await comprobarPuerto(puerto);
+  for (let intento = 0; sigueOcupado && intento < intentos; intento += 1) {
+    await dormir(esperaMs);
+    sigueOcupado = await comprobarPuerto(puerto);
+  }
+  if (!sigueOcupado) return arbol;
+  const pids = pidsEnPuerto(puerto, { plataforma, ejecutar });
+  if (pids.length === 0) {
+    return {
+      parado: false,
+      motivo: `el puerto ${puerto} sigue escuchando y no se ha podido identificar (ni rematar) quién lo tiene abierto.`,
+    };
+  }
+  const rematados = pids.map((otroPid) => matarPid(otroPid, { plataforma, ejecutar, matar }));
+  if (!rematados.every(Boolean)) {
+    return {
+      parado: false,
+      motivo: `el puerto ${puerto} seguía abierto por el pid ${pids.join(', ')} y no se ha podido rematar del todo.`,
+    };
+  }
+  return { parado: true };
+}
+
 /** Para cada proceso registrado su árbol entero. Si alguno no para, lo dice y no borra `procesos.json`. */
-export function pararProcesosRegistrados({ plataforma = process.platform } = {}) {
+export async function pararProcesosRegistrados({ plataforma = process.platform } = {}) {
   const procesos = leerProcesos();
   let todosParados = true;
-  for (const { nombre, pid } of procesos) {
-    const resultado = pararArbolDeProcesos(pid, { plataforma });
+  for (const { nombre, pid, puerto } of procesos) {
+    const resultado = await pararServicio({ pid, puerto }, { plataforma });
     if (resultado.parado) {
       console.log(`  parado ${nombre} (pid ${pid})`);
     } else {

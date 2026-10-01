@@ -3,9 +3,9 @@ VIGENTE
 # Especificación · Demo local de punta a punta en Windows: arranque, Sala v1 con presencia real y parada
 
 - Rebanada: [Notion](https://app.notion.com/p/3eb5306618988171b6efeb3975ccc034) · Ciclo 1 · Tipo Plataforma · Paquetes `deploy`, `rooms`, `api`, `web`, `docs` (más `scripts/`, `.github/workflows/ci.yml`) · P0
-- Rama: `rebanada/demo-local-windows` (PR #50, fusionado) y su seguimiento `rebanada/demo-local-windows-seguimiento` (este PR, tras la verificación del Probador).
+- Rama: `rebanada/demo-local-windows` (PR #50, fusionado), su seguimiento `rebanada/demo-local-windows-seguimiento` (PR #54, fusionado) y el segundo seguimiento `rebanada/demo-local-windows-seguimiento-2` (este PR, tras la segunda verificación del Probador).
 - Plan de referencia: [plan v8](https://claude.ai/artifact/Mf7PeYbaXCnp5wFhQu3XWn); especificaciones hermanas [`entorno-local.md`](entorno-local.md) (arranque de un solo comando) y [`sala-v1-presencia.md`](sala-v1-presencia.md) (Centrifugo, presencia); [ADR-026](../adr/ADR-026.md) (privacidad de la presencia).
-- Zona crítica: el PR #50 sí (tocaba `invitarPropietario` y `.github/workflows/ci.yml`; ya fusionado). Este PR de seguimiento no: solo toca `scripts/` y documentación, nada de `.github/workflows` ni de `CODEOWNERS`.
+- Zona crítica: el PR #50 sí (tocaba `invitarPropietario` y `.github/workflows/ci.yml`; ya fusionado). Los dos seguimientos, no: solo tocan `scripts/`, `.env.example` y documentación, nada de `.github/workflows` ni de `CODEOWNERS`.
 
 ## Objetivo
 
@@ -13,7 +13,8 @@ Desde un clon limpio de `main` en la máquina Windows de Jesús, `pnpm local:arr
 
 ## Paquetes tocados
 
-- `scripts/`: `local-comun.mjs` (resolución de pnpm en Windows, parada del árbol de procesos, prioridad de entorno), `local-requisitos.mjs` (versión de pnpm), `local-arrancar.mjs` (idempotencia del Compose, entorno de los procesos lanzados, `AIW_SALA_V1`).
+- `scripts/`: `local-comun.mjs` (resolución de pnpm en Windows, parada de servicios con comprobación de puerto, reconocimiento de servicios vivos, prioridad de entorno), `local-requisitos.mjs` (versión de pnpm, puertos propios ya vivos), `local-arrancar.mjs` (idempotencia completa: Compose, procesos y siembra; `AIW_SALA_V1` y `AIW_INICIO_PANEL`), `local-parar.mjs` (parada async con remate de puerto), `local-actualizar.mjs` (levanta el Compose si hace falta).
+- `.env.example`: `AIW_INICIO_PANEL`.
 - `deploy/compose/centrifugo/config.json`: espacio de nombres `sala` (Centrifugo v6).
 - `packages/rooms`: `centrifugo.ts` propaga el error de Centrifugo en vez de devolverlo envuelto sin más.
 - `apps/api`: `identidad/invitar.ts` (participante de la sala general, zona crítica) y `rutas/sala.ts` (registra en vez de degradar en silencio).
@@ -53,6 +54,7 @@ Los nueve de la rebanada en Notion:
 ## Casos de prueba y de eval
 
 - Unitario: `scripts/local-comun.test.mjs` (nuevo): `pararArbolDeProcesos` en los dos sentidos (`plataforma: 'win32'` con `taskkill` simulado que falla y que acierta; `plataforma: 'linux'`/`'darwin'` con `process.kill` simulado); `resolucionDePnpm`/`comandoPnpm` en los dos sentidos (con y sin `shell`, argumentos citados si tienen espacios); `entornoDeProceso` (prioridad `.env` < proceso < calculado). `scripts/local-requisitos.test.mjs` (nuevo): pnpm por debajo de 10 es error, por encima con aviso si difiere de `packageManager`, puerto del propio Compose no es error. `apps/api/src/pruebas/invitar.test.ts` (ampliado, necesita `DATABASE_URL`): `invitarPropietario` añade a la sala general si existe (con y sin ella ya de miembro, para probar el `on conflict`), no falla si no hay sala general, y anota `sala.miembro_anadido` solo cuando de verdad insertó. `packages/rooms/src/centrifugo.test.ts` (ampliado): `llamarApi` lanza `ErrorCentrifugo` con el código y el mensaje de Centrifugo cuando la respuesta trae `error`. `apps/api/src/pruebas/sala-puerto.test.ts` (ampliado, necesita `DATABASE_URL`): un `ErrorCentrifugo` en `presenciaDeSala` se registra (se espía `console.error`) y aun así responde con todos como «añadidos», sin romper la ruta; y `avisarEscribiendo` no propaga un `ErrorCentrifugo` (mejor esfuerzo, decisión 6), solo lo registra.
+- Unitario (segundo seguimiento): `scripts/local-comun.test.mjs` ampliado con `procesoVivo`, `servicioVivo`, `extraerSemillaSala`, `pidsDeNetstat` (parseo puro de `netstat -ano`, sin confundir puertos ni líneas que no escuchan), `pidsEnPuerto` (Windows vía `netstat`, POSIX vía `lsof`, `[]` si la herramienta falta), `matarPid` y `pararServicio` (el árbol dice parado pero el puerto sigue escuchando → identifica y remata al pid concreto; sin poder identificarlo, no lo da por parado). `scripts/local-requisitos.test.mjs` ampliado con `procesoRegistradoEnPuerto` (encuentra el proceso propio en ese puerto, no si el puerto no coincide con lo registrado, nunca para un proceso sin puerto). Sin Windows en esta sesión, como en el seguimiento anterior: todo probado inyectando `plataforma`/`ejecutar`/`matar`/`comprobarPuerto`.
 - Integración: sin `DATABASE_URL` no hay prueba de integración nueva en esta sesión (igual que el resto del monorepo, sin demonio de Docker aquí); las de `invitarPropietario` con base real ya existían y se amplían con el mismo patrón, se saltan con motivo sin `DATABASE_URL`. La comprobación de verdad contra Centrifugo (criterio 6) es la propia CI: no hay Docker en este sandbox para ejecutarla aquí.
 - Eval: no aplica. Esta rebanada no añade comportamiento de agente.
 - Auditoría y contador: `sala.miembro_anadido` desde `invitarPropietario` se comprueba en `apps/api/src/pruebas/invitar.test.ts` contando filas de `entrada_auditoria` filtradas por `accion`, igual que ya hace `apps/worker/src/pruebas/sala-equipo.test.ts` para el mismo nombre de acción desde el trabajador (ninguno de los dos usa `verificarCadenaEnBase` para esta acción en concreto; ese helper lo usan otras pruebas de `apps/worker/src/pruebas/sala.test.ts` para acciones distintas).
@@ -114,16 +116,90 @@ y la causa que él mismo aisló), no adivinados; se han probado en unitario en
 los dos sentidos donde depende de la plataforma. La verificación de punta a
 punta en Windows la vuelve a hacer el Probador tras fusionar este PR.
 
+## Segundo seguimiento tras el #54 (30-9)
+
+El Probador verificó de nuevo en la máquina de Jesús, main en `8eb9616` (el
+#54 ya fusionado): el arranque completo funciona por primera vez en Windows
+(criterios 1, 4, 5 y 7 bien), pero el criterio 2 sigue sin cumplirse, la
+idempotencia del criterio 3 queda a medias, y aparecen dos hallazgos menores
+(Inicio con 404, `local:actualizar` sin el Compose levantado sigue fallando
+en vez de arrancarlo). El detalle completo está en la rebanada de Notion,
+sección «Verificación tras #54»; aquí solo las decisiones de esta rama:
+
+1. **`pararArbolDeProcesos` deja de ser la última palabra sobre si un
+   servicio paró: `pararServicio` comprueba después el puerto.** El
+   `taskkill /PID <pid> /T /F` de la raíz puede devolver éxito y aun así
+   dejar vivos `cmd.exe /c tsx watch`, `next dev` o `demo-sala` — el
+   relanzamiento interno de pnpm por la versión del `packageManager` rompe
+   la cadena de procesos por el medio y `/T` no llega a esos nietos
+   (reproducido por el Probador). Para `api` y `web` (que tienen un puerto
+   propio, ahora guardado en `procesos.json` vía `registrarProceso(nombre,
+pid, rutaRegistro, puerto)`), si el árbol dice «parado» pero el puerto
+   sigue escuchando, `pararServicio` identifica con `netstat -ano` (Windows)
+   o `lsof -ti tcp:<puerto> -sTCP:LISTEN` (Linux o macOS) a quien lo tiene
+   abierto y lo remata con `matarPid` (`taskkill /PID <pid> /F` sin `/T`, o
+   `SIGKILL` directo — ya no vale el grupo, porque el grupo es justo lo que
+   se rompió). Si no puede identificarlo (herramienta ausente, o puerto que
+   sigue ocupado sin que nadie aparezca), lo dice y no lo da por parado: el
+   worker no tiene puerto propio y sigue solo con el árbol, como antes.
+2. **`local:arrancar` reconoce sus propios `worker-sala`, `api` y `web` ya
+   vivos (pid vivo y, para `api`/`web`, el mismo puerto registrado) y no
+   vuelve a sembrar ni a lanzar nada si los tres lo están.** Es el repro
+   exacto del Probador: con todo registrado y vivo, antes abortaba con
+   «Puertos ocupados: 3002, 3000» en la comprobación de requisitos; ahora
+   esa comprobación (`procesoRegistradoEnPuerto` en `local-requisitos.mjs`)
+   no cuenta como ocupado un puerto que es de un proceso propio todavía
+   vivo, y antes de tocar Docker, `local-arrancar.mjs` ya ha detectado el
+   caso completo y lo dice sin más. Con un estado parcial (por ejemplo,
+   mataste `web` a mano pero `api` y el worker siguen vivos), cada paso se
+   guarda de relanzar lo que ya está: el worker reutiliza su siembra
+   (`extraerSemillaSala` releyendo su propio registro, ya que no hace falta
+   volver a sembrar) y `api`/`web` solo se relanzan si de verdad no están ya
+   escuchando en su puerto — sin esto, relanzar un servicio que ya tiene el
+   puerto abierto habría fallado en silencio (el nuevo proceso no llega a
+   escuchar, pero `esperarPuerto` lo daría por sano igualmente porque el
+   viejo ya lo tenía) y `procesos.json` se habría quedado con el pid nuevo
+   y muerto, perdiendo el rastro del viejo que sigue vivo — un huérfano
+   nuevo, distinto pero igual de real que el que arregla el punto 1.
+3. **`AIW_INICIO_PANEL` se enciende por defecto en local, igual que
+   `AIW_SALA_V1` (misma `valorEntorno({}, nombre, '1')`, misma prioridad: una
+   exportación real en la terminal manda).** Añadida a `.env.example`
+   (apagada allí, como el resto de banderas de funcionalidad hasta la demo);
+   `pnpm local:arrancar` la pasa a `api` y a `web` y añade el enlace de
+   Inicio a su resumen final y al runbook.
+4. **`local:actualizar` levanta el Compose él mismo si Postgres no responde,
+   en vez de solo decir cómo hacerlo.** Reconsidera la decisión 4 del
+   seguimiento anterior («no es su responsabilidad»): la sesión de dirección
+   pidió explícitamente hacerlo si es barato, y lo es — el mismo `docker
+compose ... up -d --wait` que ya usa `local:arrancar`, sin repetir su
+   comprobación de requisitos (ese paso sigue siendo cosa de
+   `local:arrancar`; `local:actualizar` solo necesita que Postgres responda
+   para migrar). Si el Compose no llega a levantar, o Postgres sigue sin
+   responder después, el mensaje de error es tan claro como antes.
+
+5. **`pararServicio` da un margen (hasta 2 s, 10 intentos de 200 ms, inyectables) a que el puerto se libere solo antes de intentar identificar y rematar a nadie.** No estaba en el plan inicial de este seguimiento: salió de la propia CI de este PR, en Linux — el punto 1 de arriba, recién empujado, hizo fallar de verdad «Entorno local arranca desde cero» (`local:parar` no pudo parar `web`: «el puerto 13000 sigue escuchando y no se ha podido identificar... quién lo tiene abierto»). Causa, diagnosticada con el registro del job: ni `SIGTERM` ni `taskkill` esperan a que el proceso termine de verdad, así que comprobar el puerto justo después de `pararArbolDeProcesos` es una carrera — el árbol sí paraba bien, pero para cuando `pidsEnPuerto` miraba con `lsof`, el proceso ya estaba en medio de cerrar el socket y no quedaba nadie que identificar. Sin el margen, esa carrera se confundía con un huérfano real exactamente como el que el punto 1 arregla, y rompía una comprobación que antes de este PR estaba en verde. Probado con una prueba que reproduce la carrera sin esperar de verdad (`dormir` inyectado: dos comprobaciones «ocupado» seguidas de una «libre»), y las dos pruebas de remate ya existentes se sitúan después del margen (`intentos: 0`) para seguir probando ese camino sin esperar.
+
+Sin Windows en esta sesión: los cuatro puntos están reproducidos y motivados
+por el propio informe del Probador (mensaje de error exacto y causa que él
+mismo aisló), no adivinados; el punto 5 está reproducido y motivado por el
+registro de la propia CI de este PR. Toda la lógica que depende de la
+plataforma o del tiempo (`pararServicio`, `pidsEnPuerto`, `matarPid`,
+`procesoVivo`, `servicioVivo`) se prueba en unitario en los dos sentidos sin
+necesitar Windows ni esperas reales. La verificación de punta a punta la
+vuelve a hacer el Probador en la máquina de Jesús antes del ensayo del
+jueves.
+
 ## Fuera de alcance
 
 - Crear la sala general de una organización nueva sin sembrar: no lo pide ningún criterio de hecho de esta rebanada (decisión 1). Sería una rebanada de alta de organización.
 - Cualquier cambio en la lógica de presencia configurable del perfil: es el PR #49 (`rebanada/presencia-configurable-perfil`), que se fusiona después de esta.
-- Ejecutores auto-hospedados o cambios de infraestructura de la CI más allá del paso nuevo del job ya existente.
-- Verificación real en la máquina Windows de Jesús (criterio 9): la hace el Probador tras fusionar. Esta sesión no tiene Windows ni Docker; ya se hizo una vuelta tras el #50 (ver «Seguimiento tras el #50» arriba) y falta repetirla tras este PR.
+- Ejecutores auto-hospedados o cambios de infraestructura de la CI más allá del paso nuevo del job ya existente (PR #50; este segundo seguimiento no toca `.github/workflows`).
+- Verificación real en la máquina Windows de Jesús (criterio 9): la hace el Probador tras fusionar. Esta sesión no tiene Windows ni Docker; ya se hicieron dos vueltas (ver «Seguimiento tras el #50» y «Segundo seguimiento tras el #54» arriba) y falta repetirla tras este PR.
+- La vista v1 no envía mensajes de verdad (la conversación de su fuente sigue simulada por contrato, hallazgo del Probador tras el #54): va en otra rebanada, no se toca aquí.
 
 ## Presupuesto de tokens
 
-Presupuesto: 12 € para la rebanada entera. El PR #50 ya lo agotó (consumo real anotado en su momento, sin acceso a la facturación exacta, probablemente por encima); este seguimiento se acota a los tres puntos del informe del Probador para no sumar más de lo necesario. Consumo real total: se registra en la rebanada al abrir este PR.
+Presupuesto: 12 € para la rebanada entera. El PR #50 ya lo agotó (consumo real anotado en su momento, sin acceso a la facturación exacta, probablemente por encima); el PR #54 se acotó a sus tres puntos por la misma razón. Este segundo seguimiento se acota a los cuatro puntos del segundo informe del Probador (más el punto 5, que salió de su propia CI) para no sumar más de lo necesario. Consumo real total: esta sesión no tiene acceso al panel de facturación, así que no puede registrar una cifra exacta; lo rellena el Cronista en su rutina nocturna (lee el consumo real de la cuenta y lo anota en la rebanada), o Jesús a mano si hace falta antes.
 
 ## Pregunta abierta
 

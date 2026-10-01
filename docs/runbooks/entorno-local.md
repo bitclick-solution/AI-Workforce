@@ -31,6 +31,7 @@ demostración (Finanzas con Cobros activo y la sala general — la misma semilla
 de «Sala v0») y arranca `api` y `web`. Termina imprimiendo:
 
 ```
+Inicio              http://localhost:3000/panel/inicio
 Panel de muestras   http://localhost:3000/panel/muestras
 Sala                http://localhost:3000/panel/sala
 Contador de tareas  http://localhost:3000/panel/contador
@@ -43,19 +44,25 @@ Mailpit             http://localhost:8025
 La primera vez tarda varios minutos (Docker descarga las imágenes). Las
 siguientes, con las imágenes ya en caché, unos treinta segundos a un minuto.
 
+Es idempotente: repetirlo con su propio `worker-sala`, `api` y `web` todavía
+vivos de un arranque anterior no vuelve a sembrar ni a lanzar nada — lo dice
+(«El entorno ya está arrancado») e imprime las mismas URL. Si solo alguno
+sigue vivo (por ejemplo, mataste `web` a mano pero `api` y el worker
+siguen arriba), relanza solo lo que falta y reutiliza lo demás.
+
 ## Otros comandos
 
-| Comando                           | Qué hace                                                                                                                                                                                                                                  |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm local:parar`                | Para `api`, `web`, el worker de la demo y el Compose. Conserva los datos.                                                                                                                                                                 |
-| `pnpm local:parar -- --volumenes` | Igual, y además borra los volúmenes (PostgreSQL, Silo, Redis, ClickHouse).                                                                                                                                                                |
-| `pnpm local:actualizar`           | Trae `main`, reinstala dependencias y migra. Se niega si no estás en `main` o si tienes cambios sin confirmar, y si el Compose no está arriba (hace falta para migrar). No reinicia los procesos: hazlo con `parar` y `arrancar` después. |
-| `pnpm local:a-cero`               | Pide confirmación, para todo y borra volúmenes y el estado de `.aiw-local/`. `.env` se conserva.                                                                                                                                          |
-| `pnpm local:a-cero -- --si`       | Igual, sin preguntar (para scripts).                                                                                                                                                                                                      |
-| `pnpm local:copia`                | Vuelca PostgreSQL a `.aiw-local/copias/<fecha>.dump`.                                                                                                                                                                                     |
-| `pnpm local:copia -- mi-copia`    | Igual, con el nombre que le des.                                                                                                                                                                                                          |
-| `pnpm local:restaurar`            | Restaura la copia más reciente de `.aiw-local/copias/` (pide confirmación).                                                                                                                                                               |
-| `pnpm local:restaurar -- <ruta>`  | Restaura esa copia concreta.                                                                                                                                                                                                              |
+| Comando                           | Qué hace                                                                                                                                                                                                                                            |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm local:parar`                | Para `api`, `web`, el worker de la demo y el Compose. Conserva los datos.                                                                                                                                                                           |
+| `pnpm local:parar -- --volumenes` | Igual, y además borra los volúmenes (PostgreSQL, Silo, Redis, ClickHouse).                                                                                                                                                                          |
+| `pnpm local:actualizar`           | Trae `main`, reinstala dependencias y migra. Se niega si no estás en `main` o si tienes cambios sin confirmar; si el Compose no está arriba, lo levanta él mismo antes de migrar. No reinicia los procesos: hazlo con `parar` y `arrancar` después. |
+| `pnpm local:a-cero`               | Pide confirmación, para todo y borra volúmenes y el estado de `.aiw-local/`. `.env` se conserva.                                                                                                                                                    |
+| `pnpm local:a-cero -- --si`       | Igual, sin preguntar (para scripts).                                                                                                                                                                                                                |
+| `pnpm local:copia`                | Vuelca PostgreSQL a `.aiw-local/copias/<fecha>.dump`.                                                                                                                                                                                               |
+| `pnpm local:copia -- mi-copia`    | Igual, con el nombre que le des.                                                                                                                                                                                                                    |
+| `pnpm local:restaurar`            | Restaura la copia más reciente de `.aiw-local/copias/` (pide confirmación).                                                                                                                                                                         |
+| `pnpm local:restaurar -- <ruta>`  | Restaura esa copia concreta.                                                                                                                                                                                                                        |
 
 ## Puertos que ocupa
 
@@ -128,10 +135,18 @@ eso es cosa suya, no tuya. Dos cosas se resuelven distinto ahí:
 /F`.** Windows no tiene grupos de procesos como Linux o macOS, así que no
   hay un único «matar al grupo»: `taskkill` con `/T` (árbol) y `/F` (forzado)
   es la forma documentada de parar un proceso y todo lo que lanzó (pnpm
-  arrastra `tsx` o `next`). Si algo no se pudo parar, `local:parar` lo dice
-  por su nombre y no borra `.aiw-local/procesos.json` — repítelo o para ese
-  proceso a mano desde el Administrador de tareas antes de volver a intentarlo,
-  para no perder el rastro de lo que sigue vivo.
+  arrastra `tsx` o `next`). Segundo seguimiento del Probador: `taskkill /T`
+  puede devolver éxito y aun así dejar vivos `cmd.exe /c tsx watch`, `next
+dev` o `demo-sala` — el relanzamiento interno de pnpm por la versión del
+  `packageManager` rompe la cadena de procesos por el medio y `/T` no llega a
+  esos nietos. Por eso, para `api` y `web` (que tienen un puerto propio),
+  `local:parar` comprueba después que el puerto de verdad ha dejado de
+  escuchar (`netstat -ano` en Windows, `lsof` en Linux o macOS) y, si no,
+  remata en concreto a quien lo tiene abierto. Si no puede identificarlo (por
+  ejemplo, sin `lsof` instalado), o algo no se pudo parar, `local:parar` lo
+  dice por su nombre y no borra `.aiw-local/procesos.json` — repítelo o para
+  ese proceso a mano desde el Administrador de tareas antes de volver a
+  intentarlo, para no perder el rastro de lo que sigue vivo.
 
 **Si ya tenías un `pnpm.exe` antiguo instalado** (por ejemplo, uno de una
 versión de Node anterior, o un `pnpm` global de `npm install -g pnpm` que
@@ -151,33 +166,34 @@ Corepack ponga el suyo delante.
 - **«Puertos ocupados»**: `pnpm local:arrancar` los comprueba todos antes de
   tocar Docker y te dice exactamente cuáles y con qué variable de `.env`
   cambiarlos (por ejemplo `POSTGRES_PORT`), en vez del error crudo de Docker a
-  medio arrancar. Repetir `pnpm local:arrancar` con su propio Compose ya
-  levantado no cuenta como ocupado (reconoce sus propios contenedores); si de
-  verdad ves este error es porque otro proyecto tuyo ya usa ese puerto — otro
-  Compose en 5432, un Java en 8080, un Node en 3001 — o porque `api`/`web`
-  quedaron corriendo de un arranque anterior sin pasar por `pnpm local:parar`.
+  medio arrancar. Repetir `pnpm local:arrancar` con su propio Compose, o con
+  su propio `api`/`web` ya vivos de un arranque anterior, no cuenta como
+  ocupado (reconoce sus propios contenedores y procesos — ver «Arrancar desde
+  cero» arriba); si de verdad ves este error es porque otro proyecto tuyo ya
+  usa ese puerto — otro Compose en 5432, un Java en 8080, un Node en 3001.
   Cambia la variable correspondiente en `.env` (ver «Puertos que ocupa»
   arriba) y repite; no hace falta parar el otro proyecto.
 - **La demo de sala no arranca (se agota el plazo)**: mira
   `.aiw-local/registros/worker-sala.log`. La causa más común es que la
   migración no ha terminado o que `DEMO_CONECTOR_SECRETO` falta en `.env`
   (bórralo y deja que `pnpm local:arrancar` lo regenere).
-- **`/panel/sala` o `/panel/contador` dan 404**: sus banderas
-  (`AIW_SALA_V0`, `AIW_SALA_V1`, `AIW_PANEL_CONTADOR`) solo están encendidas
-  en los procesos que arranca `local:arrancar`, no en `.env`. Si arrancaste
-  `api` o `web` a mano con `pnpm --filter @aiw/api dev`, no las tendrán; usa
-  `pnpm local:arrancar`. Si de verdad exportaste `AIW_SALA_V1=0` en tu
-  terminal antes de arrancar (para probar la v0 a propósito), esa exportación
+- **`/panel/sala`, `/panel/inicio` o `/panel/contador` dan 404**: sus
+  banderas (`AIW_SALA_V0`, `AIW_SALA_V1`, `AIW_INICIO_PANEL`,
+  `AIW_PANEL_CONTADOR`) solo están encendidas en los procesos que arranca
+  `local:arrancar`, no en `.env`. Si arrancaste `api` o `web` a mano con `pnpm
+--filter @aiw/api dev`, no las tendrán; usa `pnpm local:arrancar`. Si de
+  verdad exportaste `AIW_SALA_V1=0` o `AIW_INICIO_PANEL=0` en tu terminal
+  antes de arrancar (para probar sin ellas a propósito), esa exportación
   manda sobre el valor por defecto: quítala y repite.
 - **`git pull --ff-only` falla en `local:actualizar`**: tu `main` local ha
   divergido de `origin/main` (algún commit propio sin subir). Resuélvelo a
   mano: `git log origin/main..main` para ver qué tienes de más.
-- **`local:actualizar` dice que Postgres no responde**: si acabas de `pnpm
-local:parar` (que también baja el Compose), `local:actualizar` no lo
-  levanta por su cuenta — no es su trabajo, solo trae `main`, reinstala y
-  migra. Arranca el Compose primero (`pnpm dev:up` si solo quieres la
-  infraestructura, o `pnpm local:arrancar` entero) y repite `pnpm
-local:actualizar`.
+- **`local:actualizar` dice que Postgres sigue sin responder tras levantar el
+  Compose**: `local:actualizar` ya levanta el Compose por su cuenta si no
+  estaba arriba; si aun así Postgres no responde, mira `docker compose
+--env-file .env -f deploy/compose/docker-compose.dev.yml logs postgres` —
+  suele ser el volumen corrupto de un `local:a-cero` a medias, o que el
+  demonio de Docker se ha caído.
 - **Falta memoria o el arranque va muy lento**: sube los recursos de Docker
   Desktop (macOS) o cierra otras aplicaciones; el aviso de `pnpm
 local:arrancar` te dice cuánta memoria tienes libre. Si tu máquina ya corre

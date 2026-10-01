@@ -26,7 +26,19 @@ if (!confirmado) {
 }
 
 console.log('— Parando api, web y el worker de la demo');
-pararProcesosRegistrados();
+// `await`: desde el segundo seguimiento de «demo local en Windows»,
+// `pararProcesosRegistrados` es async (da un margen de hasta 2 s por servicio
+// a que el puerto se libere antes de identificar y rematar un huérfano). Sin
+// esperarla, `docker compose down --volumes` y el borrado de `.aiw-local/` de
+// abajo (justo el `procesos.json` que esa lógica necesita) se adelantaban a
+// que terminara — hallazgo del Revisor, visto antes de que esto llegara a
+// ejecutarse de verdad.
+const { todosParados } = await pararProcesosRegistrados();
+if (!todosParados) {
+  console.warn(
+    '  algún proceso no se pudo parar del todo; se continúa igualmente: a-cero lo borra todo.',
+  );
+}
 
 console.log('— Parando el Compose y borrando volúmenes');
 const resultado = spawnSync('docker', [...composeArgs, 'down', '--volumes'], {
