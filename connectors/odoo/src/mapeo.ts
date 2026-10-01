@@ -110,7 +110,7 @@ export function aFactura(registro: unknown, ahora: Date): FacturaVencida {
 export function leerRegistros(carga: unknown): unknown[] {
   if (Array.isArray(carga)) return carga;
   if (esObjeto(carga)) {
-    for (const clave of ['records', 'results', 'data', 'rows'] as const) {
+    for (const clave of ['records', 'results', 'data', 'rows', 'result'] as const) {
       const valor = carga[clave];
       if (Array.isArray(valor)) return valor;
       if (esObjeto(valor)) return leerRegistros(valor);
@@ -119,19 +119,39 @@ export function leerRegistros(carga: unknown): unknown[] {
   return fallo('no trae ninguna lista de registros');
 }
 
-/** Saca el identificador que devuelve una escritura del MCP dinámico. */
-export function leerIdentificador(carga: unknown): number {
-  if (typeof carga === 'number' && Number.isInteger(carga) && carga > 0) return carga;
-  if (Array.isArray(carga) && carga.length > 0) return leerIdentificador(carga[0]);
-  if (esObjeto(carga)) {
-    for (const clave of ['message_id', 'activity_id', 'id', 'res_id', 'record_id'] as const) {
-      const valor = carga[clave];
-      if (typeof valor === 'number' && Number.isInteger(valor) && valor > 0) return valor;
-    }
-    for (const clave of ['result', 'data', 'record', 'records', 'ids'] as const) {
-      if (clave in carga) return leerIdentificador(carga[clave]);
+function idDeValor(valor: unknown): number | undefined {
+  if (typeof valor === 'number' && Number.isInteger(valor) && valor > 0) return valor;
+  if (Array.isArray(valor) && valor.length > 0) return idDeValor(valor[0]);
+  if (esObjeto(valor)) return idDeObjeto(valor);
+  return undefined;
+}
+
+/**
+ * Las claves sueltas (`record_id`, `res_id`…) a veces repiten un argumento de la
+ * llamada —el registro sobre el que se escribe— y no el identificador de lo
+ * creado: `chatter_post` del MCP dinámico devuelve `record_id` con el id de la
+ * factura junto a `result` con el id real del mensaje. Por eso la envolvente se
+ * prueba antes que esas claves sueltas, y solo se cae a ellas si la envolvente
+ * no trae un identificador utilizable.
+ */
+function idDeObjeto(objeto: Record<string, unknown>): number | undefined {
+  for (const clave of ['result', 'data', 'record', 'records', 'ids'] as const) {
+    if (clave in objeto) {
+      const id = idDeValor(objeto[clave]);
+      if (id !== undefined) return id;
     }
   }
+  for (const clave of ['message_id', 'activity_id', 'id', 'res_id', 'record_id'] as const) {
+    const id = idDeValor(objeto[clave]);
+    if (id !== undefined) return id;
+  }
+  return undefined;
+}
+
+/** Saca el identificador que devuelve una escritura del MCP dinámico. */
+export function leerIdentificador(carga: unknown): number {
+  const id = idDeValor(carga);
+  if (id !== undefined) return id;
   return fallo('la escritura no devuelve identificador');
 }
 

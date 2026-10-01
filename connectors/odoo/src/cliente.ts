@@ -45,6 +45,30 @@ function textoDe(resultado: ResultadoHerramienta): string {
     .join('\n');
 }
 
+function valorCrudo(resultado: ResultadoHerramienta, texto: string): unknown {
+  if (resultado.structuredContent !== undefined) return resultado.structuredContent;
+  if (texto === '') return {};
+  try {
+    return JSON.parse(texto);
+  } catch {
+    return { texto };
+  }
+}
+
+/**
+ * Algunas herramientas del MCP dinámico (p. ej. `search_records`) devuelven el
+ * fallo dentro de una respuesta «correcta» del protocolo, con `isError` sin
+ * marcar: `{ success: false, error: "…" }`. Sin esto, `leerRegistros` la veía
+ * como una respuesta sin lista y el motivo real del ERP se perdía detrás de
+ * «no trae ninguna lista de registros».
+ */
+function falloBlando(carga: unknown): string | undefined {
+  if (typeof carga !== 'object' || carga === null || Array.isArray(carga)) return undefined;
+  const objeto = carga as Record<string, unknown>;
+  if (objeto['success'] !== false) return undefined;
+  return typeof objeto['error'] === 'string' ? objeto['error'] : 'sin detalle del ERP';
+}
+
 /** El MCP dinámico responde en texto JSON o en contenido estructurado; valen las dos. */
 export function leerCarga(resultado: ResultadoHerramienta, herramienta: string): unknown {
   const texto = textoDe(resultado);
@@ -55,13 +79,15 @@ export function leerCarga(resultado: ResultadoHerramienta, herramienta: string):
       `El MCP dinámico rechazó «${herramienta}»: ${recortarDetalle(texto) || 'sin detalle'}`,
     );
   }
-  if (resultado.structuredContent !== undefined) return resultado.structuredContent;
-  if (texto === '') return {};
-  try {
-    return JSON.parse(texto);
-  } catch {
-    return { texto };
+  const carga = valorCrudo(resultado, texto);
+  const detalle = falloBlando(carga);
+  if (detalle !== undefined) {
+    throw new ErrorConector(
+      motivoDeMensaje(detalle),
+      `El MCP dinámico rechazó «${herramienta}»: ${recortarDetalle(detalle) || 'sin detalle'}`,
+    );
   }
+  return carga;
 }
 
 export interface OpcionesClienteHttp {
