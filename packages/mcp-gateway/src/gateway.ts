@@ -51,7 +51,7 @@ import type { ResolvedorDeSecretos, Secreto } from './secretos.js';
  * Una entrada de auditoría se consulta filtrando por este texto dentro de seis
  * años: se añaden valores, no se renombran.
  */
-/** Por qué una escritura aprobada no llegó a ejecutarse por falta de la credencial de confirmación. */
+/** Motivo con el que se nombra la falta de la credencial de confirmación de una escritura aprobada. */
 export const MOTIVO_SIN_CONFIRMACION = 'confirmacion_sin_credencial';
 
 export const ACCIONES = {
@@ -296,6 +296,10 @@ export class Gateway {
 
     // ADR-031: la credencial de confirmación solo viaja con una escritura cuya
     // aprobación ya está decidida, y nunca por la conexión que sirve las lecturas.
+    // Esto exige que la clase de acción de la escritura del conector esté en N1 (pide
+    // aprobación): si una política la subiera a N2 o N3 la escritura se ejecutaría por la
+    // conexión normal, sin esta credencial, y el conector la rechazaría con `no_autorizado`.
+    // Falla cerrado y es deliberado: una escritura autónoma no es una aprobación humana.
     const conConfirmacion =
       herramienta.tipo === 'escritura' &&
       desbloqueada &&
@@ -370,13 +374,9 @@ export class Gateway {
       confirmacion = undefined;
     }
     if (confirmacion === undefined) {
-      await this.#anotarRechazo(
-        contexto,
-        herramienta.nombre,
-        null,
-        MOTIVO_SIN_CONFIRMACION,
-        herramienta.conector,
-      );
+      // Sin `#anotarRechazo`: el fallo sube al `catch` de `llamar`, que es el único punto que
+      // anota esta llamada. Anotar aquí también escribiría dos entradas (y sumaría dos veces
+      // al contador) por una sola llamada rechazada.
       throw new HerramientaFallo(
         herramienta.nombre,
         JSON.stringify({

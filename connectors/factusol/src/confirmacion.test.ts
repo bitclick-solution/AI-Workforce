@@ -10,7 +10,7 @@ import {
   leerOpcionDeConfirmacion,
   observacionesTrasAnotar,
 } from './confirmacion.js';
-import { DIA_DE_LA_GRABACION, vencimientoDePrueba } from './grabaciones/index.js';
+import { DIA_DE_LA_GRABACION } from './grabaciones/index.js';
 import { crearHerramientas } from './herramientas.js';
 import { simularFactusol, type OpcionesSimulador } from './simulador.js';
 
@@ -34,7 +34,6 @@ function montar(
       confirmador,
       borradores,
       ahora: () => DIA_DE_LA_GRABACION,
-      vencimiento: vencimientoDePrueba,
       registrar: () => undefined,
     }),
   };
@@ -48,15 +47,15 @@ describe('B · el borrador coincide con lo aprobado', () => {
     const { herramientas, sim } = montar();
     const salida = await herramientas.crearNotaSeguimiento(ENTRADA);
 
-    expect(salida.id).toBe('BORR-0002');
+    expect(salida.id).toBe('dft_0002');
     expect(sim.observaciones()).toBe(`Cliente de prueba.\n${LINEA}`);
     const confirmaciones = sim.llamadas.filter((l) => l.herramienta === OPERACION_CONFIRMAR);
     expect(confirmaciones).toEqual([
-      { via: 'confirmar', herramienta: OPERACION_CONFIRMAR, argumentos: { draft_id: 'BORR-0002' } },
+      { via: 'confirmar', herramienta: OPERACION_CONFIRMAR, argumentos: { draft_id: 'dft_0002' } },
     ]);
     // El sondeo se canceló; el definitivo quedó ejecutado.
-    expect(sim.borradores.get('BORR-0001')?.estado).toBe('cancelado');
-    expect(sim.borradores.get('BORR-0002')?.estado).toBe('ya_ejecutado');
+    expect(sim.borradores.get('dft_0001')?.estado).toBe('cancelado');
+    expect(sim.borradores.get('dft_0002')?.estado).toBe('ya_ejecutado');
   });
 
   it('el cliente de confirmación solo llama a confirmar_operacion y el del agente nunca', async () => {
@@ -80,32 +79,24 @@ describe('B · el borrador no coincide', () => {
     [
       'cambia otro campo además de observaciones',
       {
-        alterarCambios: (c: Record<string, unknown>) => ({
-          ...c,
-          domicilio: { valor_actual: 'Calle A', valor_nuevo: 'Calle B' },
-        }),
+        alterarCambios: (campos: Record<string, unknown>[]) => [
+          ...campos,
+          { nombre: 'Domicilio', valor_actual: 'Calle A', valor_nuevo: 'Calle B', cambia: true },
+        ],
       },
     ],
     [
       'el valor nuevo no es el actual más la nota',
       {
-        alterarCambios: (c: Record<string, unknown>) => ({
-          observaciones: {
-            ...(c['observaciones'] as Record<string, unknown>),
-            valor_nuevo: 'Otra cosa distinta.',
-          },
-        }),
+        alterarCambios: (campos: Record<string, unknown>[]) =>
+          campos.map((campo) => ({ ...campo, valor_nuevo: 'Otra cosa distinta.' })),
       },
     ],
     [
       'borra lo que había',
       {
-        alterarCambios: (c: Record<string, unknown>) => ({
-          observaciones: {
-            ...(c['observaciones'] as Record<string, unknown>),
-            valor_nuevo: LINEA,
-          },
-        }),
+        alterarCambios: (campos: Record<string, unknown>[]) =>
+          campos.map((campo) => ({ ...campo, valor_nuevo: LINEA })),
       },
     ],
   ])('%s: cancela el borrador, no confirma y falla como invalido', async (_caso, opciones) => {
@@ -115,18 +106,18 @@ describe('B · el borrador no coincide', () => {
       reintentable: false,
     });
     expect(veces(sim, OPERACION_CONFIRMAR)).toBe(0);
-    expect(sim.borradores.get('BORR-0002')?.estado).toBe('cancelado');
+    expect(sim.borradores.get('dft_0002')?.estado).toBe('cancelado');
     expect(sim.observaciones()).toBe('Cliente de prueba.');
   });
 
   it('un diff que no se puede leer no se confirma', async () => {
-    const { herramientas, sim } = montar({ alterarCambios: () => ({}) });
+    const { herramientas, sim } = montar({ alterarCambios: () => [] });
     await expect(herramientas.crearNotaSeguimiento(ENTRADA)).rejects.toMatchObject({
       motivo: 'invalido',
     });
     expect(veces(sim, OPERACION_CONFIRMAR)).toBe(0);
     // Ni el borrador de sondeo, que no se entiende, queda pendiente.
-    expect(sim.borradores.get('BORR-0001')?.estado).toBe('cancelado');
+    expect(sim.borradores.get('dft_0001')?.estado).toBe('cancelado');
   });
 
   it('comprobarCoincidencia acepta solo observaciones con actual más nota', () => {
@@ -170,7 +161,7 @@ describe('B · sin el token de confirmación', () => {
 
   it('las lecturas siguen funcionando sin él', async () => {
     const { herramientas } = montar({}, { token: false });
-    await expect(herramientas.listarFacturasVencidas({})).resolves.toMatchObject({ total: 2 });
+    await expect(herramientas.listarFacturasVencidas({})).resolves.toMatchObject({ total: 3 });
   });
 });
 
@@ -187,7 +178,7 @@ describe('B · el borrador caducó', () => {
   it('el servidor que bloquea la confirmación con el token del agente no escribe nada', async () => {
     const sim = simularFactusol();
     await sim.agente.llamar('draft_modificar_cliente', { cliente: '12', observaciones: 'x' });
-    await expect(sim.agente.llamar(OPERACION_CONFIRMAR, { draft_id: 'BORR-0001' })).rejects.toThrow(
+    await expect(sim.agente.llamar(OPERACION_CONFIRMAR, { draft_id: 'dft_0001' })).rejects.toThrow(
       /no puede confirmar/,
     );
     expect(sim.observaciones()).toBe('Cliente de prueba.');
@@ -213,7 +204,7 @@ describe('B · reanudación tras una caída entre el borrador y la confirmación
 
     expect(veces(sim, 'draft_modificar_cliente')).toBe(creados);
     expect(veces(sim, 'get_estado_borrador')).toBeGreaterThan(0);
-    expect(salida.id).toBe('BORR-0002');
+    expect(salida.id).toBe('dft_0002');
     expect(sim.observaciones()).toBe(`Cliente de prueba.\n${LINEA}`);
   });
 
@@ -250,26 +241,12 @@ describe('B · reanudación tras una caída entre el borrador y la confirmación
       { borradores },
     );
     await expect(herramientas.crearNotaSeguimiento(CON_CLAVE)).rejects.toBeDefined();
-    const viejo = sim.borradores.get('BORR-0002');
+    const viejo = sim.borradores.get('dft_0002');
     if (viejo) viejo.estado = 'caducado';
     falla = false;
 
     const salida = await herramientas.crearNotaSeguimiento(CON_CLAVE);
-    expect(salida.id).toBe('BORR-0004');
-    expect(sim.observaciones()).toBe(`Cliente de prueba.\n${LINEA}`);
-  });
-
-  it('un borrador pendiente sin diff legible se cancela y se crea uno nuevo', async () => {
-    const borradores = almacenDeBorradoresEnMemoria();
-    let falla = true;
-    const { herramientas, sim } = montar(
-      { confirmarFalla: () => (falla ? 'Read timed out' : undefined), estadoSinDiff: true },
-      { borradores },
-    );
-    await expect(herramientas.crearNotaSeguimiento(CON_CLAVE)).rejects.toBeDefined();
-    falla = false;
-    await herramientas.crearNotaSeguimiento(CON_CLAVE);
-    expect(sim.borradores.get('BORR-0002')?.estado).toBe('cancelado');
+    expect(salida.id).toBe('dft_0004');
     expect(sim.observaciones()).toBe(`Cliente de prueba.\n${LINEA}`);
   });
 
@@ -294,7 +271,7 @@ describe('A y la selección', () => {
     });
     await herramientas.crearNotaSeguimiento(ENTRADA);
     expect(veces(sim, OPERACION_CONFIRMAR)).toBe(0);
-    expect(sim.borradores.get('BORR-0002')?.estado).toBe('pendiente');
+    expect(sim.borradores.get('dft_0002')?.estado).toBe('pendiente');
   });
 
   it('por defecto es B y solo se admiten A y B', () => {

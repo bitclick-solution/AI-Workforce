@@ -190,7 +190,7 @@ describe('dos credenciales, cada una en su sitio', () => {
     });
     await cliente.close();
 
-    expect((resultado.structuredContent as { id: string }).id).toBe('BORR-0002');
+    expect((resultado.structuredContent as { id: string }).id).toBe('dft_0002');
     const confirmaciones = llamadas.filter((l) => l.herramienta === OPERACION_CONFIRMAR);
     expect(confirmaciones).toHaveLength(1);
     expect(confirmaciones[0]?.auth).toBe(`Bearer ${CONFIRMAR}`);

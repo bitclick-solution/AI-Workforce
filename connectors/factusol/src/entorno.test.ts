@@ -96,7 +96,12 @@ describe('token de confirmación (ADR-031)', () => {
     ['es el mismo que el del agente', agente, agente, /no puede ser el token del agente/],
     ['no lleva el scope confirmar', agente, jwt({ scope: 'lectura' }), /no lleva el scope/],
     ['es demasiado corto', agente, 'x1y2z3', /demasiado corto/],
-    ['no es un JWT', agente, 'no-es-un-jwt-pero-es-largo', /JWT/],
+    [
+      'no es un JWT',
+      agente,
+      'no-es-un-jwt-pero-es-largo',
+      /FACTUSOL_MCP_TOKEN_CONFIRMAR no es un JWT/,
+    ],
   ])('se rechaza si %s, sin nombrar ningún valor', (_caso, token, confirmacion, patron) => {
     try {
       leerConfiguracion({

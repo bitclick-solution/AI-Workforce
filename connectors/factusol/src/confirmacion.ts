@@ -14,7 +14,7 @@
  * - **A (transitoria, sin gateway).** El adaptador deja el borrador y una persona lo
  *   confirma en el panel de Factusol.
  */
-import { leerEstado, type CambioDeCampo } from './borrador.js';
+import { leerEstado } from './borrador.js';
 import { HERRAMIENTAS_FACTUSOL, type ClienteFactusol } from './cliente.js';
 import { ErrorConector } from './errores.js';
 
@@ -30,7 +30,7 @@ export interface BorradorDeNota {
   /** La línea aprobada, sola. */
   readonly linea: string;
   /** Cambios del borrador por campo, tal como los devolvió Factusol MCP. */
-  readonly cambios: ReadonlyMap<string, CambioDeCampo>;
+  readonly cambios: ReadonlyMap<string, { readonly actual: string; readonly nuevo: string }>;
 }
 
 export interface ResultadoDeConfirmacion {
@@ -42,8 +42,17 @@ export interface ConfirmadorDeBorrador {
   readonly opcion: 'A' | 'B';
   /** Antes de crear ningún borrador: sin lo necesario para confirmar, falla sin dejar nada. */
   antesDeEscribir(): void;
-  /** Con el borrador ya creado. */
-  alCrearBorrador(borrador: BorradorDeNota): Promise<ResultadoDeConfirmacion>;
+  /**
+   * Con el borrador ya creado y antes de guardarlo o confirmarlo: lo comprueba contra lo
+   * aprobado. Si no coincide, lo cancela y falla; sin esta comprobación no se confirma.
+   */
+  comprobar(borrador: BorradorDeNota): Promise<void>;
+  /**
+   * Con el borrador ya comprobado. Un borrador es inmutable una vez creado (cambiarlo
+   * crea otro), así que una reanudación confirma el mismo `draft_id` sin repetir la
+   * comprobación.
+   */
+  confirmar(draftId: string): Promise<ResultadoDeConfirmacion>;
   /** Cancela el borrador en Factusol. Nunca confirma. */
   cancelar(draftId: string): Promise<void>;
 }
@@ -86,8 +95,8 @@ export function confirmacionPorPersona(cliente: ClienteFactusol): ConfirmadorDeB
   return {
     opcion: 'A',
     antesDeEscribir: () => undefined,
-    alCrearBorrador: () =>
-      Promise.resolve({ estado: 'pendiente', confirma: 'persona_en_el_panel' }),
+    comprobar: () => Promise.resolve(),
+    confirmar: () => Promise.resolve({ estado: 'pendiente', confirma: 'persona_en_el_panel' }),
     cancelar: async (draftId) => {
       await cliente.llamar(HERRAMIENTAS_FACTUSOL.cancelarBorrador, { draft_id: draftId });
     },
@@ -115,10 +124,7 @@ export function confirmacionPorGateway(
         );
       }
     },
-    async alCrearBorrador(borrador) {
-      if (clienteConfirmar === undefined) {
-        throw new ErrorConector('no_autorizado', 'Falta el token de confirmación.');
-      }
+    async comprobar(borrador) {
       try {
         comprobarCoincidencia(borrador);
       } catch (error) {
@@ -128,9 +134,14 @@ export function confirmacionPorGateway(
           .catch(() => undefined);
         throw error;
       }
-      await clienteConfirmar.llamar(OPERACION_CONFIRMAR, { draft_id: borrador.draftId });
+    },
+    async confirmar(draftId) {
+      if (clienteConfirmar === undefined) {
+        throw new ErrorConector('no_autorizado', 'Falta el token de confirmación.');
+      }
+      await clienteConfirmar.llamar(OPERACION_CONFIRMAR, { draft_id: draftId });
       const estado = leerEstado(
-        (await cliente.llamar(HERRAMIENTAS_FACTUSOL.estadoBorrador, { draft_id: borrador.draftId }))
+        (await cliente.llamar(HERRAMIENTAS_FACTUSOL.estadoBorrador, { draft_id: draftId }))
           .estructurado,
       );
       if (estado.estado === 'ejecutado') return { estado: 'confirmado', confirma: 'gateway' };

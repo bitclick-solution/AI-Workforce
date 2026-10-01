@@ -28,6 +28,7 @@ export interface ClienteFactusol {
 export const HERRAMIENTAS_FACTUSOL = {
   listarFacturas: 'list_facturas_emitidas',
   factura: 'get_factura',
+  formasDePago: 'get_formas_de_pago',
   cliente: 'get_cliente',
   borradorCliente: 'draft_modificar_cliente',
   cancelarBorrador: 'cancelar_borrador',

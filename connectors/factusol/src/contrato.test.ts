@@ -6,8 +6,7 @@
  * es lo que pasa en la CI. Sin entorno, la parte contra Factusol se salta con un
  * mensaje que dice qué falta.
  *
- * Contra la instancia real, el vencimiento sigue sin derivarse (no hay informe de
- * la forma de pago): el listado debe devolver una lista válida, vacía mientras tanto.
+ * Contra la instancia real el vencimiento se deriva de la forma de pago de cada factura.
  * La nota se escribe solo como borrador, que caduca a los 30 minutos si nadie lo
  * confirma, y solo si hay `FACTUSOL_FACTURA_PRUEBA` (serie-número de una factura de
  * la empresa de pruebas).
@@ -17,11 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { clienteGrabado, clienteSse, type ClienteFactusol } from './cliente.js';
 import { MOTIVO_SALTO, hayCredenciales, leerConfiguracion } from './entorno.js';
 import { SalidaCrearNotaSeguimiento, SalidaListarFacturasVencidas } from './esquemas.js';
-import {
-  DIA_DE_LA_GRABACION,
-  cargarGrabaciones,
-  vencimientoDePrueba,
-} from './grabaciones/index.js';
+import { DIA_DE_LA_GRABACION, cargarGrabaciones } from './grabaciones/index.js';
 import { crearHerramientas, type Herramientas } from './herramientas.js';
 
 const CONTRA_FACTUSOL = hayCredenciales();
@@ -42,7 +37,6 @@ describe('contrato sobre respuestas grabadas', () => {
   const herramientas = crearHerramientas({
     cliente: clienteGrabado(cargarGrabaciones()),
     ahora: () => DIA_DE_LA_GRABACION,
-    vencimiento: vencimientoDePrueba,
     registrar: () => undefined,
   });
 
@@ -56,7 +50,7 @@ describe('contrato sobre respuestas grabadas', () => {
       texto: 'Nota de contrato.',
     });
     expect(SalidaCrearNotaSeguimiento.parse(salida)).toMatchObject({
-      id: 'BORR-0001',
+      id: 'dft_20260921_090000_a1b2c3',
       factura_id: '1-000101',
     });
   });

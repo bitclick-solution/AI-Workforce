@@ -1,7 +1,7 @@
 /**
  * Factusol MCP simulado para las pruebas de la confirmación.
  *
- * Lleva el ciclo del borrador del informe del Probador: `draft_modificar_cliente` crea un
+ * Lleva el ciclo del borrador con las formas reales de las muestras del Probador (1-10): `draft_modificar_cliente` crea un
  * borrador con su diff, `cancelar_borrador` lo tira, `get_estado_borrador` dice en qué
  * quedó y `confirmar_operacion` solo vale con el token de confirmación: con el del agente
  * el servidor lo bloquea y no escribe nada. Las lecturas salen de las grabaciones. Los
@@ -22,10 +22,8 @@ export interface BorradorSimulado {
 export interface OpcionesSimulador {
   /** Observaciones del cliente antes de escribir. */
   readonly observaciones?: string;
-  /** Altera el diff que devuelve `draft_modificar_cliente`, para probar «no coincide». */
-  readonly alterarCambios?: (cambios: Record<string, unknown>) => Record<string, unknown>;
-  /** `get_estado_borrador` de un borrador pendiente no trae diff. */
-  readonly estadoSinDiff?: boolean;
+  /** Altera `borrador.cuerpo.campos` de `draft_modificar_cliente`, para probar «no coincide». */
+  readonly alterarCambios?: (campos: Record<string, unknown>[]) => Record<string, unknown>[];
   /** `confirmar_operacion` contesta bien pero el borrador ya había caducado. */
   readonly caducaAlConfirmar?: boolean;
   /** `confirmar_operacion` falla con este texto (p. ej. un corte de red). */
@@ -55,11 +53,16 @@ export function simularFactusol(opciones: OpcionesSimulador = {}): {
   const borradores = new Map<string, BorradorSimulado>();
   let observaciones = opciones.observaciones ?? 'Cliente de prueba.';
 
-  function cambiosDe(borrador: BorradorSimulado): Record<string, unknown> {
-    const cambios = {
-      observaciones: { valor_actual: borrador.actual, valor_nuevo: borrador.nuevo },
-    };
-    return opciones.alterarCambios === undefined ? cambios : opciones.alterarCambios(cambios);
+  function camposDe(borrador: BorradorSimulado): Record<string, unknown>[] {
+    const campos = [
+      {
+        nombre: 'Observaciones',
+        valor_actual: borrador.actual,
+        valor_nuevo: borrador.nuevo,
+        cambia: true,
+      },
+    ];
+    return opciones.alterarCambios === undefined ? campos : opciones.alterarCambios(campos);
   }
 
   async function responder(
@@ -71,7 +74,7 @@ export function simularFactusol(opciones: OpcionesSimulador = {}): {
     switch (herramienta) {
       case 'draft_modificar_cliente': {
         const borrador: BorradorSimulado = {
-          id: `BORR-${String(borradores.size + 1).padStart(4, '0')}`,
+          id: `dft_${String(borradores.size + 1).padStart(4, '0')}`,
           estado: 'pendiente',
           actual: observaciones,
           nuevo: String(argumentos['observaciones']),
@@ -80,10 +83,18 @@ export function simularFactusol(opciones: OpcionesSimulador = {}): {
         return {
           texto: '',
           estructurado: {
-            draft_id: borrador.id,
-            estado: 'pendiente',
-            caduca_en_minutos: 30,
-            cambios: cambiosDe(borrador),
+            texto: '📋 **BORRADOR · Modificar cliente**',
+            borrador: {
+              draft_id: borrador.id,
+              tipo: 'modificar_cliente',
+              caduca_en: '2026-10-01T19:29:32+00:00',
+              cuerpo: {
+                entidad: 'cliente',
+                operacion: 'modificacion',
+                identificador: String(argumentos['cliente']),
+                campos: camposDe(borrador),
+              },
+            },
           },
         };
       }
@@ -99,12 +110,12 @@ export function simularFactusol(opciones: OpcionesSimulador = {}): {
         return {
           texto: '',
           estructurado: {
+            texto: 'estado del borrador',
+            accion: 'modificar_cliente',
+            documentos: ejecutado ? [{ tabla: 'F_CLI', codigo: 12 }] : [],
+            resultado: ejecutado ? 'ok' : null,
             estado: borrador.estado,
-            escrito: ejecutado ? 'sí' : 'no',
-            ...(ejecutado ? { resultado: 'ok' } : {}),
-            ...(borrador.estado === 'pendiente' && opciones.estadoSinDiff === true
-              ? {}
-              : { cambios: cambiosDe(borrador) }),
+            escrito: ejecutado ? 'si' : 'no',
           },
         };
       }

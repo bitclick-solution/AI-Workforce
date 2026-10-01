@@ -30,7 +30,6 @@ import {
   HerramientaFallo,
   HerramientaNoAutorizada,
   MARCA_OCULTA,
-  MOTIVO_SIN_CONFIRMACION,
   PasoNoPermitido,
   RegistroDeServidores,
   Secreto,
@@ -319,13 +318,15 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
       expect(confirmaciones.every((c) => c === undefined)).toBe(true);
       expect(montados.every((m) => m.demo.notas.length === 0)).toBe(true);
 
+      // Una sola entrada por la llamada rechazada, y es la de la llamada fallida.
       const cadena = await conTenant(cliente, sembrado.tenantId, (tx) =>
         leerCadena(tx, sembrado.tenantId),
       );
-      const rechazo = cadena.find((e) => e.accion === ACCIONES.rechazada);
-      expect(rechazo?.datosReferenciados).toEqual(
-        expect.arrayContaining([{ tipo: 'motivo', id: MOTIVO_SIN_CONFIRMACION }]),
-      );
+      expect(cadena.filter((e) => e.accion === ACCIONES.rechazada)).toHaveLength(0);
+      const llamadas = cadena.filter((e) => e.accion === ACCIONES.llamada);
+      expect(llamadas).toHaveLength(1);
+      expect(llamadas[0]?.resultado).toBe('error');
+      expect(JSON.stringify(llamadas[0]?.datosReferenciados)).toContain('no_autorizado');
     });
 
     it('una credencial vacía cuenta como no configurada', async () => {

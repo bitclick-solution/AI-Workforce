@@ -9,11 +9,7 @@
  */
 import { clienteGrabado, clienteSse, type ClienteFactusol } from './cliente.js';
 import { hayCredenciales, leerConfiguracion } from './entorno.js';
-import {
-  DIA_DE_LA_GRABACION,
-  cargarGrabaciones,
-  vencimientoDePrueba,
-} from './grabaciones/index.js';
+import { DIA_DE_LA_GRABACION, cargarGrabaciones } from './grabaciones/index.js';
 import { crearHerramientas } from './herramientas.js';
 import { esProcesoPrincipal } from './proceso.js';
 
@@ -42,7 +38,6 @@ export async function demostrar(): Promise<void> {
     herramientas = crearHerramientas({
       cliente,
       ahora: () => DIA_DE_LA_GRABACION,
-      vencimiento: vencimientoDePrueba,
     });
   }
 

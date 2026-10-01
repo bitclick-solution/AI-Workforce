@@ -47,19 +47,19 @@ export function hayCredenciales(entorno: Entorno = process.env): boolean {
  * Scopes de un JWT, decodificado sin verificarlo: el conector no tiene el
  * secreto y no lo necesita, solo se niega a llevar un token que confirma.
  */
-export function scopesDelToken(token: string): string[] {
+export function scopesDelToken(token: string, variable = 'FACTUSOL_MCP_TOKEN'): string[] {
   const partes = token.split('.');
   if (partes.length !== 3) {
-    throw new ErrorConector('invalido', 'FACTUSOL_MCP_TOKEN no es un JWT de tres partes.');
+    throw new ErrorConector('invalido', `${variable} no es un JWT de tres partes.`);
   }
   let carga: unknown;
   try {
     carga = JSON.parse(Buffer.from(partes[1] ?? '', 'base64url').toString('utf8'));
   } catch {
-    throw new ErrorConector('invalido', 'FACTUSOL_MCP_TOKEN no lleva una carga JWT legible.');
+    throw new ErrorConector('invalido', `${variable} no lleva una carga JWT legible.`);
   }
   if (typeof carga !== 'object' || carga === null || Array.isArray(carga)) {
-    throw new ErrorConector('invalido', 'FACTUSOL_MCP_TOKEN no lleva una carga JWT legible.');
+    throw new ErrorConector('invalido', `${variable} no lleva una carga JWT legible.`);
   }
   const objeto = carga as Record<string, unknown>;
   const scopes: string[] = [];
@@ -116,7 +116,7 @@ export function leerConfiguracion(entorno: Entorno = process.env): Configuracion
         `${VARIABLE_TOKEN_CONFIRMAR} es demasiado corto: no se redactaría un valor de menos de ${String(LONGITUD_MINIMA_SECRETO)} caracteres.`,
       );
     }
-    if (!scopesDelToken(tokenConfirmar).includes(SCOPE_PROHIBIDO)) {
+    if (!scopesDelToken(tokenConfirmar, VARIABLE_TOKEN_CONFIRMAR).includes(SCOPE_PROHIBIDO)) {
       throw new ErrorConector(
         'invalido',
         `${VARIABLE_TOKEN_CONFIRMAR} no lleva el scope «${SCOPE_PROHIBIDO}»: con él no se podría confirmar nada.`,

@@ -42,6 +42,7 @@ import {
   esNoEncontrado,
   type FacturaDeLista,
 } from './markdown.js';
+import { resolutorPorFormaDePago, type ResolutorDeVencimiento } from './vencimiento.js';
 
 export const NOMBRES = {
   listar: 'listar_facturas_vencidas',
@@ -52,22 +53,6 @@ const MILISEGUNDOS_POR_DIA = 86_400_000;
 
 /** Lo que se pide a Factusol: el máximo del contrato, porque el recorte se hace después de filtrar. */
 const LECTURA_MAXIMA = 200;
-
-/**
- * Deriva el vencimiento de una factura desde la forma de pago y la fecha.
- *
- * El informe del Probador no documenta la forma de `get_formas_de_pago` ni dónde
- * aparece la forma de pago de una factura, así que la implementación por defecto
- * no deriva nada y la factura no se devuelve. Cuando el Probador aporte las formas
- * exactas, se sustituye esta implementación sin tocar el resto.
- */
-export interface ResolutorDeVencimiento {
-  derivar(factura: FacturaDeLista): Promise<string | undefined>;
-}
-
-export const sinVencimiento: ResolutorDeVencimiento = {
-  derivar: () => Promise.resolve(undefined),
-};
 
 /** Lo guardado bajo una clave: la nota y la huella de los datos que la crearon. */
 export interface NotaIdempotente {
@@ -184,7 +169,6 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
   const { cliente } = opciones;
   const ahora = opciones.ahora ?? (() => new Date());
   const almacen = opciones.almacen ?? almacenEnMemoria();
-  const vencimiento = opciones.vencimiento ?? sinVencimiento;
   const confirmador = opciones.confirmador ?? confirmacionPorPersona(cliente);
   const borradores = opciones.borradores ?? almacenDeBorradoresEnMemoria();
   const registrar = opciones.registrar ?? ((mensaje: string) => registrarPorDefecto(mensaje));
@@ -218,47 +202,72 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
     // Una factura que vence hoy no está vencida: el mínimo real es un día.
     const umbral = Math.max(1, argumentos.dias_vencida_minimo);
     const momento = ahora();
+    const resolutor: ResolutorDeVencimiento =
+      opciones.vencimiento ??
+      resolutorPorFormaDePago(() => texto(HERRAMIENTAS_FACTUSOL.formasDePago, {}));
     try {
-      const pendientes = analizarListaDeFacturas(
-        await texto(HERRAMIENTAS_FACTUSOL.listarFacturas, {
-          estado: 'pendiente',
-          limite: LECTURA_MAXIMA,
-        }),
-      ).filter((factura) => factura.estado === 'pendiente');
-
-      let sinVencimientoCuenta = 0;
-      const vencidas: { factura: FacturaDeLista; vence: string; dias: number }[] = [];
-      for (const factura of pendientes) {
-        const vence = await vencimiento.derivar(factura);
-        if (vence === undefined) {
-          sinVencimientoCuenta += 1;
-          continue;
+      // `pendiente` y `parcial` son filtros distintos de `estado`: una parcial vuelve como
+      // «pendiente parcial». Se piden las dos y se unen por identificador.
+      const unidas = new Map<string, FacturaDeLista>();
+      let posibleTruncado = false;
+      for (const estado of ['pendiente', 'parcial']) {
+        const lista = analizarListaDeFacturas(
+          await texto(HERRAMIENTAS_FACTUSOL.listarFacturas, { estado, limite: LECTURA_MAXIMA }),
+        );
+        posibleTruncado ||= lista.length >= LECTURA_MAXIMA;
+        for (const factura of lista) {
+          if (factura.estado.startsWith('pendiente')) unidas.set(factura.id, factura);
         }
-        const dias = diasVencida(vence, momento);
-        if (dias >= umbral) vencidas.push({ factura, vence, dias });
       }
-      vencidas.sort(
-        (una, otra) =>
-          otra.dias - una.dias ||
-          otra.factura.total - una.factura.total ||
-          una.factura.id.localeCompare(otra.factura.id),
-      );
+      const pendientes = [...unidas.values()];
 
-      const facturas: FacturaVencida[] = [];
-      let conCobrosParciales = 0;
-      const codigos = new Map<string, string>();
-      for (const { factura, vence, dias } of vencidas) {
-        if (facturas.length >= argumentos.limite) break;
+      const cuentas = { sinVencimiento: 0, cobrosSinImporte: 0, conAbonos: 0, sinImporte: 0 };
+      const vencidas: { factura: FacturaDeLista; vence: string; dias: number; importe: number }[] =
+        [];
+      for (const factura of pendientes) {
+        // El vencimiento nunca es anterior a la fecha: si ni así llega al umbral, no se mira.
+        if (diasVencida(factura.fecha, momento) < umbral) continue;
         const detalle = analizarDetalleDeFactura(
           await texto(HERRAMIENTAS_FACTUSOL.factura, {
             serie: factura.serie,
             numero: factura.numero,
           }),
         );
-        if (!detalle.sinCobros) {
-          conCobrosParciales += 1;
+        const vence = await resolutor.derivar(detalle);
+        if (vence === undefined) {
+          cuentas.sinVencimiento += 1;
           continue;
         }
+        const dias = diasVencida(vence, momento);
+        if (dias < umbral) continue;
+        // Los importes de la factura no restan abonos: con alguno, o sin la sección, el
+        // pendiente no es fiable y no se devuelve.
+        if (detalle.abonos !== 'ninguno') {
+          cuentas.conAbonos += 1;
+          continue;
+        }
+        if (detalle.cobros.tipo === 'ilegible') {
+          cuentas.cobrosSinImporte += 1;
+          continue;
+        }
+        const cobrado = detalle.cobros.tipo === 'importe' ? detalle.cobros.total : 0;
+        const importe = Math.round((detalle.total - cobrado) * 100) / 100;
+        if (importe <= 0) {
+          cuentas.sinImporte += 1;
+          continue;
+        }
+        vencidas.push({ factura: detalle, vence, dias, importe });
+      }
+      vencidas.sort(
+        (una, otra) =>
+          otra.dias - una.dias ||
+          otra.importe - una.importe ||
+          una.factura.id.localeCompare(otra.factura.id),
+      );
+
+      const facturas: FacturaVencida[] = [];
+      const codigos = new Map<string, string>();
+      for (const { factura, vence, dias, importe } of vencidas.slice(0, argumentos.limite)) {
         facturas.push({
           id: factura.id,
           numero: factura.id,
@@ -266,7 +275,7 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
             id: await codigoDeCliente(factura.clienteNif, codigos),
             nombre: factura.clienteNombre,
           },
-          importe_pendiente: factura.total,
+          importe_pendiente: importe,
           moneda: 'EUR',
           fecha_emision: factura.fecha,
           fecha_vencimiento: vence,
@@ -275,10 +284,12 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
       }
       registrar(
         `listar_facturas_vencidas: pendientes=${String(pendientes.length)} ` +
-          `facturas_sin_vencimiento=${String(sinVencimientoCuenta)} ` +
-          `con_cobros_sin_importe=${String(conCobrosParciales)} ` +
+          `facturas_sin_vencimiento=${String(cuentas.sinVencimiento)} ` +
+          `con_abonos=${String(cuentas.conAbonos)} ` +
+          `con_cobros_ilegibles=${String(cuentas.cobrosSinImporte)} ` +
+          `sin_importe_pendiente=${String(cuentas.sinImporte)} ` +
           `devueltas=${String(facturas.length)}` +
-          (pendientes.length >= LECTURA_MAXIMA ? ' posible_truncado=1' : ''),
+          (posibleTruncado ? ' posible_truncado=1' : ''),
       );
       return SalidaListarFacturasVencidas.parse({ facturas, total: facturas.length });
     } catch (error) {
@@ -300,9 +311,10 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
   }
 
   /**
-   * Reanudación tras una caída entre el borrador y la confirmación: consulta el estado
-   * del borrador guardado para esa clave. Devuelve la nota si ya está escrita; `undefined`
-   * si hay que seguir creando uno nuevo (caducó, se canceló o no se puede comprobar).
+   * Reanudación tras una caída entre el borrador y la confirmación: consulta el estado del
+   * borrador guardado para esa clave, que se guardó ya comprobado. Devuelve la nota si ya
+   * está escrita o si se confirma ahora ese mismo borrador; `undefined` si hay que crear
+   * uno nuevo (se canceló o caducó, y no se había escrito nada).
    */
   async function reanudar(
     argumentos: EntradaNotaResuelta,
@@ -315,21 +327,8 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
     );
     if (estado.estado === 'ejecutado') return salidaDe(argumentos, previo.draftId, previo.creadoEn);
     if (estado.estado === 'pendiente') {
-      // Sigue vivo: se confirma ese mismo, si su diff se puede comprobar. Sin diff
-      // legible se cancela y se crea uno nuevo, que es el único caso de un segundo borrador.
-      const cambios = estado.cambios.size > 0 ? estado.cambios : undefined;
-      if (cambios !== undefined) {
-        await confirmador.alCrearBorrador({
-          draftId: previo.draftId,
-          clienteCodigo: previo.clienteCodigo,
-          facturaId: argumentos.factura_id,
-          observaciones: previo.observaciones,
-          linea: previo.linea,
-          cambios,
-        });
-        return salidaDe(argumentos, previo.draftId, previo.creadoEn);
-      }
-      await confirmador.cancelar(previo.draftId).catch(() => undefined);
+      await confirmador.confirmar(previo.draftId);
+      return salidaDe(argumentos, previo.draftId, previo.creadoEn);
     }
     await borradores.borrar(clave);
     return undefined;
@@ -385,6 +384,16 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
         observaciones,
       });
       const borrador = await leerOCancelar(definitivo.estructurado);
+      // Primero se comprueba contra lo aprobado y solo entonces se guarda y se confirma: lo
+      // guardado es siempre un borrador ya comprobado.
+      await confirmador.comprobar({
+        draftId: borrador.draftId,
+        clienteCodigo: codigo,
+        facturaId: argumentos.factura_id,
+        observaciones,
+        linea,
+        cambios: leerCambios(definitivo.estructurado),
+      });
       if (clave !== undefined) {
         await borradores.guardar(clave, {
           huella,
@@ -395,14 +404,7 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
           creadoEn: momento.toISOString(),
         });
       }
-      await confirmador.alCrearBorrador({
-        draftId: borrador.draftId,
-        clienteCodigo: codigo,
-        facturaId: argumentos.factura_id,
-        observaciones,
-        linea,
-        cambios: leerCambios(definitivo.estructurado),
-      });
+      await confirmador.confirmar(borrador.draftId);
       return salidaDe(argumentos, borrador.draftId, momento.toISOString());
     } catch (error) {
       throw traducirError(error, 'No se pudo crear la nota de seguimiento');

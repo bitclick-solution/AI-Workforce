@@ -34,11 +34,13 @@ Descubierto por el Probador el 1-10 en la instancia local; el adaptador no se co
 
 Todas las respuestas son Markdown (`structuredContent.result` repite el texto). Un único módulo, `src/markdown.ts`, lo analiza: bloques `**Factura S-NNNNNN**` con `- Cliente: NOMBRE (NIF)`, `- Fecha`, `- Estado`, `- Total: 1.21 €`. Un bloque que no encaja sale como `invalido` con el motivo; nunca un dato a medias. Un «no encontrado» llega como texto con `isError: false` y se reconoce por `No se ha encontrado …`.
 
-### Lo que no está resuelto
+### Reglas de derivación
 
-- **Vencimiento.** Ninguna respuesta lo trae. Se derivaría de la forma de pago y la fecha, pero el informe no documenta `get_formas_de_pago` ni dónde aparece la forma de pago de una factura. La implementación por defecto de `ResolutorDeVencimiento` no deriva nada: la factura no se devuelve y se cuenta en el registro (`facturas_sin_vencimiento`). **Contra la instancia real, `listar_facturas_vencidas` devuelve la lista vacía hasta que el Probador aporte esas dos formas.**
-- **Importe pendiente.** El listado da el `Total`. Una factura con cobros se descarta porque el informe no documenta el importe cobrado (`con_cobros_sin_importe` en el registro).
-- **Forma del borrador y de su estado.** Del informe constan `draft_id`, `valor_actual` y, ya ejecutado, `estado: ya_ejecutado`, `escrito: sí`, `resultado: ok`. `src/borrador.ts` asume `valor_nuevo` junto a `valor_actual` y el nombre `caducado` (o `expirado`), y rechaza lo demás. Las grabaciones y el simulador del borrador son provisionales: la prueba de contrato contra la instancia local las fija.
+- **Vencimiento.** Fecha de la factura + los días que diga el nombre de su forma de pago, solo si tiene un único vencimiento: `CONTADO` (0) o `… N DIAS`. Varios vencimientos, un nombre sin días, un código desconocido o una factura sin forma no se derivan: la factura no se devuelve y se cuenta en el registro (`facturas_sin_vencimiento`). Es una tabla de patrones sobre un nombre libre, frágil por naturaleza: pide al ingeniero el vencimiento por factura.
+- **Importe pendiente.** Total menos la suma de los cobros legibles (`- AAAA-MM-DD: 69.76 € (cobro) — …`). Un cobro de otra forma, o cualquier abono (los importes de la factura no los restan), descarta la factura y la cuenta (`con_cobros_ilegibles`, `con_abonos`).
+- **`numero` y `id`** valen lo mismo, `SERIE-NNNNNN`: Factusol no tiene un identificador interno distinto del número.
+- **Sin informe todavía:** el nombre del estado de un borrador caducado.
+- **Una versión más nueva puede cambiar las formas.** El adaptador está validado contra la imagen del 1-10; si las lecturas pasan a JSON, hace falta la rama estructurada del analizador.
 
 ### La nota: `observaciones` del cliente
 
@@ -51,7 +53,7 @@ Toda escritura es un borrador que caduca a los 30 minutos. La aprobación N1 de 
 1. El gateway, tras la aprobación, abre una conexión efímera con las dos credenciales (cada una en su variable) y llama a `crear_nota_seguimiento`. Sin la de confirmación, falla como `no_autorizado` antes de llegar aquí.
 2. El conector crea el borrador, comprueba en su diff que **solo cambia `observaciones`** y que el valor nuevo es **el actual más la nota aprobada**; si no coincide, lo cancela y falla como `invalido`.
 3. `confirmar_operacion` va por un cliente aparte que lleva el token de confirmación y no hace nada más; se verifica con `get_estado_borrador`.
-4. Con `clave_idempotencia`, el borrador pendiente se guarda en `FACTUSOL_ESTADO_DIR`; tras una caída, la repetición consulta su estado y no crea un segundo.
+4. Con `clave_idempotencia`, el borrador pendiente se guarda en `FACTUSOL_ESTADO_DIR`; tras una caída, la repetición consulta su estado y no crea un segundo: si sigue pendiente, confirma ese mismo borrador (ya comprobado).
 
 El conector se niega a arrancar si el token del agente trae el scope `confirmar`. `FACTUSOL_CONFIRMACION=A` (solo desarrollo, sin gateway) deja el borrador pendiente para que una persona lo confirme en el panel. Detalle y secuencia exacta: la especificación, «Confirmación de la escritura».
 

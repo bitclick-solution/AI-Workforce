@@ -24,11 +24,7 @@ import {
   leerConfiguracion,
   redactar,
 } from './entorno.js';
-import {
-  DIA_DE_LA_GRABACION,
-  cargarGrabaciones,
-  vencimientoDePrueba,
-} from './grabaciones/index.js';
+import { DIA_DE_LA_GRABACION, cargarGrabaciones } from './grabaciones/index.js';
 import { crearHerramientas } from './herramientas.js';
 import { NOMBRES } from './herramientas.js';
 import { crearServidor } from './servidor.js';
@@ -150,7 +146,6 @@ describe('el token de confirmación tampoco sale del proceso', () => {
           clienteConfirmar: sim.confirmar,
         }),
         ahora: () => DIA_DE_LA_GRABACION,
-        vencimiento: vencimientoDePrueba,
       }),
       secretos: [CLAVE_SEMBRADA, CONFIRMAR],
     });
@@ -213,7 +208,6 @@ describe('el token no sale del proceso', () => {
       herramientas: crearHerramientas({
         cliente: clienteGrabado(grabaciones),
         ahora: () => DIA_DE_LA_GRABACION,
-        vencimiento: vencimientoDePrueba,
       }),
       secretos: [CLAVE_SEMBRADA],
     });
