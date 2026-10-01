@@ -177,13 +177,17 @@ compose ... up -d --wait` que ya usa `local:arrancar`, sin repetir su
    para migrar). Si el Compose no llega a levantar, o Postgres sigue sin
    responder después, el mensaje de error es tan claro como antes.
 
+5. **`pararServicio` da un margen (hasta 2 s, 10 intentos de 200 ms, inyectables) a que el puerto se libere solo antes de intentar identificar y rematar a nadie.** No estaba en el plan inicial de este seguimiento: salió de la propia CI de este PR, en Linux — el punto 1 de arriba, recién empujado, hizo fallar de verdad «Entorno local arranca desde cero» (`local:parar` no pudo parar `web`: «el puerto 13000 sigue escuchando y no se ha podido identificar... quién lo tiene abierto»). Causa, diagnosticada con el registro del job: ni `SIGTERM` ni `taskkill` esperan a que el proceso termine de verdad, así que comprobar el puerto justo después de `pararArbolDeProcesos` es una carrera — el árbol sí paraba bien, pero para cuando `pidsEnPuerto` miraba con `lsof`, el proceso ya estaba en medio de cerrar el socket y no quedaba nadie que identificar. Sin el margen, esa carrera se confundía con un huérfano real exactamente como el que el punto 1 arregla, y rompía una comprobación que antes de este PR estaba en verde. Probado con una prueba que reproduce la carrera sin esperar de verdad (`dormir` inyectado: dos comprobaciones «ocupado» seguidas de una «libre»), y las dos pruebas de remate ya existentes se sitúan después del margen (`intentos: 0`) para seguir probando ese camino sin esperar.
+
 Sin Windows en esta sesión: los cuatro puntos están reproducidos y motivados
 por el propio informe del Probador (mensaje de error exacto y causa que él
-mismo aisló), no adivinados; toda la lógica que depende de la plataforma
-(`pararServicio`, `pidsEnPuerto`, `matarPid`, `procesoVivo`, `servicioVivo`)
-se prueba en unitario en los dos sentidos sin necesitar Windows. La
-verificación de punta a punta la vuelve a hacer el Probador en la máquina de
-Jesús antes del ensayo del jueves.
+mismo aisló), no adivinados; el punto 5 está reproducido y motivado por el
+registro de la propia CI de este PR. Toda la lógica que depende de la
+plataforma o del tiempo (`pararServicio`, `pidsEnPuerto`, `matarPid`,
+`procesoVivo`, `servicioVivo`) se prueba en unitario en los dos sentidos sin
+necesitar Windows ni esperas reales. La verificación de punta a punta la
+vuelve a hacer el Probador en la máquina de Jesús antes del ensayo del
+jueves.
 
 ## Fuera de alcance
 
@@ -195,7 +199,7 @@ Jesús antes del ensayo del jueves.
 
 ## Presupuesto de tokens
 
-Presupuesto: 12 € para la rebanada entera. El PR #50 ya lo agotó (consumo real anotado en su momento, sin acceso a la facturación exacta, probablemente por encima); el PR #54 se acotó a sus tres puntos por la misma razón. Este segundo seguimiento se acota a los cuatro puntos del segundo informe del Probador para no sumar más de lo necesario. Consumo real total: se registra en la rebanada al abrir este PR, sin acceso a la facturación exacta de esta sesión.
+Presupuesto: 12 € para la rebanada entera. El PR #50 ya lo agotó (consumo real anotado en su momento, sin acceso a la facturación exacta, probablemente por encima); el PR #54 se acotó a sus tres puntos por la misma razón. Este segundo seguimiento se acota a los cuatro puntos del segundo informe del Probador (más el punto 5, que salió de su propia CI) para no sumar más de lo necesario. Consumo real total: esta sesión no tiene acceso al panel de facturación, así que no puede registrar una cifra exacta; lo rellena el Cronista en su rutina nocturna (lee el consumo real de la cuenta y lo anota en la rebanada), o Jesús a mano si hace falta antes.
 
 ## Pregunta abierta
 
