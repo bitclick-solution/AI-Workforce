@@ -124,6 +124,20 @@ export function leerConfiguracion(entorno: Entorno = process.env): Configuracion
   };
 }
 
+/**
+ * Tenants cuyas aprobaciones nuevas se mandan solas por correo, leyendo la salida
+ * transaccional de eventos (seguimiento 2-10). Vacía por defecto: sin ella, el
+ * comportamiento es el de antes de este seguimiento, ninguna aprobación se envía
+ * sola. Leer `evento_salida` de todos los tenants a la vez pediría un rol con
+ * privilegio que hoy no existe; esta lista explícita es la frontera mientras tanto.
+ */
+export function leerTenantsVigilados(entorno: Entorno = process.env): string[] {
+  return (entorno['AIW_APROBACION_TENANTS'] ?? '')
+    .split(',')
+    .map((valor) => valor.trim())
+    .filter((valor) => valor.length > 0);
+}
+
 function texto(entorno: Entorno, variable: string, porDefecto: string): string {
   const valor = (entorno[variable] ?? '').trim();
   return valor.length > 0 ? valor : porDefecto;

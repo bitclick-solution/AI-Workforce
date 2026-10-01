@@ -1,7 +1,8 @@
 import { ROL_APLICACION, crearConexion } from '@aiw/db';
 
 import { APLICACION } from './index';
-import { leerConfiguracion } from './aprobacion/configuracion';
+import { leerConfiguracion, leerTenantsVigilados } from './aprobacion/configuracion';
+import { escucharEventosDeAprobacion } from './aprobacion/escucha-eventos';
 import { montarPuertos } from './aprobacion/montaje';
 import { ServicioDeAprobacion } from './aprobacion/servicio';
 import { arrancarServidor } from './aprobacion/servidor';
@@ -54,7 +55,29 @@ async function principal(): Promise<void> {
       `correo por ${configuracion.correo.proveedor}, señal por ${configuracion.senal.proveedor}.`,
   );
 
+  const tenantsVigilados = leerTenantsVigilados();
+  const escucha =
+    tenantsVigilados.length > 0
+      ? escucharEventosDeAprobacion({
+          cliente: conexion.cliente,
+          servicio,
+          tenantIds: tenantsVigilados,
+          alFallar: (tenantId, error) => {
+            console.error(
+              `[${APLICACION.nombre}] no se pudo consumir la salida transaccional del tenant ${tenantId}:`,
+              error,
+            );
+          },
+        })
+      : undefined;
+  console.log(
+    tenantsVigilados.length > 0
+      ? `[${APLICACION.nombre}] correo automático al crearse una aprobación: ${tenantsVigilados.length} tenant(s) vigilados.`
+      : `[${APLICACION.nombre}] AIW_APROBACION_TENANTS vacía: ninguna aprobación se manda sola, igual que antes de este seguimiento.`,
+  );
+
   const parar = async (): Promise<void> => {
+    escucha?.parar();
     await enMarcha.cerrar();
     await puertos.cerrar();
     await conexion.cerrar();

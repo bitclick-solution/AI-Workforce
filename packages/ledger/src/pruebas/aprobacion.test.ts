@@ -19,6 +19,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   ACCIONES,
+  DESTINO_EVENTO_APROBACION_CORREO,
+  TIPO_EVENTO_APROBACION_CREADA,
   anotarCorreoEnviado,
   anotarEnlaceAbierto,
   anotarEnlaceRechazado,
@@ -31,6 +33,7 @@ import {
 } from '../aprobacion.js';
 import { exportarLibro } from '../exportar.js';
 import { verificarCadenaEnBase } from '../libro.js';
+import { eventosPendientes, marcarEventoFallido, marcarEventoPublicado } from '../salida.js';
 
 const TITULO = HAY_BASE_DE_DATOS
   ? 'aprobaciones y exportación'
@@ -192,6 +195,102 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
           }),
         ),
       ).rejects.toThrow(/no existe en este tenant/);
+    });
+
+    it('deja un evento pendiente en la salida transaccional, para que apps/channels mande el correo solo', async () => {
+      const pedida = await pedirPermiso();
+
+      const pendientes = await conTenant(cliente, org.tenantId, (tx) =>
+        eventosPendientes(tx, org.tenantId, DESTINO_EVENTO_APROBACION_CORREO),
+      );
+      const delEvento = pendientes.find(
+        (evento) =>
+          typeof evento.carga === 'object' &&
+          evento.carga !== null &&
+          (evento.carga as { aprobacionId?: unknown }).aprobacionId === pedida.id,
+      );
+      expect(delEvento).toMatchObject({
+        tipo: TIPO_EVENTO_APROBACION_CREADA,
+        carga: { version: 1, aprobacionId: pedida.id },
+        intentos: 0,
+      });
+    });
+
+    it('un borrador que no cumple su esquema no deja ni aprobación ni evento (misma transacción)', async () => {
+      const antes = await conTenant(cliente, org.tenantId, (tx) =>
+        eventosPendientes(tx, org.tenantId, DESTINO_EVENTO_APROBACION_CORREO, 1000),
+      );
+      await expect(
+        conTenant(cliente, org.tenantId, (tx) =>
+          solicitarAprobacion(tx, org.tenantId, {
+            tareaId: org.tareaId,
+            claseAccion: 'pago.emitir',
+            nivelExigido: 'n1',
+            borradorOpaco: { carga: {} } as never,
+            resumenLegible: 'Algo',
+          }),
+        ),
+      ).rejects.toThrow();
+      const despues = await conTenant(cliente, org.tenantId, (tx) =>
+        eventosPendientes(tx, org.tenantId, DESTINO_EVENTO_APROBACION_CORREO, 1000),
+      );
+      expect(despues).toHaveLength(antes.length);
+    });
+  });
+
+  describe('salida transaccional de eventos', () => {
+    it('marcarEventoPublicado lo saca de los pendientes', async () => {
+      await pedirPermiso();
+      const [evento] = await conTenant(cliente, org.tenantId, (tx) =>
+        eventosPendientes(tx, org.tenantId, DESTINO_EVENTO_APROBACION_CORREO, 1),
+      );
+      if (!evento) throw new Error('Esperaba un evento pendiente.');
+      await conTenant(cliente, org.tenantId, (tx) =>
+        marcarEventoPublicado(tx, org.tenantId, evento.id),
+      );
+      const pendientes = await conTenant(cliente, org.tenantId, (tx) =>
+        eventosPendientes(tx, org.tenantId, DESTINO_EVENTO_APROBACION_CORREO, 1000),
+      );
+      expect(pendientes.some((e) => e.id === evento.id)).toBe(false);
+    });
+
+    it('marcarEventoFallido lo saca de los pendientes también: no se reintenta solo', async () => {
+      await pedirPermiso();
+      const [evento] = await conTenant(cliente, org.tenantId, (tx) =>
+        eventosPendientes(tx, org.tenantId, DESTINO_EVENTO_APROBACION_CORREO, 1),
+      );
+      if (!evento) throw new Error('Esperaba un evento pendiente.');
+      await conTenant(cliente, org.tenantId, (tx) =>
+        marcarEventoFallido(tx, org.tenantId, evento.id, 'SMTP caído'),
+      );
+      const pendientes = await conTenant(cliente, org.tenantId, (tx) =>
+        eventosPendientes(tx, org.tenantId, DESTINO_EVENTO_APROBACION_CORREO, 1000),
+      );
+      expect(pendientes.some((e) => e.id === evento.id)).toBe(false);
+    });
+
+    it('los eventos de un tenant no se ven desde otro', async () => {
+      const pedida = await conTenant(cliente, otra.tenantId, (tx) =>
+        solicitarAprobacion(tx, otra.tenantId, {
+          tareaId: otra.tareaId,
+          claseAccion: 'pago.emitir',
+          nivelExigido: 'n1',
+          borradorOpaco: { tipo: 'pago', carga: { opaco: true } },
+          resumenLegible: 'Pago de la organización vecina',
+          venceEn: new Date(Date.now() + 86_400_000),
+        }),
+      );
+      const vistoDesdeOrg = await conTenant(cliente, org.tenantId, (tx) =>
+        eventosPendientes(tx, org.tenantId, DESTINO_EVENTO_APROBACION_CORREO, 1000),
+      );
+      expect(
+        vistoDesdeOrg.some(
+          (evento) =>
+            typeof evento.carga === 'object' &&
+            evento.carga !== null &&
+            (evento.carga as { aprobacionId?: unknown }).aprobacionId === pedida.id,
+        ),
+      ).toBe(false);
     });
   });
 
