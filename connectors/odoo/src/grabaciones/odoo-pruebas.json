@@ -18,7 +18,14 @@
           }
         ],
         "smart_fields_applied": false,
-        "fields_used": ["name", "partner_id", "amount_residual", "currency_id", "invoice_date", "invoice_date_due"]
+        "fields_used": [
+          "name",
+          "partner_id",
+          "amount_residual",
+          "currency_id",
+          "invoice_date",
+          "invoice_date_due"
+        ]
       }
     },
     {

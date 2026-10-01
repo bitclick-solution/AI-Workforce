@@ -28,13 +28,13 @@ Motivo de fondo, además del runtime: el MCP dinámico expone el ERP entero con 
 
 `src/cliente.ts` y `src/mapeo.ts` no adivinan la forma: la sacan del código fuente de [erpipe-org/mcp-odoo](https://github.com/erpipe-org/mcp-odoo) (MIT), leído para esta rebanada sin copiarlo. Cada herramienta de escritura y de lectura ya devuelve un objeto (no una lista ni un escalar sueltos), así que FastMCP no le añade otra envolvente: la forma de abajo es literal, en `structuredContent`, con el mismo objeto también disponible como texto JSON en `content`.
 
-| Herramienta               | Fichero                | Éxito devuelve (claves relevantes)                                                                 |
-| -------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------- |
-| `search_records`           | `tools_read.py`         | `{ success, count, result: [<registros>], smart_fields_applied, fields_used }`. La lista va en `result`, no en `records`. |
-| `chatter_post`             | `tools_write.py`        | Modo `direct`/`execute`: `{ success, mode, model, record_id, approval_required, result }`. `record_id` repite el registro sobre el que se escribe (la factura); el identificador del mensaje creado va en `result`. |
-| `preview_write`            | `tools_write.py`        | `{ success, tool, ..., approval: { ..., token } }` (vía `build_write_preview_report`).                |
-| `validate_write`           | `tools_write.py`        | El mismo `report` de `preview_write` con `approval_status: { stored, expires_in_seconds, source }` añadido; el identificador de aprobación sigue en `approval.token`, no en un `approval_id` suelto. |
-| `execute_approved_write`   | `tools_write.py` (`_execute_approved_write_gated`) | `{ success, tool, model, operation, result, instance }`. El identificador de lo creado va en `result`. |
+| Herramienta              | Fichero                                            | Éxito devuelve (claves relevantes)                                                                                                                                                                                  |
+| ------------------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_records`         | `tools_read.py`                                    | `{ success, count, result: [<registros>], smart_fields_applied, fields_used }`. La lista va en `result`, no en `records`.                                                                                           |
+| `chatter_post`           | `tools_write.py`                                   | Modo `direct`/`execute`: `{ success, mode, model, record_id, approval_required, result }`. `record_id` repite el registro sobre el que se escribe (la factura); el identificador del mensaje creado va en `result`. |
+| `preview_write`          | `tools_write.py`                                   | `{ success, tool, ..., approval: { ..., token } }` (vía `build_write_preview_report`).                                                                                                                              |
+| `validate_write`         | `tools_write.py`                                   | El mismo `report` de `preview_write` con `approval_status: { stored, expires_in_seconds, source }` añadido; el identificador de aprobación sigue en `approval.token`, no en un `approval_id` suelto.                |
+| `execute_approved_write` | `tools_write.py` (`_execute_approved_write_gated`) | `{ success, tool, model, operation, result, instance }`. El identificador de lo creado va en `result`.                                                                                                              |
 
 Tres consecuencias en el adaptador, las tres cubiertas por prueba:
 
