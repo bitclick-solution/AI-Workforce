@@ -17,6 +17,7 @@ import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  ACCIONES_APRENDIZAJE,
   ErrorDeAprendizaje,
   buscarHabilidadCongelada,
   lineasDeHabilidades,
@@ -83,6 +84,16 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     const segunda = await sembrarHabilidad(cliente, org.tenantId, DEFINICION);
     expect(segunda.nueva).toBe(false);
     expect(segunda.habilidadId).toBe(primera.habilidadId);
+
+    const anotadas = await conTenant(
+      cliente,
+      org.tenantId,
+      (tx) =>
+        tx<{ accion: string }[]>`
+          select accion from entrada_auditoria where tenant_id = ${org.tenantId} order by numero_orden
+        `,
+    );
+    expect(anotadas.map((f) => f.accion)).toContain(ACCIONES_APRENDIZAJE.habilidadSembrada);
   });
 
   it('propone la activación, la promueve y la versión nueva lleva la habilidad congelada', async () => {

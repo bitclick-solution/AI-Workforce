@@ -337,8 +337,12 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     expect(adelante.repuestas).toEqual([leccion.leccionId]);
 
     // 7. Cada paso está en el libro, la cadena verifica y el contador sumó.
+    // `habilidadSembrada` queda fuera: es del flujo de siembra del catálogo,
+    // que este escenario (edición → señal → lección → promoción → reversión)
+    // no ejercita; lo comprueba `habilidades.test.ts`.
+    const { habilidadSembrada: _habilidadSembrada, ...accionesDeEsteFlujo } = ACCIONES_APRENDIZAJE;
     const anotadas = await acciones(org.tenantId);
-    for (const accion of Object.values(ACCIONES_APRENDIZAJE)) {
+    for (const accion of Object.values(accionesDeEsteFlujo)) {
       expect(anotadas).toContain(accion);
     }
     const verificacion = await conTenant(cliente, org.tenantId, (tx) =>
