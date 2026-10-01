@@ -59,7 +59,7 @@ Sin endpoints de la API, sin flujos de Temporal, sin tablas ni migraciones. El c
    - Salida: `{ id, factura_id, tipo, creado_en (ISO 8601) }`.
    - Con la misma `clave_idempotencia` devuelve el mismo `id` y no crea una segunda nota. Si la superficie nativa de Factusol no distingue nota de actividad, `tipo: 'actividad'` con `fecha_limite` se traduce a lo más parecido que exponga (por ejemplo, una nota con la fecha límite en el texto) y el README documenta la equivalencia exacta.
 
-**Mapeo con Factusol.** Por definir con el detalle exacto de campos y llamada nativa una vez descubierta la superficie real (ver decisión de arriba); esta especificación fija el contrato de entrada y salida, no el mapeo interno, que es libre mientras produzca ese contrato. El README del conector documenta el mapeo exacto, como hace `connectors/odoo/README.md`.
+**Mapeo con Factusol.** Fijado en la sección «Mapeo con Factusol MCP 3.4.7» de arriba. El README del conector lo documenta, como hace `connectors/odoo/README.md`.
 
 **Errores.** Igual que Odoo: todo fallo sale como error MCP con `code`, `message` en español y `datos.motivo` en `{ no_encontrada, no_autorizado, temporal, invalido }`. Solo `temporal` es reintentable (`datos.reintentable: true`). El detalle nativo de Factusol se recorta a su primera línea y a 300 caracteres antes de salir del conector: una traza con estructura interna de Factusol no tiene por qué llegar al contexto del modelo ni a los registros de aguas abajo.
 

@@ -1,0 +1,86 @@
+{
+  "_nota": "Respuestas grabadas de Factusol MCP 3.4.7 con la forma exacta del informe del Probador (1-10) y valores inventados: ninguna persona, empresa, NIF o importe real. Las de Markdown (list_facturas_emitidas, get_factura, get_cliente) siguen el informe literal. Las del borrador (draft_modificar_cliente) son JSON estructurado del que el informe solo fija draft_id y valor_actual: su forma es provisional hasta la prueba de contrato contra la instancia local. cancelar_borrador devuelve un texto que el adaptador no lee. Fecha de referencia de las pruebas: 2026-09-21.",
+  "list_facturas_emitidas": [
+    {
+      "argumentos": {
+        "estado": "pendiente"
+      },
+      "texto": "**Factura 1-000101**\n- Cliente: EJEMPLO UNO S.L. (B00000001)\n- Fecha: 2026-07-01\n- Estado: pendiente\n- Total: 121.00 €\n\n**Factura 1-000102**\n- Cliente: MUESTRA DOS S.A. (A00000002)\n- Fecha: 2026-08-10\n- Estado: pendiente\n- Total: 60.50 €\n\n**Factura 1-000103**\n- Cliente: PRUEBA TRES (Q00000003)\n- Fecha: 2026-09-15\n- Estado: pendiente\n- Total: 30.25 €\n\n**Factura 1-000104**\n- Cliente: EJEMPLO UNO S.L. (B00000001)\n- Fecha: 2026-06-20\n- Estado: pendiente\n- Total: 12.10 €"
+    }
+  ],
+  "get_factura": [
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 101
+      },
+      "texto": "**Factura 1-000101**\n- Cliente: EJEMPLO UNO S.L. (B00000001)\n- Fecha: 2026-07-01\n- Estado: pendiente\n- Total: 121.00 €\n- Base imponible: 100.00 € · IVA: 21.00 €\n**Líneas:**\n- Concepto de prueba — 1.0 x 100.00 € = 100.00 €\n**Cobros:**\n- ninguno registrado"
+    },
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 102
+      },
+      "texto": "**Factura 1-000102**\n- Cliente: MUESTRA DOS S.A. (A00000002)\n- Fecha: 2026-08-10\n- Estado: pendiente\n- Total: 60.50 €\n- Base imponible: 50.00 € · IVA: 10.50 €\n**Líneas:**\n- Concepto de prueba — 1.0 x 50.00 € = 50.00 €\n**Cobros:**\n- ninguno registrado"
+    },
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 104
+      },
+      "texto": "**Factura 1-000104**\n- Cliente: EJEMPLO UNO S.L. (B00000001)\n- Fecha: 2026-06-20\n- Estado: pendiente\n- Total: 12.10 €\n- Base imponible: 10.00 € · IVA: 2.10 €\n**Líneas:**\n- Concepto de prueba — 1.0 x 10.00 € = 10.00 €\n**Cobros:**\n- Cobro parcial de prueba 5.00 €"
+    },
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 999999
+      },
+      "texto": "No se ha encontrado la factura 1-999999."
+    },
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 777777
+      },
+      "error": "fetch failed: ECONNREFUSED factusol-mcp:8000"
+    }
+  ],
+  "get_cliente": [
+    {
+      "argumentos": {
+        "termino_busqueda": "B00000001"
+      },
+      "texto": "**EJEMPLO UNO S.L.** (B00000001 · NIE)\n- Código: 12\n- Nombre comercial: Ejemplo Uno\n- Domicilio: Calle de Prueba, 1 (00000, PROVINCIA)\n- Teléfono: 000000000"
+    },
+    {
+      "argumentos": {
+        "termino_busqueda": "A00000002"
+      },
+      "texto": "**MUESTRA DOS S.A.** (A00000002 · NIE)\n- Código: 17\n- Nombre comercial: Muestra Dos\n- Domicilio: Calle de Prueba, 2 (00000, PROVINCIA)\n- Teléfono: 000000000"
+    }
+  ],
+  "draft_modificar_cliente": [
+    {
+      "estructurado": {
+        "draft_id": "BORR-0001",
+        "estado": "pendiente",
+        "caduca_en_minutos": 30,
+        "cambios": {
+          "observaciones": {
+            "valor_actual": "Cliente de prueba.",
+            "valor_nuevo": "Cliente de prueba.\n[2026-09-21] Nota de prueba."
+          }
+        }
+      },
+      "texto": "{\"draft_id\": \"BORR-0001\"}"
+    }
+  ],
+  "cancelar_borrador": [
+    {
+      "argumentos": {
+        "draft_id": "BORR-0001"
+      },
+      "texto": "Borrador cancelado."
+    }
+  ]
+}

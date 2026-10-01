@@ -2,8 +2,103 @@ VIGENTE
 
 # Conector Factusol
 
-Factusol MCP es un servicio en Python ya existente, con 451 pruebas y clientes en marcha. Se conserva íntegro como conector y como producto propio, y la plataforma lo consume como imagen de contenedor a través del gateway MCP. No se reescribe.
+Conector MCP de Factusol: expone las mismas dos herramientas que `connectors/odoo` —`listar_facturas_vencidas` y `crear_nota_seguimiento`— habladas contra **Factusol MCP 3.4.7**, para que el gateway elija el conector por el ERP del tenant sin tocar el puesto de Cobros.
 
-- Este directorio no contiene código: solo la referencia al servicio, su versión de imagen y las notas de integración.
-- Rebanada que lo conecta al Compose de desarrollo: "Solicitar cuenta de WhatsApp Business y preparar el acceso a Odoo y a Factusol MCP".
-- Python queda confinado a servicios aislados como este, según el ADR-002.
+- Rebanada: «Conector Factusol v0: facturas vencidas y nota de seguimiento sobre Factusol MCP».
+- Especificación: [`docs/specs/conector-factusol-v0.md`](../../docs/specs/conector-factusol-v0.md), sección «Mapeo con Factusol MCP 3.4.7».
+- Qué es Factusol MCP: un servicio en Python (FastMCP, producto propio de Bitclick) con 97 herramientas sobre la API SaaS de Sdelsol. **No se reescribe** (ADR-002): se consume como imagen aislada, versión fijada **3.4.7**, y lo que vive aquí es el adaptador en TypeScript. Las 97 herramientas no llegan al agente: el adaptador expone dos.
+- Las credenciales las inyecta el gateway MCP. Nunca aparecen en este paquete ni en el contexto del modelo.
+
+## Las dos herramientas
+
+Mismo contrato que `connectors/odoo`, con una diferencia: `id`, `factura_id` y `cliente.id` son **cadenas con el identificador nativo** de Factusol (`1-000123`, `12`), como ya asumen `connectors/demo` y el guion del puesto de Cobros.
+
+- `listar_facturas_vencidas` (lectura). Entrada `{ dias_vencida_minimo?, limite? }`; salida `{ facturas, total }` de más a menos días vencida. Nunca devuelve una factura que no está vencida.
+- `crear_nota_seguimiento` (escritura). Entrada `{ factura_id, texto, tipo?, fecha_limite?, clave_idempotencia? }`; salida `{ id, factura_id, tipo, creado_en }`. **`id` es el `draft_id`**: la nota existe como borrador hasta que alguien lo confirma.
+
+Todo fallo sale como error MCP con `code`, `message` en español y `datos.motivo` en `{ no_encontrada, no_autorizado, temporal, invalido }`. Solo `temporal` es reintentable. El detalle de Factusol se recorta a su primera línea y a 300 caracteres.
+
+## Mapeo real con Factusol MCP 3.4.7
+
+Descubierto por el Probador el 1-10 en la instancia local; el adaptador no se conecta a ella.
+
+| Contrato                 | Factusol MCP                                                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Transporte               | SSE (`GET /sse` + `POST` de sesión), no HTTP «streamable».                                                                |
+| Autenticación            | JWT HS256 en `Authorization: Bearer`, en el flujo y en cada `POST`. Toda llamada lleva `tenant_id`, que añade el cliente. |
+| Lista de pendientes      | `list_facturas_emitidas { estado: 'pendiente', limite }`.                                                                 |
+| Detalle y cobros         | `get_factura { serie, numero }`: `**Cobros:**` con `- ninguno registrado`.                                                |
+| Código de cliente        | `get_cliente { termino_busqueda: <NIF> }`, `- Código: N`. Una vez por cliente y por llamada.                              |
+| Nota                     | `draft_modificar_cliente { cliente, observaciones }`; el adaptador **no** llama a `confirmar_operacion`.                  |
+| Lectura de observaciones | `get_cliente` no las trae: se leen del `valor_actual` de un borrador de sondeo, que se cancela con `cancelar_borrador`.   |
+
+Todas las respuestas son Markdown (`structuredContent.result` repite el texto). Un único módulo, `src/markdown.ts`, lo analiza: bloques `**Factura S-NNNNNN**` con `- Cliente: NOMBRE (NIF)`, `- Fecha`, `- Estado`, `- Total: 1.21 €`. Un bloque que no encaja sale como `invalido` con el motivo; nunca un dato a medias. Un «no encontrado» llega como texto con `isError: false` y se reconoce por `No se ha encontrado …`.
+
+### Lo que no está resuelto
+
+- **Vencimiento.** Ninguna respuesta lo trae. Se derivaría de la forma de pago y la fecha, pero el informe no documenta `get_formas_de_pago` ni dónde aparece la forma de pago de una factura. La implementación por defecto de `ResolutorDeVencimiento` no deriva nada: la factura no se devuelve y se cuenta en el registro (`facturas_sin_vencimiento`). **Contra la instancia real, `listar_facturas_vencidas` devuelve la lista vacía hasta que el Probador aporte esas dos formas.**
+- **Importe pendiente.** El listado da el `Total`. Una factura con cobros se descarta porque el informe no documenta el importe cobrado (`con_cobros_sin_importe` en el registro).
+- **Forma del borrador.** Del informe constan `draft_id` y `valor_actual`. `src/borrador.ts` exige un objeto `observaciones` con `valor_actual` y rechaza lo demás. Las grabaciones del borrador son provisionales.
+
+### La nota: `observaciones` del cliente
+
+No hay herramienta de notas. La línea `[AAAA-MM-DD] texto` se **añade al final** de las observaciones del cliente de la factura y nunca sustituye lo que había. Un `tipo: 'actividad'` con `fecha_limite` lleva `(Fecha límite: AAAA-MM-DD)` dentro del texto. Un borrador caduca a los 30 minutos.
+
+## Confirmación del borrador
+
+Toda escritura es un borrador. El adaptador nunca confirma, y se niega a arrancar si el token trae el scope `confirmar`. Detrás de `ConfirmadorDeBorrador` hay dos opciones; decide Jesús:
+
+- **A (la única construida y la de por defecto).** El adaptador deja el borrador y una persona lo confirma en el panel de Factusol (`/panel`, origen `panel` en auditoría).
+- **B (la que recomienda la dirección).** Tras la aprobación N1, el gateway confirma con un token `confirmar` que solo guarda él, solo el borrador aprobado y tras comprobar que su contenido coincide con la carga aprobada (origen `mcp_externo`). Vive en `packages/mcp-gateway`, zona crítica, y no está construida: `FACTUSOL_CONFIRMACION=B` hace que el conector no arranque, para que un borrador no caduque sin que nadie lo confirme.
+
+## Idempotencia
+
+`clave_idempotencia` guarda junto a la nota la huella de los datos que la crearon. La misma clave con los mismos datos devuelve el mismo `draft_id`; con datos distintos sale `invalido`. Dos llamadas simultáneas escriben una vez. El almacén vive en el proceso y guarda 1000 claves; la garantía duradera es del flujo de Temporal y del gateway. Los borradores de Factusol no admiten clave: la idempotencia es de este adaptador.
+
+## Cómo se lanza
+
+```sh
+AIW_CONECTOR_FACTUSOL=1 pnpm --filter @aiw/connector-factusol iniciar   # MCP por stdio, como lo lanza el gateway
+AIW_CONECTOR_FACTUSOL=1 FACTUSOL_CONECTOR_HTTP=1 pnpm --filter @aiw/connector-factusol iniciar   # además, HTTP «streamable»
+pnpm --filter @aiw/connector-factusol demo:factusol   # demostración sobre las respuestas grabadas
+```
+
+Sin `AIW_CONECTOR_FACTUSOL=1` el proceso no abre transporte ni toca Factusol: bandera de funcionalidad hasta la demo.
+
+## Variables de entorno
+
+Solo nombres; los valores los inyecta el gateway.
+
+| Variable                                                                      | Qué es                                                                   |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `FACTUSOL_MCP_URL`                                                            | Extremo SSE de Factusol MCP, sin usuario ni contraseña dentro.           |
+| `FACTUSOL_MCP_TOKEN`                                                          | JWT HS256 del agente, **sin** scope `confirmar`. Mínimo ocho caracteres. |
+| `FACTUSOL_TENANT_ID`                                                          | Tenant que Factusol MCP exige en cada llamada.                           |
+| `FACTUSOL_CONFIRMACION`                                                       | `A` (por defecto). `B` no arranca aún.                                   |
+| `AIW_CONECTOR_FACTUSOL`, `FACTUSOL_CONECTOR_HTTP`, `FACTUSOL_CONECTOR_PUERTO` | Banderas y puerto del transporte.                                        |
+| `FACTUSOL_FACTURA_PRUEBA`                                                     | Solo pruebas: `serie-número` de una factura de la empresa de pruebas.    |
+
+Las variables del servidor de Factusol MCP (`MCP_AUTH_SECRET`, `HITL_CONFIRMACION_SECRET`…) no entran nunca aquí. El cifrado por tenant y la resolución de `conector.referencia_secreto` son del gateway (`packages/mcp-gateway`).
+
+## Pruebas
+
+```sh
+CI=1 pnpm --filter @aiw/connector-factusol test
+```
+
+- Unitarias del analizador, los esquemas, los errores, el token y la idempotencia: corren siempre.
+- De contrato: contra la instancia de pruebas cuando están las tres variables, y contra las grabaciones de `src/grabaciones/` cuando no, que es lo que pasa en la CI. Sin entorno se saltan con un mensaje que dice qué falta.
+- Las grabaciones llevan valores inventados con la forma exacta del informe del Probador; una prueba comprueba que no hay correos, teléfonos ni documentos de identidad.
+
+## Mejoras que conviene pedir a Factusol MCP
+
+Salen del descubrimiento del 1-10. La numeración es de este README salvo la 8, que el Probador numeró.
+
+1. **Respuestas en JSON** además del Markdown: hoy el adaptador analiza texto y cualquier cambio de formato lo rompe.
+2. **Vencimiento e importe pendiente por factura** en `list_facturas_emitidas` y `get_factura`.
+3. **Una herramienta de notas** de cliente y de factura, en vez de reescribir `observaciones`.
+4. **Clave de idempotencia** en los `draft_*`.
+5. **«No encontrado» como error estructurado** (`isError: true` con código), no como texto con `isError: false`.
+6. **Código de cliente** en el listado de facturas, para no resolverlo por NIF con una llamada más.
+7. **Documentar como camino oficial** el flujo de confirmación desde un proceso anfitrión con el scope `confirmar`.
+8. **`observaciones`** y el resto de campos editables en la respuesta de `get_cliente`, para poder verificar una escritura sin leer el diff de un borrador.
