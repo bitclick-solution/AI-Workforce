@@ -5,7 +5,7 @@ VIGENTE
 - Rebanada: [Notion](https://app.notion.com/p/3eb53066189881349709d81c2679316e) · Ciclo 2 · Tipo Conector · Paquetes `connectors/factusol` · P0
 - Rama: `rebanada/conector-factusol-v0`
 - Plan de referencia: frontera «plano de control agnóstico del ERP» y «registro de herramientas como interfaz con descubrimiento en runtime» del [ADR-001](../adr/ADR-001.md); [ADR-002](../adr/ADR-002.md) («Factusol MCP se conserva íntegro como conector en Python»; «Python solo en servicios aislados»); [ADR-005](../adr/ADR-005.md) (niveles por clase de acción). Patrón de referencia, no plan: [Conector Odoo v0](conector-odoo-v0.md), la otra mitad del mismo par multi-ERP, y [`connectors/factusol/README.md`](../../connectors/factusol/README.md), que ya fija que Factusol MCP no se reescribe y se consume como imagen a través del gateway MCP.
-- Zona crítica: no. El conector no toca `packages/mcp-gateway`, `packages/domain`, `packages/ledger`, `.github/` ni ninguna migración. El cifrado por tenant y la `referencia_secreto` son del gateway y quedan fuera de esta rebanada, igual que en el conector de Odoo.
+- Zona crítica: **sí desde el ADR-031** (1-10-2026). El PR del adaptador no toca `packages/mcp-gateway`, `packages/domain`, `packages/ledger`, `.github/` ni ninguna migración; el PR de la confirmación toca `packages/mcp-gateway` y lo dice. El cifrado por tenant y la `referencia_secreto` siguen siendo del gateway.
 - No toca el prototipo IAGENT-COMPANY: no se cosecha ni se copia nada de él para esta rebanada (prohibición de `CLAUDE.md`). Factusol MCP es un producto propio de Bitclick, previo a la plataforma (documento original citado en el ADR-001, «Factusol MCP SaaS»), distinto del prototipo IAGENT-COMPANY.
 
 ## Objetivo
