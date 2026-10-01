@@ -119,6 +119,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     expect(candidata?.listaBlancaHerramientas).toContain('odoo.buscar_factura');
     const nueva = candidata?.habilidadesCongeladas?.find((h) => h.nombre === DEFINICION.nombre);
     expect(nueva?.pasos).toEqual(DEFINICION.pasos);
+    // `herramientas` viaja desde la siembra hasta la candidata: antes de la
+    // migración de `habilidad.herramientas` esto llegaba siempre `[]`.
+    expect(nueva?.herramientas).toEqual(DEFINICION.herramientas);
 
     const activa = await conTenant(cliente, org.tenantId, (tx) =>
       versionActivaDe(tx, org.tenantId, org.puestoId),
