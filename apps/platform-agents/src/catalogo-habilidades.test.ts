@@ -3,8 +3,26 @@ import { describe, expect, it } from 'vitest';
 import { CATALOGO_DE_HABILIDADES, habilidadDelCatalogo } from './catalogo-habilidades.js';
 
 describe('catálogo de habilidades — esquema', () => {
-  it('el catálogo del repositorio es válido y llega vacío en esta rebanada', () => {
-    expect(CATALOGO_DE_HABILIDADES.habilidades).toEqual([]);
+  it('el catálogo del repositorio es válido y trae las nueve habilidades de Finanzas', () => {
+    const porPuesto = (puesto: string) =>
+      CATALOGO_DE_HABILIDADES.habilidades.filter((h) => h.puesto === puesto).length;
+    expect(CATALOGO_DE_HABILIDADES.habilidades).toHaveLength(9);
+    expect([porPuesto('cobros'), porPuesto('conciliacion'), porPuesto('prevision')]).toEqual([
+      3, 3, 3,
+    ]);
+  });
+
+  it('cada habilidad normativa del catálogo cita al menos una fuente con enlace', () => {
+    const normativas = CATALOGO_DE_HABILIDADES.habilidades.filter((h) => h.normativa);
+    expect(normativas.map((h) => h.id).sort()).toEqual([
+      'cobros.demora-ley-3-2004',
+      'conciliacion.devolucion-de-adeudo-sepa',
+      'conciliacion.leer-norma-43',
+      'prevision.calendario-fiscal',
+    ]);
+    for (const habilidad of normativas) {
+      expect(habilidad.fuentes.length).toBeGreaterThan(0);
+    }
   });
 
   it('acepta una habilidad sin contenido normativo sin exigir fuentes', () => {

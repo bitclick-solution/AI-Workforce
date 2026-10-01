@@ -1,6 +1,313 @@
 {
   "version": 1,
   "fuente": "docs/specs/habilidades-en-el-bucle-y-catalogo-finanzas.md",
-  "nota": "Mecanismo sin contenido: el catálogo de las nueve habilidades de Finanzas para España llega en una rebanada propia de contenido, con cada cifra y fecha verificada contra su fuente oficial vigente. Ver la decisión 1 de la especificación.",
-  "habilidades": []
+  "nota": "Contenido propio para España, no una traducción: solo la estructura (casos, pasos, comprobaciones) se inspira en agency-agents/finance (MIT); no se reutiliza texto suyo. Cada cifra, plazo, fecha, tipo de interés y código normativo se comprobó el 2026-10-01 contra BOE, AEAT, AEB y Banco de España (tabla normativa en el PR). Dependen del ejercicio y caducan: el tipo de demora (segundo semestre de 2026, hasta 2026-12-31) y el calendario fiscal (ejercicio 2026). Revisión de contenido normativo: Jesús y, antes del primer cliente externo, la gestoría.",
+  "habilidades": [
+    {
+      "id": "cobros.antiguedad-de-cobros",
+      "version": 1,
+      "puesto": "cobros",
+      "normativa": false,
+      "casosQueAplican": [
+        "Agrupar las facturas vencidas por tramos de antigüedad",
+        "Preparar el informe de antigüedad de cobros o el estado de vencidos de un cliente",
+        "Comprobar que el total vencido de un informe coincide con el del ERP"
+      ],
+      "pasos": [
+        "Lee del manual de la empresa los tramos de antigüedad. Si el manual no los define, usa 0-30, 31-60, 61-90 y más de 90 días de vencida; es una convención de trabajo, no una norma.",
+        "Obtén las facturas vencidas con listar_facturas_vencidas, sin descartar ninguna.",
+        "Calcula la antigüedad de cada factura como los días naturales entre hoy y su fecha de vencimiento.",
+        "Asigna cada factura a un solo tramo y suma los importes pendientes por tramo y por cliente. Si hay más de una moneda, haz un informe por moneda.",
+        "Presenta la tabla con el número de facturas, el importe por tramo y el total, y cita el documento del ERP de cada factura que nombres."
+      ],
+      "comprobaciones": [
+        "La suma de los tramos coincide, al céntimo, con el total vencido del ERP; si no coincide, no presentes el informe y di la diferencia.",
+        "Cada factura está en un solo tramo y ninguna queda fuera.",
+        "Las facturas con una disputa anotada en el ERP van aparte y señaladas; no se mezclan con las reclamables.",
+        "Informas del estado de las facturas, no de la solvencia ni de la conducta de un cliente.",
+        "Si te piden decidir qué provisionar, deducir o contabilizar, o dar la opinión contable, fiscal o legal sobre las facturas, es asesoramiento: no lo das y escalas."
+      ],
+      "herramientas": ["listar_facturas_vencidas"],
+      "fuentes": [],
+      "nombre": "cobros.antiguedad-de-cobros"
+    },
+    {
+      "id": "cobros.demora-ley-3-2004",
+      "version": 1,
+      "puesto": "cobros",
+      "normativa": true,
+      "casosQueAplican": [
+        "Calcular el plazo de pago, el interés de demora y el coste de cobro de una factura vencida entre empresas",
+        "Preparar una propuesta de reclamación con los intereses de la Ley 3/2004",
+        "Responder cuánto se debe con intereses por una factura vencida"
+      ],
+      "pasos": [
+        "Comprueba que la Ley 3/2004 se aplica (art. 3): la operación es entre empresas o entre empresas y la Administración. Si el cliente es un consumidor, o la deuda está sometida a un procedimiento concursal, no calcules nada: di por qué y escala a una persona.",
+        "Lee con listar_facturas_vencidas el importe pendiente, la fecha de factura, la de vencimiento y el cliente. Lee del contrato o del manual el plazo y el interés pactados.",
+        "Fija el plazo de pago. Si el contrato fija uno, úsalo. Si no, son 30 días naturales desde la recepción de las mercancías o la prestación del servicio (art. 4.1). Si hay un procedimiento de aceptación o verificación, dura como máximo 30 días naturales y los 30 días de pago corren desde la aceptación (art. 4.2). El plazo pactado no puede superar 60 días naturales (art. 4.3): si el contrato dice más, no sigas y escala.",
+        "Fija el tipo. El tipo pactado en el contrato manda (art. 7.1). Sin pacto, el tipo legal es el que el BCE aplicó a su operación principal de financiación más reciente antes del primer día del semestre natural, más ocho puntos porcentuales, y rige los seis meses siguientes (art. 7.2); el Ministerio lo publica en el BOE cada semestre (art. 7.3). Referencia comprobada el 2026-10-01: 10,40 % en el segundo semestre de 2026 (tipo BCE del 2,40 %; BOE núm. 159, de 1-7-2026). Esta referencia caduca el 2026-12-31: para un día de mora en otro semestre, pide el tipo vigente a una persona en lugar de usar este.",
+        "Calcula la mora, que empieza por el mero incumplimiento, sin aviso ni intimación del acreedor (art. 5). Convenciones de cálculo, que no vienen de la ley y que el manual puede sustituir: el primer día de mora es el siguiente al fin del plazo y el interés es simple, importe vencido × tipo anual × días de mora / 365.",
+        "Añade la indemnización por costes de cobro: una cantidad fija de 40 euros (art. 8.1). Los costes de cobro acreditados por encima de esa cantidad solo se incluyen con sus justificantes.",
+        "Presenta una propuesta para que una persona la revise, con una línea por concepto: importe, plazo y su fuente, días de mora, tipo y su fuente, interés, 40 euros y total. No reclames nada y no escribas al cliente."
+      ],
+      "comprobaciones": [
+        "Cada cifra de la propuesta cita su fuente: la factura del ERP, el contrato o el manual, y el artículo de la Ley 3/2004 o la resolución del BOE.",
+        "No emites la propuesta si el cliente es un consumidor, si la deuda está en concurso, si el ERP anota una disputa o si el plazo pactado supera 60 días naturales: escalas con el motivo.",
+        "Antes de usar el 10,40 % compruebas que todos los días de mora caen en el segundo semestre de 2026.",
+        "La propuesta lleva la marca «a revisar por una persona». Reclamar, aplazar y cualquier comunicación al cliente son acciones de otro nivel y las decide una persona.",
+        "No das opinión jurídica (si procede reclamar, si una cláusula es abusiva, qué ocurre si el cliente no paga): es asesoramiento, no lo das y escalas."
+      ],
+      "herramientas": ["listar_facturas_vencidas"],
+      "fuentes": [
+        {
+          "titulo": "Ley 3/2004, de 29 de diciembre, de medidas de lucha contra la morosidad en las operaciones comerciales (BOE-A-2004-21830, texto consolidado)",
+          "url": "https://www.boe.es/buscar/act.php?id=BOE-A-2004-21830"
+        },
+        {
+          "titulo": "Resolución de 30 de junio de 2026 de la Secretaría General del Tesoro y Financiación Internacional: tipo legal de interés de demora del segundo semestre de 2026 (BOE núm. 159, de 1-7-2026)",
+          "url": "https://www.boe.es/diario_boe/txt.php?id=BOE-A-2026-14327"
+        },
+        {
+          "titulo": "Banco de España: tabla de tipos de interés de demora para operaciones comerciales",
+          "url": "https://clientebancario.bde.es/pcb/es/menu-horizontal/podemosayudarte/tiposinteres/guia_textual/tiposinteresreferenciaotrostiposfrecuentes/tabla_tipos_interes_demora_operaciones_comerciales.html"
+        }
+      ],
+      "nombre": "cobros.demora-ley-3-2004"
+    },
+    {
+      "id": "cobros.lista-de-dudosos",
+      "version": 1,
+      "puesto": "cobros",
+      "normativa": false,
+      "casosQueAplican": [
+        "Preparar la lista de facturas candidatas a dudoso cobro",
+        "Revisar qué facturas cumplen los criterios de dudoso del manual",
+        "Preparar para el cierre la lista de dudosos para que una persona decida"
+      ],
+      "pasos": [
+        "Lee del manual de la empresa los criterios de dudoso (por ejemplo antigüedad, importe, contactos sin respuesta, disputa). Si el manual no los define, no inventes criterios: dilo y escala.",
+        "Obtén las facturas vencidas con listar_facturas_vencidas y, de cada una, la información de seguimiento que devuelva el ERP.",
+        "Aplica los criterios uno a uno y anota, por factura, qué criterios cumple y qué dato del ERP lo prueba (documento, fecha, nota).",
+        "Redacta la lista candidata ordenada por importe, con el motivo de cada factura. Pon aparte las que casi cumplen y señala las de clientes vetados o de trato manual y las que tienen una disputa abierta.",
+        "Entrega la lista como propuesta. Marcar una factura como dudosa lo decide una persona (N1 fijo): no la marques, no anotes el estado de dudoso en el ERP y no avises al cliente."
+      ],
+      "comprobaciones": [
+        "Cada factura de la lista cumple al menos un criterio del manual y cita el documento del ERP que lo prueba.",
+        "La habilidad solo lee y propone: ninguna escritura en el ERP ni mensaje a un tercero.",
+        "Una factura con disputa abierta o de un cliente vetado o de trato manual nunca aparece como candidata sin la marca que lo diga.",
+        "No valoras la solvencia de un cliente que sea persona física: devuelves solo el estado de sus facturas.",
+        "Si te piden decidir, o dar la opinión contable, fiscal o legal sobre una factura dudosa, no lo haces: es asesoramiento y escalas."
+      ],
+      "herramientas": ["listar_facturas_vencidas"],
+      "fuentes": [],
+      "nombre": "cobros.lista-de-dudosos"
+    },
+    {
+      "id": "conciliacion.leer-norma-43",
+      "version": 1,
+      "puesto": "conciliacion",
+      "normativa": true,
+      "casosQueAplican": [
+        "Leer un extracto bancario en formato Norma 43 (cuaderno 43 de la AEB)",
+        "Comprobar que un fichero Norma 43 cuadra antes de casar sus apuntes",
+        "Un extracto bancario llega como fichero de texto de la AEB"
+      ],
+      "pasos": [
+        "Localiza el fichero en el encargo o en un documento del ERP y sepáralo por registros según su código de dos cifras: 11 cabecera de cuenta, 22 movimiento, 23 concepto complementario (hasta cinco por movimiento), 24 equivalencia de importe (opcional), 33 final de cuenta y 88 fin de fichero.",
+        "Lee de la cabecera (11) la cuenta, las fechas inicial y final (AAMMDD), el saldo inicial y su clave: 1 deudor, 2 acreedor. Los importes tienen 14 posiciones, con dos decimales y sin coma. Trata el saldo acreedor como positivo y el deudor como negativo.",
+        "Lee cada movimiento (22): fecha de operación, fecha de valor, concepto común, importe y clave (1 debe, 2 haber). Une a cada movimiento los registros 23 y 24 que le siguen.",
+        "Lee del final de cuenta (33) el número y la suma de los apuntes del debe y del haber, el saldo final y su clave.",
+        "Comprueba el cuadre: saldo inicial + total del haber − total del debe = saldo final. Es la consecuencia aritmética de las claves anteriores, no una frase literal de la norma.",
+        "Comprueba también que el número y la suma de los movimientos 22 coinciden con los del 33, que el 88 declara el total de registros del fichero sin contarse a sí mismo, que la divisa es la de la cuenta (978 es el euro) y que el saldo inicial es el saldo final del extracto anterior.",
+        "Si todo cuadra, entrega los apuntes ordenados por fecha, di que el extracto cuadra y solo entonces empieza a casar. Si algo no cuadra, no cases nada: informa de qué comprobación falla, con las cifras, y escala."
+      ],
+      "comprobaciones": [
+        "Cada comprobación del cuadre se presenta con sus cifras (saldo inicial, totales, saldo final) para que una persona la repita.",
+        "No corriges, redondeas ni ajustas ningún importe para que cuadre: un descuadre se escala tal cual.",
+        "Si solo tienes los apuntes ya importados por leer_extracto_bancario, sin cabecera ni final de cuenta, no puedes comprobar el cuadre: dilo y pide el fichero.",
+        "No inventas un apunte, un saldo ni una fecha que no estén en el extracto.",
+        "Si te piden decidir cómo ajustar o contabilizar un descuadre, es asesoramiento contable: no lo das y escalas."
+      ],
+      "herramientas": ["leer_extracto_bancario"],
+      "fuentes": [
+        {
+          "titulo": "AEB: Información normalizada de cuenta corriente, serie normas y procedimientos bancarios n.º 43 (Madrid, julio 2001; copia alojada por una entidad)",
+          "url": "https://ind.millenniumbcp.pt/pt/negocios/tesouraria/Documents/layout_Norma43.pdf"
+        },
+        {
+          "titulo": "AEB: Cuaderno 43, actualización de junio 2012 (anexos 1 y 2; copia alojada por un tercero)",
+          "url": "https://norma43.net/downloads/cuaderno_43_-_junio_2012.pdf"
+        }
+      ],
+      "nombre": "conciliacion.leer-norma-43"
+    },
+    {
+      "id": "conciliacion.devolucion-de-adeudo-sepa",
+      "version": 1,
+      "puesto": "conciliacion",
+      "normativa": true,
+      "casosQueAplican": [
+        "Reconocer la devolución de un recibo o adeudo SEPA en el extracto",
+        "Un apunte lleva un código de motivo SEPA como AC04, AM04, MD01 o MS02",
+        "Un cobro domiciliado vuelve devuelto o impagado"
+      ],
+      "pasos": [
+        "Identifica el apunte con leer_extracto_bancario: una devolución es un cargo que corresponde a un cobro domiciliado anterior. En un extracto Norma 43 el concepto común 14 es «Devoluciones e impagados». Busca en el concepto un código de motivo de cuatro caracteres.",
+        "Traduce el código con esta lista (guía de la AEB): AC01 identificador de cuenta incorrecto (IBAN no válido); AC04 cuenta cancelada; AC06 cuenta bloqueada; AC13 la cuenta es de un consumidor en un adeudo B2B; AG01 la cuenta no admite adeudos directos por razones normativas; AG02 código de operación, de transacción o tipo de secuencia incorrecto; AM04 saldo insuficiente; AM05 operación duplicada; BE05 identificador del acreedor incorrecto; MD01 mandato no válido o inexistente; MD02 faltan datos del mandato o son incorrectos; MD06 transacción autorizada disconforme (reembolso incondicional); MD07 deudor fallecido; MS02 razón no especificada por el cliente; MS03 razón no especificada; RC01 identificador de la entidad incorrecto (BIC no válido); RR01 motivos normativos, falta la cuenta del deudor; RR02 motivos normativos, falta el nombre del deudor; RR03 motivos normativos, falta el nombre del acreedor. Si el código no está en la lista o el apunte no lleva ninguno, di «motivo no identificado» y no lo interpretes.",
+        "Distingue la devolución del reembolso que pide el deudor: según la guía, en el esquema básico el reembolso incondicional (MD06) se puede pedir hasta 8 semanas después de la fecha de cargo y el de una transacción no autorizada (MD01), hasta 13 meses después.",
+        "Localiza con listar_facturas_vencidas la factura o facturas del cobro original y reúne: importe, fecha del apunte, código y significado, facturas y cliente.",
+        "No propongas asiento, no cases el apunte con otro documento y no contactes con el cliente. Prepara el encargo a Cobros con esos datos y escala siempre a una persona: una devolución de recibo se escala."
+      ],
+      "comprobaciones": [
+        "Citas el código tal cual aparece en el extracto y su significado de la guía; no deduces la causa ni la culpa que el código no dice (MS02 y MS03 son «razón no especificada»).",
+        "El importe del apunte coincide con el del cobro original; si no, lo dices.",
+        "No hay asiento de diferencia ni escritura en el ERP, y la escalada se hace siempre, con el código y las facturas.",
+        "Si te preguntan si procede reclamar, si el cliente tiene derecho al reembolso o qué consecuencias tiene, es asesoramiento: no lo das y escalas."
+      ],
+      "herramientas": ["leer_extracto_bancario", "listar_facturas_vencidas"],
+      "fuentes": [
+        {
+          "titulo": "AEB: Guía de utilización de los motivos de las transacciones-R en adeudos directos SEPA (traducción de EPC173-14)",
+          "url": "https://aebanca.es/wp-content/uploads/2026/03/Guia-de-utilizacion-de-los-motivos-de-las-transacciones-R-en-adeudos-directos-SEPA.pdf"
+        },
+        {
+          "titulo": "AEB: Cuaderno 43, actualización de junio 2012 (anexos 1 y 2; copia alojada por un tercero)",
+          "url": "https://norma43.net/downloads/cuaderno_43_-_junio_2012.pdf"
+        }
+      ],
+      "nombre": "conciliacion.devolucion-de-adeudo-sepa"
+    },
+    {
+      "id": "conciliacion.casar-remesa",
+      "version": 1,
+      "puesto": "conciliacion",
+      "normativa": false,
+      "casosQueAplican": [
+        "Casar el abono de una remesa con las facturas que cobra",
+        "Casar el abono de una pasarela de pago de tarjetas con sus facturas",
+        "Un ingreso agrupado en el extracto cubre varias facturas"
+      ],
+      "pasos": [
+        "Lee del manual la tolerancia de conciliación, la cuenta de diferencias y, si hay pasarela, su comisión. Sin tolerancia en el manual, usa 0 euros.",
+        "Lee el abono con leer_extracto_bancario (solo apuntes sin casar) y las facturas candidatas con listar_facturas_vencidas.",
+        "Busca el conjunto de facturas de la misma remesa o liquidación, o del mismo cliente, cuyos importes sumen el abono; apóyate en las referencias del concepto del apunte.",
+        "Calcula la diferencia = abono − suma de las facturas. Si está dentro de la tolerancia (o es la comisión documentada de la pasarela), casa. Si no lo está, no cases nada y escala.",
+        "Si casas, anota con crear_nota_seguimiento en cada factura el apunte con el que casa. Si queda una diferencia, déjala con proponer_asiento_diferencia como borrador, con el documento, la cuenta de contrapartida del manual y el motivo; el asiento de diferencia es N1 fijo y una persona lo aprueba.",
+        "Sin documento o sin cuenta de contrapartida no propongas asiento: escala."
+      ],
+      "comprobaciones": [
+        "Suma de las facturas más la diferencia igual al abono, al céntimo, y cada apunte casado cita su documento.",
+        "Ninguna factura se usa en dos casados.",
+        "Tras dos intentos sin casar, una sola escalada con el motivo; no reintentas en bucle.",
+        "No contabilizas, no confirmas asientos ni mueves dinero: solo casas, anotas y dejas el borrador.",
+        "Si te piden decidir el tratamiento contable o fiscal de la diferencia, es asesoramiento: no lo das y escalas."
+      ],
+      "herramientas": [
+        "leer_extracto_bancario",
+        "listar_facturas_vencidas",
+        "crear_nota_seguimiento",
+        "proponer_asiento_diferencia"
+      ],
+      "fuentes": [],
+      "nombre": "conciliacion.casar-remesa"
+    },
+    {
+      "id": "prevision.calendario-fiscal",
+      "version": 1,
+      "puesto": "prevision",
+      "normativa": true,
+      "casosQueAplican": [
+        "Colocar en la previsión de tesorería los pagos de los modelos 303, 111, 115 y 202",
+        "Una previsión a 30, 60 o 90 días cruza una fecha de presentación de impuestos",
+        "Qué obligaciones fiscales periódicas caen dentro del horizonte de la previsión"
+      ],
+      "pasos": [
+        "Determina el ejercicio de cada fecha del horizonte y usa el calendario del contribuyente de la AEAT de ese ejercicio. Si el calendario de ese ejercicio no está publicado, no calcules la fecha: márcala «calendario sin publicar, a confirmar por administración». A 2026-10-01 el calendario de 2027 no estaba publicado.",
+        "Lee con listar_obligaciones_programadas lo que el ERP ya tiene programado y no lo dupliques.",
+        "Coloca las fechas que publica el calendario de 2026 (último día de presentación, comprobado el 2026-10-01): modelo 303 (IVA, autoliquidación trimestral) hasta el 30-1-2026 (4.º trimestre de 2025), 20-4-2026, 20-7-2026 y 20-10-2026; modelos 111 y 115 (trimestrales) hasta el 20-1-2026 (4.º trimestre de 2025), 20-4-2026, 20-7-2026 y 20-10-2026; modelo 202 (pago fraccionado del Impuesto sobre Sociedades, régimen general) hasta el 20-4-2026, 20-10-2026 y 21-12-2026. Usa el día que dice el calendario, no calcules fines de semana ni festivos. El 4.º trimestre de 2026 cae en enero de 2027: a confirmar.",
+        "Si el manual dice que la organización presenta con periodicidad mensual, es gran empresa o está en otro régimen, estas fechas no valen: marca la obligación «a confirmar por administración».",
+        "Crea una línea de previsión por obligación con el importe «a confirmar por administración». Si el ERP trae un importe estimado, muéstralo como estimación y no lo recalcules. No calcules la cuota. Si el manual indica pago por domiciliación, añade «plazo de domiciliación a confirmar por administración»."
+      ],
+      "comprobaciones": [
+        "Cada fecha cita la página del calendario del ejercicio de la que sale.",
+        "Ninguna línea lleva un importe calculado por ti.",
+        "Toda fecha fuera del ejercicio comprobado (2026) queda marcada «a confirmar»; esta habilidad hay que revisarla al empezar cada ejercicio.",
+        "No dices qué modelos debe presentar la organización ni cómo reducir la cuota: es asesoramiento fiscal, no lo das y escalas a administración."
+      ],
+      "herramientas": ["listar_obligaciones_programadas"],
+      "fuentes": [
+        {
+          "titulo": "AEAT: Calendario del contribuyente 2026 (páginas «Hasta el 20 de enero», «30 de enero», «20 de abril», «20 de julio», «20 de octubre» y «21 de diciembre»)",
+          "url": "https://sede.agenciatributaria.gob.es/Sede/ayuda/calendario-contribuyente/calendario-contribuyente-2026.html"
+        }
+      ],
+      "nombre": "prevision.calendario-fiscal"
+    },
+    {
+      "id": "prevision.escenario-de-cobro-tardio",
+      "version": 1,
+      "puesto": "prevision",
+      "normativa": false,
+      "casosQueAplican": [
+        "Simular qué pasa si un cliente paga más tarde de lo previsto",
+        "Desplazar los cobros de un cliente y recalcular el saldo a 30, 60 y 90 días",
+        "Comparar el saldo previsto con el saldo mínimo de tesorería del manual"
+      ],
+      "pasos": [
+        "Lee del manual el saldo mínimo de tesorería y, en la petición, el cliente y el retraso que hay que simular. Si no hay retraso, usa los días medios de pago del cliente que devuelve leer_historial_de_pago y dilo.",
+        "Obtén con leer_saldos el saldo de partida, con listar_vencimientos los cobros y los pagos pendientes de los próximos 90 días y con listar_obligaciones_programadas las nóminas y los impuestos programados.",
+        "Construye la previsión base a 30, 60 y 90 días desde hoy y desplaza solo los cobros de ese cliente el retraso pedido.",
+        "Calcula el saldo en cada horizonte y el saldo mínimo del período, en el escenario y en la base, y las fechas en que el escenario baja del mínimo del manual.",
+        "Presenta base y escenario lado a lado, con los vencimientos que has movido y sus documentos del ERP. Di que es un escenario, no una predicción."
+      ],
+      "comprobaciones": [
+        "Cada cifra cita el documento del ERP o la herramienta de la que sale; lo que falta se dice, no se estima.",
+        "Solo se mueven los cobros del cliente del escenario; el resto de vencimientos coincide con la base.",
+        "Si el saldo a 30 días del escenario queda por debajo del mínimo del manual, lo señalas y escalas.",
+        "No recomiendas financiación, aplazar pagos ni reclamar al cliente: eso lo decide una persona.",
+        "Si te piden recomendar financiación, aplazar pagos o reclamar al cliente, es asesoramiento y decide una persona: no lo das y escalas."
+      ],
+      "herramientas": [
+        "leer_saldos",
+        "listar_vencimientos",
+        "leer_historial_de_pago",
+        "listar_obligaciones_programadas"
+      ],
+      "fuentes": [],
+      "nombre": "prevision.escenario-de-cobro-tardio"
+    },
+    {
+      "id": "prevision.explicar-desvio",
+      "version": 1,
+      "puesto": "prevision",
+      "normativa": false,
+      "casosQueAplican": [
+        "Explicar un desvío de la previsión de tesorería superior al 15 %",
+        "Por qué el saldo real a 30 días difiere del previsto",
+        "Identificar los cobros retrasados o los pagos no previstos que explican un desvío"
+      ],
+      "pasos": [
+        "Calcula el desvío = (saldo real − saldo previsto) / saldo previsto. Si su valor absoluto no supera el 15 %, dilo y no busques una causa.",
+        "Lee con leer_saldos el saldo real y recupera la previsión que se hizo para esa fecha.",
+        "Busca causas que puedas comprobar: cobros que vencían en el período y siguen pendientes (listar_vencimientos y leer_historial_de_pago), pagos que no estaban previstos y obligaciones que cambiaron de fecha o de importe (listar_obligaciones_programadas).",
+        "Cuantifica cada causa y comprueba cuánto del desvío explica; da el resto como «sin causa verificable».",
+        "Redacta la explicación en orden de importe, con el documento del ERP de cada causa."
+      ],
+      "comprobaciones": [
+        "La suma de las causas más lo no explicado es igual al desvío, al céntimo.",
+        "Toda causa cita un documento del ERP; si no puedes citarlo, no la das como causa.",
+        "No especulas sobre la intención de un cliente ni sobre lo que va a pasar: explicas lo que ya ha pasado.",
+        "Si el desvío supera el umbral y no se explica, lo escalas con lo que falta.",
+        "Si el desvío supera el umbral y no se explica, lo escalas con lo que falta. Si te piden valorar la intención de un cliente o qué hacer con él, es asesoramiento: no lo das y escalas."
+      ],
+      "herramientas": [
+        "leer_saldos",
+        "listar_vencimientos",
+        "leer_historial_de_pago",
+        "listar_obligaciones_programadas"
+      ],
+      "fuentes": [],
+      "nombre": "prevision.explicar-desvio"
+    }
+  ]
 }
