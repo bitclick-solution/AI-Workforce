@@ -30,6 +30,7 @@ import {
   HerramientaFallo,
   HerramientaNoAutorizada,
   MARCA_OCULTA,
+  MOTIVO_SIN_CONFIRMACION,
   PasoNoPermitido,
   RegistroDeServidores,
   Secreto,
@@ -71,6 +72,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
       listaBlanca?: string[];
       /** La primera apertura del conector falla; las siguientes, no. */
       fallarPrimeraApertura?: boolean;
+      /** ADR-031: referencia de la credencial de confirmación y entorno que la resuelve. */
+      referenciaConfirmacion?: string;
+      entorno?: Record<string, string>;
     } = {},
   ) {
     const sembrado = await sembrarFinanzas(cliente, {
@@ -81,27 +85,36 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
     });
 
     const montados: Awaited<ReturnType<typeof montarDemoEnMemoria>>[] = [];
+    /** Lo que recibió la fábrica como credencial de confirmación en cada apertura. */
+    const confirmaciones: (string | undefined)[] = [];
     let aperturasFallidas = 0;
-    const registro = new RegistroDeServidores().registrar(NOMBRE_CONECTOR_DEMO, async (secreto) => {
-      if (opciones.fallarPrimeraApertura && aperturasFallidas === 0) {
-        aperturasFallidas += 1;
-        throw new Error('El conector no arranca (fallo inyectado en la apertura).');
-      }
-      const montado = await montarDemoEnMemoria({
-        credencial: secreto?.revelar() ?? '',
-        credencialEsperada: SECRETO,
-        ...(opciones.fallosIniciales === undefined
-          ? {}
-          : { fallosIniciales: opciones.fallosIniciales }),
-      });
-      montados.push(montado);
-      return conectarPorMcp(montado.transporte, NOMBRE_CONECTOR_DEMO);
-    });
+    const registro = new RegistroDeServidores().registrar(
+      NOMBRE_CONECTOR_DEMO,
+      async (secreto, confirmacion) => {
+        confirmaciones.push(confirmacion?.revelar());
+        if (opciones.fallarPrimeraApertura && aperturasFallidas === 0) {
+          aperturasFallidas += 1;
+          throw new Error('El conector no arranca (fallo inyectado en la apertura).');
+        }
+        const montado = await montarDemoEnMemoria({
+          credencial: secreto?.revelar() ?? '',
+          credencialEsperada: SECRETO,
+          ...(opciones.fallosIniciales === undefined
+            ? {}
+            : { fallosIniciales: opciones.fallosIniciales }),
+        });
+        montados.push(montado);
+        return conectarPorMcp(montado.transporte, NOMBRE_CONECTOR_DEMO);
+      },
+      opciones.referenciaConfirmacion === undefined
+        ? {}
+        : { referenciaConfirmacion: opciones.referenciaConfirmacion },
+    );
 
     const gateway = new Gateway({
       cliente,
       registro,
-      secretos: resolvedorDeEntorno(ENTORNO),
+      secretos: resolvedorDeEntorno({ ...ENTORNO, ...(opciones.entorno ?? {}) }),
     });
     gateways.push(gateway);
 
@@ -129,7 +142,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
       return contexto;
     }
 
-    return { sembrado, gateway, crearTarea, montados };
+    return { sembrado, gateway, crearTarea, montados, confirmaciones };
   }
 
   it('el catálogo solo trae las herramientas de la lista blanca, ya clasificadas', async () => {
@@ -234,6 +247,130 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
     expect(anotada?.datosReferenciados).toEqual(
       expect.arrayContaining([{ tipo: 'aprobacion', id: aprobacionId }]),
     );
+  });
+
+  describe('credencial de confirmación (ADR-031)', () => {
+    const REFERENCIA = 'env:CONFIRMACION_DE_PRUEBA';
+    const TOKEN_CONFIRMACION = `confirmar-${uuidV7()}`;
+    const CON_TOKEN = { CONFIRMACION_DE_PRUEBA: TOKEN_CONFIRMACION };
+    const ESCRITURA = {
+      herramienta: HERRAMIENTA_NOTA,
+      argumentos: { factura_id: 'inv-0001', texto: 'Te recordamos el pago pendiente.' },
+      presupuesto: PRESUPUESTO,
+    };
+
+    it('una escritura aprobada abre una conexión efímera con la credencial, y solo esa', async () => {
+      const { gateway, crearTarea, sembrado, confirmaciones, montados } = await montar({
+        referenciaConfirmacion: REFERENCIA,
+        entorno: CON_TOKEN,
+      });
+      const contexto = await crearTarea(sembrado.cobros);
+
+      await gateway.herramientasPara(contexto);
+      await gateway.llamar(contexto, {
+        herramienta: HERRAMIENTA_LISTAR,
+        argumentos: {},
+        presupuesto: PRESUPUESTO,
+      });
+      expect(confirmaciones.filter((c) => c !== undefined)).toEqual([]);
+
+      await gateway.llamar(contexto, { ...ESCRITURA, aprobacionId: uuidV7() });
+
+      expect(confirmaciones.filter((c) => c !== undefined)).toEqual([TOKEN_CONFIRMACION]);
+      expect(montados.at(-1)?.demo.notas).toHaveLength(1);
+    });
+
+    it('una lectura nunca recibe la credencial', async () => {
+      const { gateway, crearTarea, sembrado, confirmaciones } = await montar({
+        referenciaConfirmacion: REFERENCIA,
+        entorno: CON_TOKEN,
+      });
+      const contexto = await crearTarea(sembrado.cobros);
+      await gateway.llamar(contexto, {
+        herramienta: HERRAMIENTA_LISTAR,
+        argumentos: {},
+        presupuesto: PRESUPUESTO,
+      });
+      expect(confirmaciones.every((c) => c === undefined)).toBe(true);
+    });
+
+    it('una escritura sin aprobación no se ejecuta ni recibe la credencial', async () => {
+      const { gateway, crearTarea, sembrado, confirmaciones } = await montar({
+        referenciaConfirmacion: REFERENCIA,
+        entorno: CON_TOKEN,
+      });
+      const contexto = await crearTarea(sembrado.cobros);
+      await expect(gateway.llamar(contexto, ESCRITURA)).rejects.toBeInstanceOf(PasoNoPermitido);
+      expect(confirmaciones.every((c) => c === undefined)).toBe(true);
+    });
+
+    it('sin la credencial configurada la escritura falla como no_autorizado y no llega al conector', async () => {
+      const { gateway, crearTarea, sembrado, confirmaciones, montados } = await montar({
+        referenciaConfirmacion: REFERENCIA,
+      });
+      const contexto = await crearTarea(sembrado.cobros);
+      const fallo = await gateway
+        .llamar(contexto, { ...ESCRITURA, aprobacionId: uuidV7() })
+        .catch((error: unknown) => error);
+
+      expect(fallo).toBeInstanceOf(HerramientaFallo);
+      expect((fallo as HerramientaFallo).motivo).toBe('no_autorizado');
+      expect((fallo as HerramientaFallo).reintentable).toBe(false);
+      expect(confirmaciones.every((c) => c === undefined)).toBe(true);
+      expect(montados.every((m) => m.demo.notas.length === 0)).toBe(true);
+
+      const cadena = await conTenant(cliente, sembrado.tenantId, (tx) =>
+        leerCadena(tx, sembrado.tenantId),
+      );
+      const rechazo = cadena.find((e) => e.accion === ACCIONES.rechazada);
+      expect(rechazo?.datosReferenciados).toEqual(
+        expect.arrayContaining([{ tipo: 'motivo', id: MOTIVO_SIN_CONFIRMACION }]),
+      );
+    });
+
+    it('una credencial vacía cuenta como no configurada', async () => {
+      const { gateway, crearTarea, sembrado, montados } = await montar({
+        referenciaConfirmacion: REFERENCIA,
+        entorno: { CONFIRMACION_DE_PRUEBA: '' },
+      });
+      const contexto = await crearTarea(sembrado.cobros);
+      await expect(
+        gateway.llamar(contexto, { ...ESCRITURA, aprobacionId: uuidV7() }),
+      ).rejects.toMatchObject({ motivo: 'no_autorizado' });
+      expect(montados.every((m) => m.demo.notas.length === 0)).toBe(true);
+    });
+
+    it('el libro anota la aprobación y la confirmación, nunca el token ni su referencia', async () => {
+      const { gateway, crearTarea, sembrado } = await montar({
+        referenciaConfirmacion: REFERENCIA,
+        entorno: CON_TOKEN,
+      });
+      const contexto = await crearTarea(sembrado.cobros);
+      const aprobacionId = uuidV7();
+      await gateway.llamar(contexto, { ...ESCRITURA, aprobacionId });
+
+      const cadena = await conTenant(cliente, sembrado.tenantId, (tx) =>
+        leerCadena(tx, sembrado.tenantId),
+      );
+      const llamada = cadena.find((e) => e.accion === ACCIONES.llamada);
+      expect(llamada?.datosReferenciados).toEqual(
+        expect.arrayContaining([
+          { tipo: 'aprobacion', id: aprobacionId },
+          { tipo: 'confirmacion', id: 'gateway' },
+        ]),
+      );
+      const todo = JSON.stringify(cadena);
+      expect(todo).not.toContain(TOKEN_CONFIRMACION);
+      expect(todo).not.toContain(REFERENCIA);
+    });
+
+    it('un conector sin credencial de confirmación registrada usa la conexión de siempre', async () => {
+      const { gateway, crearTarea, sembrado, confirmaciones, montados } = await montar();
+      const contexto = await crearTarea(sembrado.cobros);
+      await gateway.llamar(contexto, { ...ESCRITURA, aprobacionId: uuidV7() });
+      expect(confirmaciones.every((c) => c === undefined)).toBe(true);
+      expect(montados).toHaveLength(1);
+    });
   });
 
   it('un puesto en prueba no ejecuta la escritura ni con aprobación', async () => {

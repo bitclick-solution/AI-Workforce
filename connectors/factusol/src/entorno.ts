@@ -14,6 +14,14 @@ export interface ConfiguracionFactusol {
   /** JWT HS256 del agente. Vive en memoria y no sale del proceso. */
   readonly token: string;
   readonly tenantId: string;
+  /**
+   * JWT con el scope `confirmar` (ADR-031). Solo existe en el proceso que el gateway
+   * lanza para ejecutar una escritura ya aprobada; en el resto de procesos es `undefined`.
+   * Lo usa únicamente `confirmar_operacion`, nunca las lecturas ni el resto del agente.
+   */
+  readonly tokenConfirmar?: string;
+  /** Directorio donde se guarda el borrador pendiente de cada clave de idempotencia. */
+  readonly directorioDeEstado?: string;
 }
 
 export const VARIABLES = ['FACTUSOL_MCP_URL', 'FACTUSOL_MCP_TOKEN', 'FACTUSOL_TENANT_ID'] as const;
@@ -21,6 +29,9 @@ export const VARIABLES = ['FACTUSOL_MCP_URL', 'FACTUSOL_MCP_TOKEN', 'FACTUSOL_TE
 export const LONGITUD_MINIMA_SECRETO = 8;
 
 export const SCOPE_PROHIBIDO = 'confirmar';
+
+/** Segunda credencial, con nombre distinto: la entrega el gateway solo a una escritura aprobada. */
+export const VARIABLE_TOKEN_CONFIRMAR = 'FACTUSOL_MCP_TOKEN_CONFIRMAR';
 
 export const MOTIVO_SALTO =
   `Sin ${VARIABLES.join(', ')}: estas pruebas necesitan la instancia de pruebas de Factusol MCP. ` +
@@ -91,7 +102,35 @@ export function leerConfiguracion(entorno: Entorno = process.env): Configuracion
       `FACTUSOL_MCP_TOKEN lleva el scope «${SCOPE_PROHIBIDO}»: ese token no va nunca con las herramientas del agente. El conector no arranca.`,
     );
   }
-  return { extremoMcp, token, tenantId: (entorno['FACTUSOL_TENANT_ID'] ?? '').trim() };
+  const tokenConfirmar = (entorno[VARIABLE_TOKEN_CONFIRMAR] ?? '').trim();
+  if (tokenConfirmar !== '') {
+    if (tokenConfirmar === token) {
+      throw new ErrorConector(
+        'invalido',
+        `${VARIABLE_TOKEN_CONFIRMAR} no puede ser el token del agente: son dos credenciales distintas.`,
+      );
+    }
+    if (tokenConfirmar.length < LONGITUD_MINIMA_SECRETO) {
+      throw new ErrorConector(
+        'invalido',
+        `${VARIABLE_TOKEN_CONFIRMAR} es demasiado corto: no se redactaría un valor de menos de ${String(LONGITUD_MINIMA_SECRETO)} caracteres.`,
+      );
+    }
+    if (!scopesDelToken(tokenConfirmar).includes(SCOPE_PROHIBIDO)) {
+      throw new ErrorConector(
+        'invalido',
+        `${VARIABLE_TOKEN_CONFIRMAR} no lleva el scope «${SCOPE_PROHIBIDO}»: con él no se podría confirmar nada.`,
+      );
+    }
+  }
+  const directorio = (entorno['FACTUSOL_ESTADO_DIR'] ?? '').trim();
+  return {
+    extremoMcp,
+    token,
+    tenantId: (entorno['FACTUSOL_TENANT_ID'] ?? '').trim(),
+    ...(tokenConfirmar === '' ? {} : { tokenConfirmar }),
+    ...(directorio === '' ? {} : { directorioDeEstado: directorio }),
+  };
 }
 
 export const MARCA_OCULTA = '«oculto»';

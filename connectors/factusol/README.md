@@ -38,18 +38,22 @@ Todas las respuestas son Markdown (`structuredContent.result` repite el texto). 
 
 - **Vencimiento.** Ninguna respuesta lo trae. Se derivaría de la forma de pago y la fecha, pero el informe no documenta `get_formas_de_pago` ni dónde aparece la forma de pago de una factura. La implementación por defecto de `ResolutorDeVencimiento` no deriva nada: la factura no se devuelve y se cuenta en el registro (`facturas_sin_vencimiento`). **Contra la instancia real, `listar_facturas_vencidas` devuelve la lista vacía hasta que el Probador aporte esas dos formas.**
 - **Importe pendiente.** El listado da el `Total`. Una factura con cobros se descarta porque el informe no documenta el importe cobrado (`con_cobros_sin_importe` en el registro).
-- **Forma del borrador.** Del informe constan `draft_id` y `valor_actual`. `src/borrador.ts` exige un objeto `observaciones` con `valor_actual` y rechaza lo demás. Las grabaciones del borrador son provisionales.
+- **Forma del borrador y de su estado.** Del informe constan `draft_id`, `valor_actual` y, ya ejecutado, `estado: ya_ejecutado`, `escrito: sí`, `resultado: ok`. `src/borrador.ts` asume `valor_nuevo` junto a `valor_actual` y el nombre `caducado` (o `expirado`), y rechaza lo demás. Las grabaciones y el simulador del borrador son provisionales: la prueba de contrato contra la instancia local las fija.
 
 ### La nota: `observaciones` del cliente
 
 No hay herramienta de notas. La línea `[AAAA-MM-DD] texto` se **añade al final** de las observaciones del cliente de la factura y nunca sustituye lo que había. Un `tipo: 'actividad'` con `fecha_limite` lleva `(Fecha límite: AAAA-MM-DD)` dentro del texto. Un borrador caduca a los 30 minutos.
 
-## Confirmación del borrador
+## Confirmación del borrador (ADR-031)
 
-Toda escritura es un borrador. El adaptador nunca confirma, y se niega a arrancar si el token trae el scope `confirmar`. Detrás de `ConfirmadorDeBorrador` hay dos opciones; decide Jesús:
+Toda escritura es un borrador que caduca a los 30 minutos. La aprobación N1 de la plataforma es la única confirmación humana, y el conector confirma con un token `confirmar` distinto del del agente:
 
-- **A (la única construida y la de por defecto).** El adaptador deja el borrador y una persona lo confirma en el panel de Factusol (`/panel`, origen `panel` en auditoría).
-- **B (la que recomienda la dirección).** Tras la aprobación N1, el gateway confirma con un token `confirmar` que solo guarda él, solo el borrador aprobado y tras comprobar que su contenido coincide con la carga aprobada (origen `mcp_externo`). Vive en `packages/mcp-gateway`, zona crítica, y no está construida: `FACTUSOL_CONFIRMACION=B` hace que el conector no arranque, para que un borrador no caduque sin que nadie lo confirme.
+1. El gateway, tras la aprobación, abre una conexión efímera con las dos credenciales (cada una en su variable) y llama a `crear_nota_seguimiento`. Sin la de confirmación, falla como `no_autorizado` antes de llegar aquí.
+2. El conector crea el borrador, comprueba en su diff que **solo cambia `observaciones`** y que el valor nuevo es **el actual más la nota aprobada**; si no coincide, lo cancela y falla como `invalido`.
+3. `confirmar_operacion` va por un cliente aparte que lleva el token de confirmación y no hace nada más; se verifica con `get_estado_borrador`.
+4. Con `clave_idempotencia`, el borrador pendiente se guarda en `FACTUSOL_ESTADO_DIR`; tras una caída, la repetición consulta su estado y no crea un segundo.
+
+El conector se niega a arrancar si el token del agente trae el scope `confirmar`. `FACTUSOL_CONFIRMACION=A` (solo desarrollo, sin gateway) deja el borrador pendiente para que una persona lo confirme en el panel. Detalle y secuencia exacta: la especificación, «Confirmación de la escritura».
 
 ## Idempotencia
 
