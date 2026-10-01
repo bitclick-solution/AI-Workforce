@@ -306,7 +306,27 @@ describe('pararServicio', () => {
     expect(resultado).toEqual({ parado: true });
   });
 
-  it('en Windows, taskkill /T dice parado pero el puerto sigue escuchando: remata a quien lo tiene (fallo real tras el #54)', async () => {
+  it('da un margen a que el puerto se libere solo antes de rematar: SIGTERM/taskkill no esperan a que el proceso termine de verdad (fallo real en la CI tras este seguimiento)', async () => {
+    const ejecutar = vi.fn(() => ({ status: 0 })); // taskkill de la raíz
+    // Ocupado las dos primeras veces (la carrera: el proceso aún no ha cerrado
+    // el socket), libre a la tercera — sin necesitar esperar de verdad.
+    const comprobarPuerto = vi
+      .fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const dormir = vi.fn().mockResolvedValue(undefined);
+    const resultado = await pararServicio(
+      { pid: 4242, puerto: 3000 },
+      { plataforma: 'win32', ejecutar, comprobarPuerto, dormir },
+    );
+    expect(resultado).toEqual({ parado: true });
+    expect(dormir).toHaveBeenCalledTimes(2);
+    // Solo el taskkill de la raíz: nunca llegó a necesitar identificar ni rematar nada.
+    expect(ejecutar).toHaveBeenCalledTimes(1);
+  });
+
+  it('en Windows, taskkill /T dice parado pero el puerto sigue escuchando pasado el margen: remata a quien lo tiene (fallo real tras el #54)', async () => {
     const ejecutar = vi
       .fn()
       // taskkill /PID 4242 /T /F (la raíz)
@@ -321,7 +341,7 @@ describe('pararServicio', () => {
     const comprobarPuerto = vi.fn().mockResolvedValue(true);
     const resultado = await pararServicio(
       { pid: 4242, puerto: 3000 },
-      { plataforma: 'win32', ejecutar, comprobarPuerto },
+      { plataforma: 'win32', ejecutar, comprobarPuerto, intentos: 0 },
     );
     expect(resultado).toEqual({ parado: true });
     expect(ejecutar).toHaveBeenNthCalledWith(
@@ -332,7 +352,7 @@ describe('pararServicio', () => {
     );
   });
 
-  it('si el puerto sigue ocupado y no se identifica a nadie, lo dice y no lo da por parado', async () => {
+  it('si el puerto sigue ocupado pasado el margen y no se identifica a nadie, lo dice y no lo da por parado', async () => {
     const ejecutar = vi
       .fn()
       .mockReturnValueOnce({ status: 0 }) // taskkill de la raíz
@@ -340,7 +360,7 @@ describe('pararServicio', () => {
     const comprobarPuerto = vi.fn().mockResolvedValue(true);
     const resultado = await pararServicio(
       { pid: 4242, puerto: 3000 },
-      { plataforma: 'win32', ejecutar, comprobarPuerto },
+      { plataforma: 'win32', ejecutar, comprobarPuerto, intentos: 0 },
     );
     expect(resultado.parado).toBe(false);
     expect(resultado.motivo).toMatch(/sigue escuchando/);

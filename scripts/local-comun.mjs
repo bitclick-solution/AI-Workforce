@@ -414,6 +414,15 @@ export function pararArbolDeProcesos(
  * sigue ocupado, remata en concreto a quien lo escucha; si no se puede identificar
  * (herramienta ausente o puerto que sigue ocupado sin que nadie aparezca), lo dice
  * y no lo da por parado — nunca se borra `procesos.json` sobre una mentira.
+ *
+ * Antes de darlo por atascado, da un margen (`intentos` × `esperaMs`, 2 s por
+ * defecto) a que el puerto se libere solo: ni `SIGTERM` ni `taskkill` esperan a
+ * que el proceso termine de verdad, así que comprobar el puerto justo después es
+ * una carrera — visto de verdad en la CI (Linux): «parado» el árbol, el puerto
+ * seguía ocupado un instante, y para cuando se miraba con `lsof` ya no había
+ * nadie que identificar («no se ha podido identificar quién lo tiene abierto»,
+ * aunque `local:parar` sí lo había parado). Sin este margen, el remate por
+ * puerto confunde una parada normal con un huérfano real.
  */
 export async function pararServicio(
   { pid, puerto },
@@ -422,11 +431,19 @@ export async function pararServicio(
     matar = process.kill,
     ejecutar = spawnSync,
     comprobarPuerto = puertoOcupado,
+    intentos = 10,
+    esperaMs = 200,
+    dormir = (ms) => new Promise((resuelve) => setTimeout(resuelve, ms)),
   } = {},
 ) {
   const arbol = pararArbolDeProcesos(pid, { plataforma, matar, ejecutar });
   if (!arbol.parado || puerto === undefined) return arbol;
-  if (!(await comprobarPuerto(puerto))) return arbol;
+  let sigueOcupado = await comprobarPuerto(puerto);
+  for (let intento = 0; sigueOcupado && intento < intentos; intento += 1) {
+    await dormir(esperaMs);
+    sigueOcupado = await comprobarPuerto(puerto);
+  }
+  if (!sigueOcupado) return arbol;
   const pids = pidsEnPuerto(puerto, { plataforma, ejecutar });
   if (pids.length === 0) {
     return {
