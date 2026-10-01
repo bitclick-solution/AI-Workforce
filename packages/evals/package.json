@@ -24,10 +24,12 @@
     "evals:smoke": "vitest run --config vitest.evals.config.ts"
   },
   "dependencies": {
+    "@aiw/db": "workspace:*",
     "@aiw/domain": "workspace:*",
     "@aiw/learning": "workspace:*",
     "@aiw/models": "workspace:*",
     "@aiw/rooms": "workspace:*",
+    "postgres": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
