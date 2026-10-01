@@ -263,6 +263,16 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
   // atada a la sala vigente en cada momento, sin pisar la conversación de una
   // sala con la respuesta tardía de otra (criterio de hecho).
   const cargarConversacionRef = useRef<() => void>(() => undefined);
+  // Mismo guardado por `vigente` para el error de un envío o una decisión que
+  // responde tarde: si la persona ya cambió de sala, el error de la sala
+  // anterior no se escribe en la sala nueva. A diferencia de
+  // `cargarConversacionRef` (que siempre recarga la sala vigente, venga de
+  // donde venga), aquí además hace falta comprobar que la sala de la que vino
+  // el error (`deSalaId`) sigue siendo la sala vigente: el mensaje es de una
+  // acción concreta, no algo que tenga sentido repetir en otra sala.
+  const informarErrorDeEnvioRef = useRef<(deSalaId: string, mensaje: string) => void>(
+    () => undefined,
+  );
 
   useEffect(() => {
     establecerPanelAbierto(window.matchMedia(PANEL_ABIERTO_DESDE).matches);
@@ -307,6 +317,9 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
       );
     };
     cargarConversacionRef.current = cargarConversacion;
+    informarErrorDeEnvioRef.current = (deSalaId, mensaje) => {
+      if (vigente && deSalaId === salaId) establecerErrorEnvio(mensaje);
+    };
 
     fuente.miembros(salaId).then(
       (datos) => {
@@ -409,6 +422,7 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
     evento.preventDefault();
     const texto = borrador.trim();
     if (!texto || enviando) return;
+    const deSalaId = salaId;
     establecerEnviando(true);
     establecerErrorEnvio(undefined);
     void fuente
@@ -419,7 +433,8 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
           recargarConversacion();
         },
         (error: unknown) => {
-          establecerErrorEnvio(
+          informarErrorDeEnvioRef.current(
+            deSalaId,
             error instanceof Error ? error.message : 'No se pudo enviar el mensaje.',
           );
         },
@@ -430,6 +445,7 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
   };
 
   const decidirPropuesta = (propuestaId: string, sentido: 'aprobada' | 'rechazada') => {
+    const deSalaId = salaId;
     establecerDecidiendo((actual) => ({ ...actual, [propuestaId]: true }));
     void fuente
       .decidirPropuesta(propuestaId, sentido)
@@ -438,7 +454,8 @@ export function VistaDeSalaV1({ salaInicial, fuente: fuenteInyectada }: VistaDeS
           recargarConversacion();
         },
         (error: unknown) => {
-          establecerErrorEnvio(
+          informarErrorDeEnvioRef.current(
+            deSalaId,
             error instanceof Error ? error.message : 'No se pudo registrar la decisión.',
           );
         },
