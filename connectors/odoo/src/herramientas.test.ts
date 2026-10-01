@@ -114,7 +114,7 @@ describe('crear_nota_seguimiento', () => {
       'execute_approved_write',
     ]);
     expect(cliente.llamadas[2]?.argumentos).toEqual({
-      approval_id: 'apr-2026-0001',
+      approval_id: 'odoo-write:prueba00000000000000000000000001',
       confirm: true,
     });
   });

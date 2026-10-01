@@ -1,9 +1,16 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { conTenant } from '@aiw/db';
+import { HAY_BASE_DE_DATOS, MOTIVO_SALTO, conectar } from '@aiw/db/pruebas';
 import { enrutadorDeGuiones, Enrutador } from '@aiw/models';
 import { CATALOGO } from '@aiw/platform-agents';
-import { describe, expect, it } from 'vitest';
+import type postgres from 'postgres';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { LISTA_BLANCA_COBROS } from './constantes.js';
-import { CORREO_JESUS_POR_DEFECTO, plantillaCobros } from './siembra.js';
+import { CORREO_JESUS_POR_DEFECTO, plantillaCobros, sembrarBitclick } from './siembra.js';
 
 describe('plantillaCobros', () => {
   it('lee la plantilla certificada del catálogo, sin tocarla', () => {
@@ -58,4 +65,61 @@ describe('plantillas certificadas de plataforma: enrutado por papel', () => {
       'finanzas.conciliacion-bancaria': 'opus5',
     });
   });
+});
+
+const TITULO_SIEMBRA = HAY_BASE_DE_DATOS
+  ? 'sembrarBitclick (contra PostgreSQL real)'
+  : `sembrarBitclick (contra PostgreSQL real) — SALTADO. ${MOTIVO_SALTO}`;
+
+describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO_SIEMBRA, () => {
+  let cliente: postgres.Sql | undefined;
+  let raiz: string | undefined;
+
+  afterEach(async () => {
+    await cliente?.end();
+    if (raiz) rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it('guarda las cinco cargas jsonb como objeto o lista, no como texto doblemente codificado', async () => {
+    cliente = conectar();
+    raiz = mkdtempSync(join(tmpdir(), 'aiw-bitclick-siembra-'));
+    writeFileSync(join(raiz, 'pnpm-workspace.yaml'), '');
+
+    const estado = await sembrarBitclick(cliente, { raiz });
+    expect(estado.creada).toBe(true);
+
+    const [tipos] = await conTenant(
+      cliente,
+      estado.tenantId,
+      (tx) =>
+        tx<
+          {
+            ficha: string;
+            enrutado_modelo: string;
+            politica: string;
+            lista_blanca: string;
+            niveles_por_clase: string;
+          }[]
+        >`
+          select
+            jsonb_typeof(puesto.ficha) as ficha,
+            jsonb_typeof(puesto.enrutado_modelo) as enrutado_modelo,
+            jsonb_typeof(version_puesto.politica) as politica,
+            jsonb_typeof(autorizacion_herramientas.lista_blanca) as lista_blanca,
+            jsonb_typeof(autorizacion_herramientas.niveles_por_clase) as niveles_por_clase
+          from puesto
+          join version_puesto on version_puesto.id = puesto.version_activa_id
+          join autorizacion_herramientas on autorizacion_herramientas.puesto_id = puesto.id
+          where puesto.tenant_id = ${estado.tenantId} and puesto.id = ${estado.puestoId}
+        `,
+    );
+
+    expect(tipos).toEqual({
+      ficha: 'object',
+      enrutado_modelo: 'object',
+      politica: 'object',
+      lista_blanca: 'array',
+      niveles_por_clase: 'object',
+    });
+  }, 30_000);
 });

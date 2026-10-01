@@ -59,6 +59,25 @@ describe('contrato sobre respuestas grabadas', () => {
     expect(SalidaCrearNotaSeguimiento.parse(salida)).toMatchObject({ id: 9001, factura_id: 42 });
   });
 
+  it('crear_nota_seguimiento con tipo «actividad» cumple el contrato (criterio de hecho 6)', async () => {
+    // El camino que falló de verdad contra el MCP v1.3.1: preview_write y
+    // validate_write envuelven su respuesta entera bajo «result» porque su tipo
+    // de vuelta es un diccionario genérico, no un modelo con campos propios como
+    // search_records. Sin explorar esa envolvente, extraerAprobacion nunca
+    // encontraba el token de aprobación anidado en result.approval.token.
+    const salida = await herramientas.crearNotaSeguimiento({
+      factura_id: 42,
+      texto: 'Segundo aviso de contrato.',
+      tipo: 'actividad',
+      fecha_limite: '2026-10-01',
+    });
+    expect(SalidaCrearNotaSeguimiento.parse(salida)).toMatchObject({
+      id: 5501,
+      factura_id: 42,
+      tipo: 'actividad',
+    });
+  });
+
   it('las grabaciones no llevan datos personales reales', () => {
     const crudo = JSON.stringify(cargarGrabaciones());
     expect(crudo).not.toMatch(/@[a-z0-9.-]+\.[a-z]{2,}/i);

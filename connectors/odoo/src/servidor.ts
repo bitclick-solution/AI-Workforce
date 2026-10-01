@@ -42,11 +42,15 @@ export const CATALOGO = [
     name: NOMBRES.listar,
     description: DESCRIPCIONES[NOMBRES.listar],
     inputSchema: ESQUEMA_ENTRADA_LISTAR,
+    // Sin esto, el gateway MCP la tipa como escritura (lo más restrictivo por
+    // defecto) y pide aprobación N1 hasta para leer.
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   },
   {
     name: NOMBRES.nota,
     description: DESCRIPCIONES[NOMBRES.nota],
     inputSchema: ESQUEMA_ENTRADA_NOTA,
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   },
 ] as const;
 

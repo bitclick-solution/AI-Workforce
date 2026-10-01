@@ -9,7 +9,7 @@ PowerShell; en bash cambia la forma de exportar variables, no los mandatos.
 
 El Constructor construye y prueba con las grabaciones de `connectors/odoo` y
 con dobles: lo que prueba la integración continua es el código, nunca el Odoo
-real. Los pasos 2 a 9 de este runbook los ejecuta el Probador (o Jesús) en su
+real. Los pasos 2 a 10 de este runbook los ejecuta el Probador (o Jesús) en su
 propia máquina, después de fusionar, con sus propias credenciales.
 
 ## Aviso: el modelo de la tarea depende de `AIW_PROVEEDOR_MODELOS`
@@ -34,6 +34,32 @@ Variables que hacen falta en tu `.env` local, con sus nombres y sin valores.
 
 `ODOO_URL`, `ODOO_BASE`, `ODOO_USUARIO`, `ODOO_CLAVE_API`. Opcional,
 `ODOO_MCP_URL` (por defecto `http://odoo-mcp:8000/mcp`).
+
+### Instancia local del MCP dinámico, si no la tienes ya corriendo
+
+El MCP dinámico que ya corre en la pila de Bitclick entra a Odoo con su propio
+usuario, no con el de pruebas, y eso rompería el criterio de aislamiento de
+ADR-024. Si no tienes ya una instancia propia para la empresa de pruebas,
+levanta una local de la misma imagen (`ghcr.io/erpipe-org/mcp-odoo`, versión
+multi-instancia v1.3.1 o la que use Bitclick) con las credenciales del usuario
+de pruebas, en un puerto solo de tu máquina, y pon `ODOO_MCP_URL` apuntando a
+ella. Tres tropiezos ya resueltos, para no repetirlos:
+
+1. **La imagen pide la contraseña además de la clave de API.** Sin ella dice
+   «No Odoo configuration found» al leer la configuración del entorno. La
+   clave de API sirve como contraseña: pásala también en la variable de
+   contraseña de la imagen.
+2. **El nombre de la base puede estar desactualizado en tu `.env`.** Confírmalo
+   contra una instancia que ya esté conectada (la del conector de Jesús, si la
+   tienes a mano) y pásalo por entorno al arrancar el contenedor, sin tocar tu
+   `.env` si no estás seguro del valor correcto.
+3. **En Git Bash de Windows, desactiva la conversión de rutas** con
+   `MSYS_NO_PATHCONV=1` antes del `docker run`. Sin ella, un argumento como
+   `--path /mcp` le llega corrompido a la imagen (Git Bash lo reescribe como
+   una ruta de Windows).
+
+Para parar la instancia local cuando termines: `docker rm -f` con el nombre
+que le hayas dado al contenedor.
 
 ### SMTP real, para que el correo llegue a tu bandeja
 
@@ -134,7 +160,25 @@ repetir: si ya existe, lo dice y no crea nada nuevo. Sobrevive a `pnpm
 local:parar` y a `pnpm local:arrancar`; solo `pnpm local:a-cero` la borra
 (vuelve a sembrar después con este mismo comando).
 
-## 6. Lanza una tarea de Cobros (criterios de hecho 3, 4 y 6)
+## 6. Activa el puesto de Cobros (criterios de hecho 5 y 6)
+
+```powershell
+pnpm --filter @aiw/worker bitclick:activar
+```
+
+La siembra del paso 5 deja el puesto **en prueba** a propósito: ADR-015 dice
+que ese estado es operativo, no declarativo, y que ninguna escritura sale al
+mundo mientras lo esté — el agente la simula. Mientras el puesto siga en
+prueba, aprobar un recordatorio por correo en el paso 8 no escribe nada de
+verdad en Odoo, por diseño. Este guion lo pasa a **activo**, deja su propia
+entrada en el libro de auditoría y es seguro de repetir: si ya está activo,
+lo dice y no toca nada.
+
+Ejecútalo solo después de validar el criterio de hecho 1 (pasos 2 y 3):
+activar antes dejaría escribir contra registros compartidos que todavía
+pueden verse desde la empresa de pruebas.
+
+## 7. Lanza una tarea de Cobros (criterios de hecho 3, 4 y 6)
 
 ```powershell
 pnpm --filter @aiw/worker bitclick:cobros
@@ -145,12 +189,12 @@ hijo que lanza este guion habla con la empresa de pruebas, nunca con otra) y
 lanza una tarea nueva sobre el puesto ya sembrado. Es repetible: cada
 ejecución crea una tarea raíz nueva. **Lánzala a mano, y como mucho una vez al
 día si decides programarla — nunca en bucle.** Con `bedrock-ue`, cada tarea
-paga con el modelo real; el coste queda en el contador del tenant (paso 8).
+paga con el modelo real; el coste queda en el contador del tenant (paso 9).
 
 Deja la terminal abierta: el trabajador corre en ese proceso hasta que la
 tarea termina.
 
-## 7. Aprueba o rechaza desde el correo (criterio de hecho 5)
+## 8. Aprueba o rechaza desde el correo (criterio de hecho 5)
 
 En otra terminal, con las mismas variables del paso 1 cargadas y las de SMTP
 del paso 1:
@@ -163,25 +207,25 @@ Si el agente propone un recordatorio, te llega un correo real con un enlace de
 aprobación firmado. Aprobarlo ejecuta `crear_nota_seguimiento` en Odoo;
 rechazarlo no escribe nada. El enlace vale por el tiempo de
 `AIW_APROBACION_VALIDEZ_HORAS` (72 horas por defecto) o por lo que fije
-`BITCLICK_VALIDEZ_APROBACION_SEGUNDOS` al lanzar la tarea del paso 6.
+`BITCLICK_VALIDEZ_APROBACION_SEGUNDOS` al lanzar la tarea del paso 7.
 
-## 8. Comprueba la nota en Odoo, el libro y el contador
+## 9. Comprueba la nota en Odoo, el libro y el contador
 
 - En Odoo: abre la factura y comprueba la nota de seguimiento (o la actividad
   con fecha límite) que se ha creado.
-- Libro y contador, con el tenant que imprimió el paso 6:
+- Libro y contador, con el tenant que imprimió el paso 7:
 
   ```powershell
   pnpm --filter @aiw/worker bitclick:informe
   ```
 
-  (el mismo guion del paso 9 ya muestra la cadena verificada y el coste; para
+  (el mismo guion del paso 10 ya muestra la cadena verificada y el coste; para
   solo la cadena, `verificarCadenaEnBase` se imprime también al terminar la
-  tarea del paso 6).
+  tarea del paso 7).
 
-## 9. Genera el informe semanal (criterio de hecho 7)
+## 10. Genera el informe semanal (criterio de hecho 7)
 
-Tras al menos una semana de uso (varias ejecuciones del paso 6):
+Tras al menos una semana de uso (varias ejecuciones del paso 7):
 
 ```powershell
 pnpm --filter @aiw/worker bitclick:informe

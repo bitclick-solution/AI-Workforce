@@ -48,6 +48,31 @@ function faltanVariablesOdoo(entorno: Record<string, string | undefined>): strin
   );
 }
 
+/**
+ * La versión activa del puesto en este instante, no la que quedó congelada en
+ * `.aiw-local/bitclick.json` al sembrar: una corrección o una promoción del
+ * aprendizaje mueven `puesto.version_activa_id` y una tarea nueva debe usar esa,
+ * no la primera que tuvo el puesto.
+ */
+export async function versionActivaDelPuesto(
+  cliente: postgres.Sql,
+  tenantId: string,
+  puestoId: string,
+): Promise<string> {
+  const [fila] = await conTenant(
+    cliente,
+    tenantId,
+    (tx) =>
+      tx<{ version_activa_id: string | null }[]>`
+        select version_activa_id from puesto where tenant_id = ${tenantId} and id = ${puestoId}
+      `,
+  );
+  if (!fila?.version_activa_id) {
+    throw new Error(`El puesto ${puestoId} no tiene versión activa.`);
+  }
+  return fila.version_activa_id;
+}
+
 /** Cuántas tareas de este puesto se han lanzado ya hoy: aviso, no bloqueo. */
 async function tareasDeHoy(
   cliente: postgres.Sql,
@@ -141,10 +166,15 @@ export async function principal(
     );
   }
 
+  const versionPuestoId = await versionActivaDelPuesto(
+    montado.cliente,
+    estado.tenantId,
+    estado.puestoId,
+  );
   const { tareaId } = await crearTareaRaiz(montado.cliente, {
     tenantId: estado.tenantId,
     puestoId: estado.puestoId,
-    versionPuestoId: estado.versionPuestoId,
+    versionPuestoId,
     presupuestoEuros: plantillaCobros().presupuestoPorTareaEuros,
   });
 
@@ -160,7 +190,7 @@ export async function principal(
       {
         tenantId: estado.tenantId,
         puestoId: estado.puestoId,
-        versionPuestoId: estado.versionPuestoId,
+        versionPuestoId,
         tareaId,
         encargo: ENCARGO_COBROS,
         validezAprobacionSegundos: Number(

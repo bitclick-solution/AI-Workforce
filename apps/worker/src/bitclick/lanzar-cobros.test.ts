@@ -1,3 +1,10 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { conTenant } from '@aiw/db';
+import { HAY_BASE_DE_DATOS, MOTIVO_SALTO, conectar } from '@aiw/db/pruebas';
+import type postgres from 'postgres';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type * as EstadoLocal from './estado-local.js';
@@ -8,7 +15,8 @@ vi.mock('./estado-local.js', async (importarOriginal) => ({
   leerEstadoBitclick: () => undefined,
 }));
 
-const { principal } = await import('./lanzar-cobros.js');
+const { principal, versionActivaDelPuesto } = await import('./lanzar-cobros.js');
+const { sembrarBitclick } = await import('./siembra.js');
 
 /** Valor de prueba, largo y reconocible. No es una credencial real de nada. */
 const CLAVE_DE_PRUEBA = 'clave-de-prueba-0d1a9f7c3b5e';
@@ -71,5 +79,56 @@ describe('principal (validación de entorno, sin tocar Temporal ni la base)', ()
     expect(mensaje).toContain('bitclick:sembrar');
     expect(mensaje).not.toContain(CLAVE_DE_PRUEBA);
     expect(process.exitCode).toBe(1);
+  });
+});
+
+const TITULO_VERSION_ACTIVA = HAY_BASE_DE_DATOS
+  ? 'versionActivaDelPuesto (contra PostgreSQL real)'
+  : `versionActivaDelPuesto (contra PostgreSQL real) — SALTADO. ${MOTIVO_SALTO}`;
+
+describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO_VERSION_ACTIVA, () => {
+  let cliente: postgres.Sql | undefined;
+  let raiz: string | undefined;
+
+  afterEach(async () => {
+    await cliente?.end();
+    if (raiz) rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it('lee la versión activa de ahora, no la congelada al sembrar', async () => {
+    cliente = conectar();
+    raiz = mkdtempSync(join(tmpdir(), 'aiw-bitclick-version-activa-'));
+    writeFileSync(join(raiz, 'pnpm-workspace.yaml'), '');
+    const estado = await sembrarBitclick(cliente, { raiz });
+
+    expect(await versionActivaDelPuesto(cliente, estado.tenantId, estado.puestoId)).toBe(
+      estado.versionPuestoId,
+    );
+
+    // Una promoción del aprendizaje (u otra corrección) mueve el puntero sin
+    // tocar `.aiw-local/bitclick.json`: lo que estaba congelado ahí queda
+    // desactualizado a propósito.
+    const [nuevaVersion] = await conTenant(
+      cliente,
+      estado.tenantId,
+      (tx) =>
+        tx<{ id: string }[]>`
+          insert into version_puesto (tenant_id, puesto_id, numero, prompt, politica)
+          select tenant_id, puesto_id, numero + 1, prompt, politica
+          from version_puesto where id = ${estado.versionPuestoId}
+          returning id
+        `,
+    );
+    if (!nuevaVersion) throw new Error('La nueva versión del puesto no se creó.');
+    await conTenant(
+      cliente,
+      estado.tenantId,
+      (tx) =>
+        tx`update puesto set version_activa_id = ${nuevaVersion.id} where id = ${estado.puestoId}`,
+    );
+
+    const activa = await versionActivaDelPuesto(cliente, estado.tenantId, estado.puestoId);
+    expect(activa).toBe(nuevaVersion.id);
+    expect(activa).not.toBe(estado.versionPuestoId);
   });
 });

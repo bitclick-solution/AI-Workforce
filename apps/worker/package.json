@@ -18,6 +18,7 @@
     "aprendizaje": "tsx src/demo-aprendizaje-cli.ts",
     "comprobar:centrifugo": "tsx src/comprobar-centrifugo.ts",
     "bitclick:sembrar": "tsx src/bitclick/sembrar.ts",
+    "bitclick:activar": "tsx src/bitclick/activar.ts",
     "bitclick:cobros": "tsx src/bitclick/lanzar-cobros.ts",
     "bitclick:informe": "tsx src/bitclick/informe-semanal.ts"
   },
