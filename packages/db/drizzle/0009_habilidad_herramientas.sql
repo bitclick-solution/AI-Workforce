@@ -7,10 +7,11 @@
 --
 -- `habilidad` ya tiene seguridad de fila por `tenant_id` desde `0000_inicial.sql`;
 -- una columna nueva hereda esa política sin necesitar ninguna propia, igual que
--- `disposicion_panel` en `0008_disposicion_panel_inicio.sql`. La fila de
--- `habilidad` es inmutable (columnasInmutables en packages/db/src/columnas.ts);
--- esto es una alteración de esquema (DDL), no un UPDATE sobre filas existentes,
--- así que el disparador de inmutabilidad no la afecta.
+-- `disposicion_panel` en `0008_disposicion_panel_inicio.sql`. `habilidad` no está
+-- en `v_tablas` (0000_inicial.sql), así que no lleva el disparador de fila
+-- inmutable que sí tienen `version_puesto`, `leccion`, etc. — y aunque lo
+-- llevara, tampoco la afectaría: ese disparador salta en `UPDATE`, y esto es
+-- una alteración de esquema (DDL) sobre la tabla, no un `UPDATE` de sus filas.
 --
 -- Autocontenida: solo altera `habilidad`, creada en `0000_inicial.sql`.
 -- Se aplica con `pnpm --filter @aiw/db db:migrar` y se deshace con `db:revertir`.
