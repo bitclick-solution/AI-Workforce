@@ -68,6 +68,11 @@ Sin endpoints, sin flujos, sin tablas ni migraciones. Contrato común; los nombr
 
 Presupuesto: 45 €. Consumo real: se registra en la rebanada al abrir el PR. Superar el presupuesto en un 50 % pasa la rebanada a Bloqueada con diagnóstico.
 
-## Pregunta abierta
+## Requisito previo
 
-¿La empresa de pruebas de Odoo de Bitclick (ADR-024) tiene extractos bancarios importados con datos ficticios? Si no, el Constructor necesita que se carguen antes de grabar las respuestas de contrato de `leer_extracto_bancario`.
+Antes de grabar las respuestas de contrato de `leer_extracto_bancario` contra Odoo, hay que cargar extractos bancarios con datos ficticios en la empresa de pruebas de Odoo de Bitclick (ADR-024). Esta rebanada no lo hace: escribir en ese Odoo necesita las credenciales del usuario de permisos mínimos, que entrega Jesús, y su aprobación, y las credenciales no entran en el repositorio ni en una sesión de planificación.
+
+- Quién: Jesús prepara la carga o la encarga a un Operador. Si el Constructor escribe un guion para hacerla, lo ejecuta solo con esas credenciales por entorno y con la aprobación de Jesús.
+- Qué: extractos de una o dos cuentas con apuntes casados y sin casar, una devolución de recibo y un apunte que no casa con nada, todos con importes y nombres inventados y sin ningún dato personal real.
+- Hasta entonces: el contrato se graba y prueba sobre `connectors/demo`, y las pruebas de contrato contra Odoo se saltan diciendo qué falta (criterio de hecho 6). La rebanada puede fusionarse sin la carga; el criterio 6 contra Odoo real, no.
+- Si falta el requisito cuando el Constructor llega a él, no bloquea la rebanada (decisión de Jesús del 2-10): trabaja con grabaciones, no carga nada por su cuenta y deja dicho en el PR que falta la verificación real, que hará el Probador cuando Jesús importe un extracto ficticio.
