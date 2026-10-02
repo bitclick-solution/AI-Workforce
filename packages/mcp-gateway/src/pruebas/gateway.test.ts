@@ -74,6 +74,8 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
       /** ADR-031: referencia de la credencial de confirmación y entorno que la resuelve. */
       referenciaConfirmacion?: string;
       entorno?: Record<string, string>;
+      /** La conexión que lleva la credencial de confirmación lanza al llamar (corte de red). */
+      fallarConConfirmacion?: boolean;
     } = {},
   ) {
     const sembrado = await sembrarFinanzas(cliente, {
@@ -103,7 +105,11 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
             : { fallosIniciales: opciones.fallosIniciales }),
         });
         montados.push(montado);
-        return conectarPorMcp(montado.transporte, NOMBRE_CONECTOR_DEMO);
+        const conexion = await conectarPorMcp(montado.transporte, NOMBRE_CONECTOR_DEMO);
+        if (opciones.fallarConConfirmacion && confirmacion !== undefined) {
+          return { ...conexion, llamar: () => Promise.reject(new Error('Read timed out')) };
+        }
+        return conexion;
       },
       opciones.referenciaConfirmacion === undefined
         ? {}
@@ -327,6 +333,31 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
       expect(llamadas).toHaveLength(1);
       expect(llamadas[0]?.resultado).toBe('error');
       expect(JSON.stringify(llamadas[0]?.datosReferenciados)).toContain('no_autorizado');
+      // Nunca recibió la credencial: no se marca la confirmación.
+      expect(JSON.stringify(llamadas[0]?.datosReferenciados)).not.toContain('confirmacion');
+    });
+
+    it('si la conexión con la credencial lanza, el libro también marca la confirmación', async () => {
+      const { gateway, crearTarea, sembrado } = await montar({
+        referenciaConfirmacion: REFERENCIA,
+        entorno: CON_TOKEN,
+        fallarConConfirmacion: true,
+      });
+      const contexto = await crearTarea(sembrado.cobros);
+      await expect(
+        gateway.llamar(contexto, { ...ESCRITURA, aprobacionId: uuidV7() }),
+      ).rejects.toThrow(/timed out/);
+
+      const cadena = await conTenant(cliente, sembrado.tenantId, (tx) =>
+        leerCadena(tx, sembrado.tenantId),
+      );
+      const llamadas = cadena.filter((e) => e.accion === ACCIONES.llamada);
+      expect(llamadas).toHaveLength(1);
+      expect(llamadas[0]?.resultado).toBe('error');
+      expect(llamadas[0]?.datosReferenciados).toEqual(
+        expect.arrayContaining([{ tipo: 'confirmacion', id: 'gateway' }]),
+      );
+      expect(JSON.stringify(cadena)).not.toContain(TOKEN_CONFIRMACION);
     });
 
     it('una credencial vacía cuenta como no configurada', async () => {

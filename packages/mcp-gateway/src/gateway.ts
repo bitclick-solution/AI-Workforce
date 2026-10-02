@@ -307,9 +307,17 @@ export class Gateway {
 
     const comienzo = Date.now();
     let resultado: ResultadoHerramienta;
+    /** Cierto solo si la credencial de confirmación llegó a entregarse a una conexión. */
+    const entrega = { hecha: false };
     try {
       resultado = conConfirmacion
-        ? await this.#llamarConConfirmacion(contexto, herramienta, abierta.autorizacion, peticion)
+        ? await this.#llamarConConfirmacion(
+            contexto,
+            herramienta,
+            abierta.autorizacion,
+            peticion,
+            entrega,
+          )
         : await abierta.conexion.llamar(herramienta.nombre, peticion.argumentos);
     } catch (error) {
       const duracionMs = Date.now() - comienzo;
@@ -318,6 +326,9 @@ export class Gateway {
         duracionMs,
         detalle: error instanceof Error ? error.message : String(error),
         ...(peticion.aprobacionId ? { aprobacionId: peticion.aprobacionId } : {}),
+        // El libro distingue una llamada que usó la credencial de confirmación de una que
+        // nunca la recibió, también cuando la conexión lanza en vez de devolver `isError`.
+        ...(entrega.hecha ? { confirmacion: true } : {}),
       });
       throw error;
     }
@@ -364,6 +375,7 @@ export class Gateway {
     herramienta: HerramientaDescubierta,
     autorizacion: AutorizacionDePuesto,
     peticion: PeticionDeLlamada,
+    entrega: { hecha: boolean },
   ): Promise<ResultadoHerramienta> {
     const referencia = this.#registro.referenciaConfirmacion(herramienta.conector) ?? '';
     let confirmacion: Secreto | undefined;
@@ -393,6 +405,7 @@ export class Gateway {
         ? null
         : await this.#secretos.resolver(autorizacion.referenciaSecreto);
     const conexion = await this.#registro.abrir(autorizacion.conectorNombre, secreto, confirmacion);
+    entrega.hecha = true;
     try {
       return await conexion.llamar(herramienta.nombre, peticion.argumentos);
     } finally {
