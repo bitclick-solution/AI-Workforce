@@ -23,6 +23,8 @@
  */
 import { conTenant, uuidV7 } from '@aiw/db';
 import {
+  ACCIONES as ACCIONES_APROBACION,
+  ACCION_TAREA_CONTADA,
   cargaDeSenal,
   leerAprobacion,
   registrarDecision,
@@ -131,6 +133,53 @@ export interface AvisoDelInicio {
   creadoEn: string;
 }
 
+export type TipoDePaso = 'arranque' | 'herramienta' | 'aprobacion_pedida' | 'decision';
+
+/** Un paso de la tarea, tal como lo cuenta el libro de auditoría. */
+export interface PasoDeLaTarea {
+  /** Número de orden de la entrada en el libro (solo crece). */
+  orden: number;
+  tipo: TipoDePaso;
+  accion: string;
+  herramienta: string | null;
+  resultado: 'exito' | 'error' | 'rechazado' | 'parcial';
+  costeEuros: number;
+  /** Nivel de autonomía aplicado (N0 a N3), si la entrada lo anota. */
+  nivel: 'n0' | 'n1' | 'n2' | 'n3' | null;
+  /** Clase de acción de la política, si la entrada la anota. */
+  claseAccion: string | null;
+  /** El motivo que anota el bucle del agente. `null` cuando el libro no lo trae. */
+  porque: string | null;
+  creadoEn: string;
+}
+
+export interface AprobacionPendienteDeLaTarea {
+  aprobacionId: string;
+  claseAccion: string;
+  nivelExigido: string;
+  /** El mismo resumen legible que lleva el correo de aprobación. */
+  resumenLegible: string;
+  creadoEn: string;
+  venceEn: string | null;
+  /** Solo a quien se le pidió. Igual que la ruta de decidir, que responde 403 al resto. */
+  puedeDecidir: boolean;
+}
+
+export interface DetalleDeTarea {
+  tareaId: string;
+  encargo: string;
+  estado: string;
+  puestoId: string;
+  agente: string;
+  departamento: string;
+  desde: string;
+  actualizadoEn: string;
+  /** Suma del coste de las entradas del libro de esta tarea. */
+  costeEuros: number;
+  pasos: PasoDeLaTarea[];
+  aprobacionPendiente: AprobacionPendienteDeLaTarea | null;
+}
+
 export interface TareaDeEncargoCreada {
   tareaId: string;
 }
@@ -142,6 +191,12 @@ export interface DecisionDelInicio {
 
 /** Lo que la ruta necesita de fuera. Se inyecta para probarla sin base ni Temporal. */
 export interface PuertoInicio {
+  /** Solo lectura. `null` si la tarea no existe en el tenant (también si es de otro). */
+  detalleDeTarea(
+    tenantId: string,
+    personaId: string,
+    tareaId: string,
+  ): Promise<DetalleDeTarea | null>;
   agentes(tenantId: string): Promise<AgenteDelInicio[]>;
   avisos(tenantId: string, personaId: string): Promise<AvisoDelInicio[]>;
   /** `null` si el puesto no existe en el tenant, no tiene versión activa o no admite trabajo nuevo. */
@@ -181,6 +236,39 @@ function campo(cuerpo: unknown, nombre: string): unknown {
     : undefined;
 }
 
+const ACCIONES_DE_DECISION: ReadonlySet<string> = new Set([
+  ACCIONES_APROBACION.aprobada,
+  ACCIONES_APROBACION.rechazada,
+  ACCIONES_APROBACION.editada,
+  ACCIONES_APROBACION.vencida,
+]);
+
+/**
+ * Qué paso es una entrada del libro, o `null` si es ruido técnico que la persona
+ * no necesita ver (correo enviado, enlace abierto, señal entregada, uso del modelo
+ * o tarifas). Esas entradas siguen sumando al coste de la tarea.
+ */
+export function clasificarPaso(accion: string, herramienta: string | null): TipoDePaso | null {
+  if (accion === ACCION_TAREA_CONTADA || accion === 'tarea.arrancada') return 'arranque';
+  if (accion === ACCIONES_APROBACION.solicitada) return 'aprobacion_pedida';
+  if (ACCIONES_DE_DECISION.has(accion)) return 'decision';
+  if (accion.startsWith('aprobacion.') || accion.startsWith('senal.')) return null;
+  if (accion.startsWith('herramienta.') || herramienta !== null) return 'herramienta';
+  return null;
+}
+
+/** Valor de la primera referencia del tipo pedido en `datos_referenciados`. */
+export function referenciaDe(datos: unknown, tipo: string): string | null {
+  if (!Array.isArray(datos)) return null;
+  for (const dato of datos) {
+    if (typeof dato === 'object' && dato !== null) {
+      const { tipo: t, id } = dato as { tipo?: unknown; id?: unknown };
+      if (t === tipo && typeof id === 'string' && id.trim().length > 0) return id;
+    }
+  }
+  return null;
+}
+
 export async function atenderInicio(
   peticion: PeticionInicio,
   configuracion: ConfiguracionInicio | undefined,
@@ -203,6 +291,17 @@ export async function atenderInicio(
   if (camino === `${PREFIJO_INICIO}/avisos`) {
     if (peticion.metodo !== 'GET') return respuesta(405, { error: 'Los avisos se leen con GET.' });
     return respuesta(200, { avisos: await puerto.avisos(tenantId, personaId) });
+  }
+
+  const detalle = /^\/inicio\/tareas\/([^/]+)$/.exec(camino);
+  if (detalle) {
+    if (peticion.metodo !== 'GET') return respuesta(405, { error: 'El detalle se lee con GET.' });
+    const tareaId = detalle[1] ?? '';
+    if (!UUID.test(tareaId)) return respuesta(400, { error: 'Esa tarea no es válida.' });
+    const tarea = await puerto.detalleDeTarea(tenantId, personaId, tareaId);
+    // Misma respuesta si no existe o es de otra organización: no revela cuál de las dos.
+    if (!tarea) return respuesta(404, { error: 'Esa tarea no existe.' });
+    return respuesta(200, { tarea });
   }
 
   if (camino === `${PREFIJO_INICIO}/encargar`) {
@@ -281,6 +380,124 @@ export function puertoInicio(
   buscarCentrifugo: BuscadorCentrifugo = fetch as unknown as BuscadorCentrifugo,
 ): PuertoInicio {
   return {
+    async detalleDeTarea(tenantId, personaId, tareaId) {
+      return conTenant(cliente, tenantId, async (tx) => {
+        const [tarea] = await tx<
+          {
+            id: string;
+            estado: string;
+            resultado: unknown;
+            creado_en: Date;
+            actualizado_en: Date;
+            puesto_id: string;
+            puesto: string;
+            departamento: string;
+          }[]
+        >`
+          select t.id, t.estado::text as estado, t.resultado, t.creado_en, t.actualizado_en,
+            t.puesto_id, pu.nombre as puesto, d.nombre as departamento
+          from tarea t
+          join puesto pu on pu.tenant_id = t.tenant_id and pu.id = t.puesto_id
+          join departamento d on d.tenant_id = pu.tenant_id and d.id = pu.departamento_id
+          where t.tenant_id = ${tenantId} and t.id = ${tareaId}
+        `;
+        if (!tarea) return null;
+
+        const entradas = await tx<
+          {
+            numero_orden: number;
+            accion: string;
+            herramienta: string | null;
+            resultado: PasoDeLaTarea['resultado'];
+            coste_euros: string;
+            nivel_aplicado: PasoDeLaTarea['nivel'];
+            datos_referenciados: unknown;
+            creado_en: Date;
+          }[]
+        >`
+          select numero_orden, accion, herramienta, resultado::text as resultado,
+            coste_euros::text as coste_euros, nivel_aplicado::text as nivel_aplicado,
+            datos_referenciados, creado_en
+          from entrada_auditoria
+          where tenant_id = ${tenantId} and tarea_id = ${tareaId}
+          order by numero_orden asc
+        `;
+
+        const pasos: PasoDeLaTarea[] = [];
+        let costeEuros = 0;
+        for (const e of entradas) {
+          const coste = Number(e.coste_euros);
+          costeEuros += coste;
+          const tipo = clasificarPaso(e.accion, e.herramienta);
+          if (!tipo) continue;
+          pasos.push({
+            orden: Number(e.numero_orden),
+            tipo,
+            accion: e.accion,
+            herramienta: e.herramienta,
+            resultado: e.resultado,
+            costeEuros: coste,
+            nivel: e.nivel_aplicado,
+            claseAccion: referenciaDe(e.datos_referenciados, 'clase_accion'),
+            porque: referenciaDe(e.datos_referenciados, 'motivo'),
+            creadoEn: e.creado_en.toISOString(),
+          });
+        }
+
+        const [pendiente] = await tx<
+          {
+            id: string;
+            persona_id: string | null;
+            clase_accion: string;
+            nivel_exigido: string;
+            resumen_legible: string;
+            creado_en: Date;
+            vence_en: Date | null;
+          }[]
+        >`
+          select a.id, a.persona_id, a.clase_accion, a.nivel_exigido::text as nivel_exigido,
+            a.resumen_legible, a.creado_en, a.vence_en
+          from aprobacion a
+          left join decision_aprobacion d on d.tenant_id = a.tenant_id and d.aprobacion_id = a.id
+          where a.tenant_id = ${tenantId} and a.tarea_id = ${tareaId} and d.id is null
+          order by a.creado_en asc
+          limit 1
+        `;
+
+        const encargo =
+          typeof tarea.resultado === 'object' && tarea.resultado !== null
+            ? (tarea.resultado as Record<string, unknown>)['encargo']
+            : undefined;
+
+        return {
+          tareaId: tarea.id,
+          encargo:
+            typeof encargo === 'string' && encargo.trim().length > 0
+              ? encargo
+              : 'Sin descripción.',
+          estado: tarea.estado,
+          puestoId: tarea.puesto_id,
+          agente: tarea.puesto,
+          departamento: tarea.departamento,
+          desde: tarea.creado_en.toISOString(),
+          actualizadoEn: tarea.actualizado_en.toISOString(),
+          costeEuros: Math.round(costeEuros * 1e4) / 1e4,
+          pasos,
+          aprobacionPendiente: pendiente
+            ? {
+                aprobacionId: pendiente.id,
+                claseAccion: pendiente.clase_accion,
+                nivelExigido: pendiente.nivel_exigido,
+                resumenLegible: pendiente.resumen_legible,
+                creadoEn: pendiente.creado_en.toISOString(),
+                venceEn: pendiente.vence_en ? pendiente.vence_en.toISOString() : null,
+                puedeDecidir: pendiente.persona_id === personaId,
+              }
+            : null,
+        };
+      });
+    },
+
     async agentes(tenantId) {
       const puestos = await conTenant(
         cliente,

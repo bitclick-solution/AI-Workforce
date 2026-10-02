@@ -16,7 +16,7 @@ import {
   conectar,
   sembrarFinanzas,
 } from '@aiw/db/pruebas';
-import { verificarCadenaEnBase } from '@aiw/ledger';
+import { anotar, solicitarAprobacion, verificarCadenaEnBase } from '@aiw/ledger';
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -228,5 +228,126 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     });
     expect(otraVez.decidida).toBe(false);
     expect(senales).toHaveLength(antes + 1);
+  });
+
+  it('detalleDeTarea: pasos en orden del libro, coste, nivel, porqué y aprobación pendiente', async () => {
+    const puerto = puertoInicio(conexion.cliente, flujos, configuracion);
+    const { tareaId } = await puerto.crearTareaDeEncargo(tenantId, {
+      puestoId: cobrosId,
+      personaId,
+      encargo: 'Prepara la nota para Contoso.',
+    });
+    const versionPuestoId = await conTenant(cliente, tenantId, async (tx) => {
+      const [fila] = await tx<{ version_puesto_id: string }[]>`
+        select version_puesto_id from tarea where tenant_id = ${tenantId} and id = ${tareaId}
+      `;
+      return fila?.version_puesto_id ?? '';
+    });
+    const aprobacionId = await conTenant(cliente, tenantId, async (tx) => {
+      const base = { actorTipo: 'agente', puestoId: cobrosId, versionPuestoId, tareaId } as const;
+      await anotar(tx, tenantId, {
+        ...base,
+        accion: 'herramienta.llamada',
+        herramienta: 'listar_facturas_vencidas',
+        datosReferenciados: [{ tipo: 'clase_accion', id: 'lectura_erp' }],
+        resultado: 'exito',
+        costeEuros: 0.0023,
+        nivelAplicado: 'n0',
+      });
+      // Ruido técnico: no es un paso, pero su coste sí cuenta.
+      await anotar(tx, tenantId, {
+        ...base,
+        accion: 'modelo.uso',
+        resultado: 'exito',
+        costeEuros: 0.01,
+      });
+      await anotar(tx, tenantId, {
+        ...base,
+        accion: 'herramienta.rechazada',
+        herramienta: 'borrar_factura',
+        datosReferenciados: [{ tipo: 'motivo', id: 'La clase está prohibida para este puesto.' }],
+        resultado: 'rechazado',
+        nivelAplicado: 'n0',
+      });
+      const solicitada = await solicitarAprobacion(tx, tenantId, {
+        tareaId,
+        personaId,
+        claseAccion: 'escritura_erp',
+        nivelExigido: 'n1',
+        borradorOpaco: { tipo: 'nota', carga: { opaco: true } },
+        resumenLegible: 'Enviar la nota de seguimiento a Contoso.',
+      });
+      return solicitada.id;
+    });
+
+    const detalle = await puerto.detalleDeTarea(tenantId, personaId, tareaId);
+    expect(detalle).toMatchObject({
+      tareaId,
+      encargo: 'Prepara la nota para Contoso.',
+      agente: 'Cobros',
+      departamento: 'Finanzas',
+      puestoId: cobrosId,
+    });
+    expect(detalle?.costeEuros).toBeCloseTo(0.0123, 4);
+    expect(detalle?.pasos.map((p) => [p.tipo, p.accion])).toEqual([
+      ['arranque', 'tarea.contada'],
+      ['herramienta', 'herramienta.llamada'],
+      ['herramienta', 'herramienta.rechazada'],
+      ['aprobacion_pedida', 'aprobacion.solicitada'],
+    ]);
+    const ordenes = detalle?.pasos.map((p) => p.orden) ?? [];
+    expect(ordenes).toEqual([...ordenes].sort((a, b) => a - b));
+    expect(detalle?.pasos[1]).toMatchObject({
+      herramienta: 'listar_facturas_vencidas',
+      nivel: 'n0',
+      claseAccion: 'lectura_erp',
+      porque: null,
+      resultado: 'exito',
+    });
+    expect(detalle?.pasos[2]).toMatchObject({
+      resultado: 'rechazado',
+      porque: 'La clase está prohibida para este puesto.',
+    });
+    expect(detalle?.aprobacionPendiente).toMatchObject({
+      aprobacionId,
+      claseAccion: 'escritura_erp',
+      nivelExigido: 'n1',
+      resumenLegible: 'Enviar la nota de seguimiento a Contoso.',
+      puedeDecidir: true,
+    });
+
+    // A otra persona de la misma organización se le enseña el resumen, pero no puede decidir.
+    const deOtra = await puerto.detalleDeTarea(tenantId, uuidV7(), tareaId);
+    expect(deOtra?.aprobacionPendiente?.puedeDecidir).toBe(false);
+
+    // Decidida, deja de estar pendiente y la decisión aparece como paso.
+    await puerto.decidirAprobacion(tenantId, { aprobacionId, personaId, sentido: 'aprobada' });
+    const despues = await puerto.detalleDeTarea(tenantId, personaId, tareaId);
+    expect(despues?.aprobacionPendiente).toBeNull();
+    expect(despues?.pasos.at(-1)).toMatchObject({ tipo: 'decision', accion: 'aprobacion.aprobada' });
+  });
+
+  it('detalleDeTarea: una tarea recién encargada tiene el arranque y ninguna aprobación', async () => {
+    const puerto = puertoInicio(conexion.cliente, flujos, configuracion);
+    const { tareaId } = await puerto.crearTareaDeEncargo(tenantId, {
+      puestoId: cobrosId,
+      personaId,
+      encargo: 'Tarea sin pasos del agente.',
+    });
+    const detalle = await puerto.detalleDeTarea(tenantId, personaId, tareaId);
+    expect(detalle?.estado).toBe('pendiente');
+    expect(detalle?.pasos.map((p) => p.tipo)).toEqual(['arranque']);
+    expect(detalle?.aprobacionPendiente).toBeNull();
+  });
+
+  it('detalleDeTarea: otra organización no ve la tarea ni nada de ella (criterio de hecho 6)', async () => {
+    const puerto = puertoInicio(conexion.cliente, flujos, configuracion);
+    const { tareaId } = await puerto.crearTareaDeEncargo(tenantId, {
+      puestoId: cobrosId,
+      personaId,
+      encargo: 'Tarea que la otra organización no debe ver.',
+    });
+    expect(await puerto.detalleDeTarea(otroTenantId, personaId, tareaId)).toBeNull();
+    expect(await puerto.detalleDeTarea(tenantId, personaId, uuidV7())).toBeNull();
   });
 });
