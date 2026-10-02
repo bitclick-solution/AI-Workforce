@@ -76,6 +76,51 @@ export interface AvisoDelInicio {
   creadoEn: string;
 }
 
+export type ResultadoDePaso = 'exito' | 'error' | 'rechazado' | 'parcial';
+export type TipoDePaso = 'arranque' | 'herramienta' | 'aprobacion_pedida' | 'decision';
+
+export interface PasoDeLaTarea {
+  orden: number;
+  tipo: TipoDePaso;
+  accion: string;
+  herramienta: string | null;
+  resultado: ResultadoDePaso;
+  costeEuros: number;
+  nivel: 'n0' | 'n1' | 'n2' | 'n3' | null;
+  claseAccion: string | null;
+  porque: string | null;
+  creadoEn: string;
+}
+
+export interface AprobacionPendienteDeLaTarea {
+  aprobacionId: string;
+  claseAccion: string;
+  nivelExigido: string;
+  resumenLegible: string;
+  creadoEn: string;
+  venceEn: string | null;
+  puedeDecidir: boolean;
+}
+
+export interface DetalleDeTarea {
+  tareaId: string;
+  encargo: string;
+  estado: string;
+  puestoId: string;
+  agente: string;
+  departamento: string;
+  desde: string;
+  actualizadoEn: string;
+  costeEuros: number;
+  pasos: PasoDeLaTarea[];
+  aprobacionPendiente: AprobacionPendienteDeLaTarea | null;
+}
+
+/** Dónde vive el detalle de una tarea en el panel. */
+export function rutaDelDetalle(tareaId: string): string {
+  return `/panel/inicio/tarea/${encodeURIComponent(tareaId)}`;
+}
+
 export type Buscador = (url: string, opciones?: RequestInit) => Promise<Response>;
 
 async function pedirJson<T>(ruta: string, opciones: RequestInit, buscar: Buscador): Promise<T> {
@@ -114,6 +159,18 @@ export async function leerAvisos(buscar: Buscador = fetch): Promise<AvisoDelInic
     buscar,
   );
   return avisos;
+}
+
+export async function leerDetalleDeTarea(
+  tareaId: string,
+  buscar: Buscador = fetch,
+): Promise<DetalleDeTarea> {
+  const { tarea } = await pedirJson<{ tarea: DetalleDeTarea }>(
+    `/api/inicio/tareas/${encodeURIComponent(tareaId)}`,
+    {},
+    buscar,
+  );
+  return tarea;
 }
 
 export async function encargarTarea(

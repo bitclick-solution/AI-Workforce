@@ -148,6 +148,15 @@ describe('VistaDelInicio', () => {
     expect(llamadas.filter((l) => l.url === '/api/inicio/avisos/a1/decidir')).toHaveLength(1);
   });
 
+  it('cada aviso enlaza al detalle de su tarea, para ver qué va a escribir antes de aprobar', async () => {
+    const { buscar } = buscarDeMuestra();
+    vi.stubGlobal('fetch', buscar);
+
+    render(<VistaDelInicio nombre="Jesús" />);
+    const enlace = await screen.findByRole('link', { name: 'Ver qué ha hecho el agente' });
+    expect(enlace.getAttribute('href')).toBe('/panel/inicio/tarea/t1');
+  });
+
   it('sin avisos pendientes, la lista dice que no hay nada', async () => {
     const { buscar } = buscarDeMuestra({ avisos: [] });
     vi.stubGlobal('fetch', buscar);

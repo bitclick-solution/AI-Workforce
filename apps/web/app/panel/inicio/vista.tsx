@@ -27,6 +27,7 @@ import {
   encargarTarea,
   leerAgentes,
   leerAvisos,
+  rutaDelDetalle,
   suscribirseAAgentesEnVivo,
   type AgenteDelInicio,
   type AvisoDelInicio,
@@ -221,7 +222,13 @@ export function VistaDelInicio({ nombre }: PropsDeLaVista) {
               alAprobar={() => void alDecidir(aviso.aprobacionId, 'aprobada')}
               alRechazar={() => void alDecidir(aviso.aprobacionId, 'rechazada')}
             >
-              {aviso.resumenLegible}
+              <p>{aviso.resumenLegible}</p>
+              <a
+                className={cn('mt-2 inline-block text-sm underline', TEMA.foco)}
+                href={rutaDelDetalle(aviso.tareaId)}
+              >
+                Ver qué ha hecho el agente
+              </a>
             </AvisoDeAprobacion>
           ))}
         </ListaDeAvisos>
