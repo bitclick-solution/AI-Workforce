@@ -65,7 +65,16 @@ export type ClaveDeTexto =
   | 'ui.panelDeWidgets.agrandar'
   | 'ui.panelDeWidgets.achicar'
   | 'ui.panelDeWidgets.ocultos'
-  | 'ui.panelDeWidgets.mostrar';
+  | 'ui.panelDeWidgets.mostrar'
+  | 'ui.paso.lista'
+  | 'ui.paso.sinPorque'
+  | 'ui.paso.etiqueta.nivel'
+  | 'ui.paso.etiqueta.coste'
+  | 'ui.paso.etiqueta.resultado'
+  | 'ui.paso.resultado.exito'
+  | 'ui.paso.resultado.error'
+  | 'ui.paso.resultado.rechazado'
+  | 'ui.paso.resultado.parcial';
 
 export type Diccionario = Partial<Record<ClaveDeTexto, string>>;
 
@@ -127,6 +136,15 @@ const CASTELLANO: Record<ClaveDeTexto, string> = {
   'ui.panelDeWidgets.achicar': 'Achicar «{titulo}»',
   'ui.panelDeWidgets.ocultos': 'Ocultos:',
   'ui.panelDeWidgets.mostrar': 'Mostrar «{titulo}»',
+  'ui.paso.lista': 'Pasos del agente',
+  'ui.paso.sinPorque': 'El libro de auditoría no anota el motivo de este paso.',
+  'ui.paso.etiqueta.nivel': 'Nivel',
+  'ui.paso.etiqueta.coste': 'Coste',
+  'ui.paso.etiqueta.resultado': 'Resultado',
+  'ui.paso.resultado.exito': 'Hecho',
+  'ui.paso.resultado.error': 'Con error',
+  'ui.paso.resultado.rechazado': 'No se hizo',
+  'ui.paso.resultado.parcial': 'A medias',
 };
 
 const INGLES: Diccionario = {
@@ -140,6 +158,15 @@ const INGLES: Diccionario = {
   'ui.porque.titulo': 'Why I did it',
   'ui.porque.mostrar': 'See why I did it',
   'ui.porque.ocultar': 'Hide why I did it',
+  'ui.paso.lista': 'Agent steps',
+  'ui.paso.sinPorque': 'The audit ledger does not record the reason for this step.',
+  'ui.paso.etiqueta.nivel': 'Level',
+  'ui.paso.etiqueta.coste': 'Cost',
+  'ui.paso.etiqueta.resultado': 'Result',
+  'ui.paso.resultado.exito': 'Done',
+  'ui.paso.resultado.error': 'Failed',
+  'ui.paso.resultado.rechazado': 'Not done',
+  'ui.paso.resultado.parcial': 'Partly done',
   'ui.aviso.aprobar': 'Approve',
   'ui.aviso.rechazar': 'Reject',
   'ui.widget.quitar': 'Remove "{titulo}" from the panel',
