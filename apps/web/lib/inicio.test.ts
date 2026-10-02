@@ -13,7 +13,9 @@ import {
   inicioActivo,
   leerAgentes,
   leerAvisos,
+  leerDetalleDeTarea,
   reenviarInicio,
+  rutaDelDetalle,
   suscribirseAAgentesEnVivo,
 } from './inicio';
 import type { CambioDeSala, FuenteDeSala, MiembroDeSala, ResumenDeSala } from './sala-contrato';
@@ -204,5 +206,37 @@ describe('reenviarInicio', () => {
     expect(respuesta.status).toBe(502);
     const cuerpo = (await respuesta.json()) as { error: string };
     expect(cuerpo.error).not.toContain('10.0.0.9');
+  });
+});
+
+describe('leerDetalleDeTarea y rutaDelDetalle', () => {
+  it('pide /api/inicio/tareas/:id y devuelve la tarea', async () => {
+    const buscar = vi.fn(
+      async () => new Response(JSON.stringify({ tarea: { tareaId: 't1' } }), { status: 200 }),
+    );
+    const tarea = await leerDetalleDeTarea('t1', buscar);
+    expect(tarea).toEqual({ tareaId: 't1' });
+    expect(buscar).toHaveBeenCalledWith('/api/inicio/tareas/t1', { cache: 'no-store' });
+  });
+
+  it('escapa el id para que no cambie la ruta', async () => {
+    const buscar = vi.fn(async () => new Response(JSON.stringify({ tarea: {} }), { status: 200 }));
+    await leerDetalleDeTarea('../avisos', buscar);
+    expect(buscar).toHaveBeenCalledWith('/api/inicio/tareas/..%2Favisos', { cache: 'no-store' });
+  });
+
+  it('lanza ErrorDelInicio con 404 cuando la tarea no existe o es de otra organización', async () => {
+    const buscar = vi.fn(
+      async () => new Response(JSON.stringify({ error: 'Esa tarea no existe.' }), { status: 404 }),
+    );
+    await expect(leerDetalleDeTarea('t1', buscar)).rejects.toMatchObject({
+      estado: 404,
+      message: 'Esa tarea no existe.',
+    });
+  });
+
+  it('la ruta del detalle en el panel lleva el id escapado', () => {
+    expect(rutaDelDetalle('abc')).toBe('/panel/inicio/tarea/abc');
+    expect(rutaDelDetalle('a/b')).toBe('/panel/inicio/tarea/a%2Fb');
   });
 });

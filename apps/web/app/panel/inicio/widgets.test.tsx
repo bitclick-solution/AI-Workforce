@@ -141,3 +141,24 @@ describe('WidgetLoUltimo', () => {
     expect(posicionEnCurso).toBeLessThan(posicionCompletada);
   });
 });
+
+describe('enlaces al detalle de la tarea (criterio de hecho 1)', () => {
+  const enlace = (id: string) => `href="/panel/inicio/tarea/${id}"`;
+
+  it('«Tu equipo» enlaza la tarea en curso y las completadas', () => {
+    const html = renderToStaticMarkup(<WidgetTuEquipo agentes={[AGENTE_COBROS]} />);
+    expect(html).toContain(enlace('t1'));
+    expect(html).toContain(enlace('t0'));
+  });
+
+  it('«Lo último» enlaza cada tarea, en curso o completada', () => {
+    const html = renderToStaticMarkup(<WidgetLoUltimo agentes={[AGENTE_COBROS]} />);
+    expect(html).toContain(enlace('t1'));
+    expect(html).toContain(enlace('t0'));
+  });
+
+  it('«Vencido por antigüedad» enlaza la tarea abierta', () => {
+    const html = renderToStaticMarkup(<WidgetVencidoPorAntiguedad agentes={[AGENTE_COBROS]} />);
+    expect(html).toContain(enlace('t1'));
+  });
+});

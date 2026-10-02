@@ -25,9 +25,9 @@ import {
   type PuestoConEmblema,
   type TonoDeInsignia,
 } from '@aiw/ui';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
-import type { AgenteDelInicio, TareaDelInicio } from '../../../lib/inicio';
+import { rutaDelDetalle, type AgenteDelInicio, type TareaDelInicio } from '../../../lib/inicio';
 
 const EMBLEMA_POR_NOMBRE: Record<string, PuestoConEmblema> = {
   cobros: 'cobros',
@@ -42,7 +42,7 @@ function emblemaDe(nombre: string): PuestoConEmblema | undefined {
 }
 
 /** Avatar del agente, con o sin emblema de puesto según lo reconozca `emblemaDe`. */
-function AgenteAvatar({ nombre }: { nombre: string }) {
+export function AgenteAvatar({ nombre }: { nombre: string }) {
   const puesto = emblemaDe(nombre);
   return puesto ? (
     <AvatarDeAgente nombre={nombre} tamano="pequeno" puesto={puesto} />
@@ -223,10 +223,19 @@ export function WidgetFicha({ agentes }: PropsDeLaFicha) {
   );
 }
 
+/** Abre el detalle de la tarea (qué hizo el agente y qué va a escribir). */
+function EnlaceDeTarea({ tarea, children }: { tarea: TareaDelInicio; children: ReactNode }) {
+  return (
+    <a className={cn('underline', TEMA.foco)} href={rutaDelDetalle(tarea.tareaId)}>
+      {children}
+    </a>
+  );
+}
+
 function TareaResumen({ tarea }: { tarea: TareaDelInicio }) {
   return (
     <p className={cn(TEMA.texto.apagado, 'truncate text-xs')} title={tarea.encargo}>
-      {tarea.encargo} · {haceCuanto(tarea.desde)}
+      <EnlaceDeTarea tarea={tarea}>{tarea.encargo}</EnlaceDeTarea> · {haceCuanto(tarea.desde)}
     </p>
   );
 }
@@ -340,7 +349,7 @@ export function WidgetVencidoPorAntiguedad({ agentes }: PropsDeVencidoPorAntigue
       {abiertas.slice(0, 5).map((tarea) => (
         <li key={tarea.tareaId} className="flex justify-between gap-2">
           <span className="truncate" title={tarea.encargo}>
-            {tarea.agenteNombre}: {tarea.encargo}
+            {tarea.agenteNombre}: <EnlaceDeTarea tarea={tarea}>{tarea.encargo}</EnlaceDeTarea>
           </span>
           <span className={cn(TEMA.texto.apagado, 'shrink-0')}>{haceCuanto(tarea.desde)}</span>
         </li>
@@ -376,7 +385,7 @@ export function WidgetLoUltimo({ agentes }: PropsDeLoUltimo) {
       {entradas.slice(0, 6).map((tarea) => (
         <li key={`${tarea.tareaId}-${tarea.estadoTexto}`} className="flex justify-between gap-2">
           <span className="truncate" title={tarea.encargo}>
-            {tarea.agenteNombre}: {tarea.encargo}
+            {tarea.agenteNombre}: <EnlaceDeTarea tarea={tarea}>{tarea.encargo}</EnlaceDeTarea>
           </span>
           <span className={cn(TEMA.texto.apagado, 'shrink-0')}>
             {tarea.estadoTexto} · {haceCuanto(tarea.desde)}

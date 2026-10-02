@@ -9,9 +9,12 @@ import {
   type AvisoDelInicio,
   type ConfiguracionInicio,
   type DecisionDelInicio,
+  type DetalleDeTarea,
   type PeticionInicio,
   type PuertoInicio,
   type TareaDeEncargoCreada,
+  clasificarPaso,
+  referenciaDe,
 } from './inicio';
 
 const TENANT = '01a0d39e-98c3-7970-814a-0a98ad132311';
@@ -20,6 +23,7 @@ const PERSONA = '01a0d39e-98c3-7970-814a-0a98ad132312';
 const OTRA_PERSONA = '01a0d39e-98c3-7970-814a-0a98ad132399';
 const PUESTO = '01a0d39e-98c3-7970-814a-0a98ad132320';
 const APROBACION = '01a0d39e-98c3-7970-814a-0a98ad132330';
+const TAREA = '01a0d39e-98c3-7970-814a-0a98ad132340';
 
 const SESIONES: Record<string, { tenantId: string; personaId: string }> = {
   'aiw.session_token=valida': { tenantId: TENANT, personaId: PERSONA },
@@ -85,11 +89,17 @@ function puertoFalso(
     admiteEncargo?: boolean;
     aprobacion?: AprobacionLeida | null;
     resultadoDecision?: DecisionDelInicio;
+    detalle?: DetalleDeTarea | null;
   } = {},
 ) {
   const encargos: unknown[] = [];
   const decisiones: unknown[] = [];
+  const lecturasDeDetalle: unknown[] = [];
   const puerto: PuertoInicio = {
+    detalleDeTarea: (tenantId, personaId, tareaId) => {
+      lecturasDeDetalle.push({ tenantId, personaId, tareaId });
+      return Promise.resolve(opciones.detalle ?? null);
+    },
     agentes: () => Promise.resolve(opciones.agentes ?? []),
     avisos: () => Promise.resolve(opciones.avisos ?? []),
     puestoAdmiteEncargo: () => Promise.resolve(opciones.admiteEncargo ?? true),
@@ -107,7 +117,7 @@ function puertoFalso(
       return Promise.resolve(opciones.resultadoDecision ?? { decidida: true });
     },
   };
-  return { puerto, encargos, decisiones };
+  return { puerto, encargos, decisiones, lecturasDeDetalle };
 }
 
 describe('ruta del inicio', () => {
@@ -322,6 +332,7 @@ describe('ruta del inicio', () => {
     };
     const tenantsVistos: string[] = [];
     const puerto: PuertoInicio = {
+      detalleDeTarea: () => Promise.resolve(null),
       agentes: (tenantId) => {
         tenantsVistos.push(tenantId);
         return Promise.resolve(tenantId === TENANT ? [agente] : []);
@@ -340,5 +351,156 @@ describe('ruta del inicio', () => {
     );
     expect(respuesta?.cuerpo).toEqual({ agentes: [] });
     expect(tenantsVistos).toEqual([OTRO_TENANT]);
+  });
+});
+
+function detalleDeMuestra(parcial: Partial<DetalleDeTarea> = {}): DetalleDeTarea {
+  return {
+    tareaId: TAREA,
+    encargo: 'Revisa las facturas vencidas de hoy.',
+    estado: 'esperando_aprobacion',
+    puestoId: PUESTO,
+    agente: 'Cobros',
+    departamento: 'Finanzas',
+    desde: '2026-10-02T09:00:00.000Z',
+    actualizadoEn: '2026-10-02T09:01:00.000Z',
+    costeEuros: 0.0123,
+    costeTotalEuros: 0.0123,
+    delegadas: [],
+    pasos: [
+      {
+        orden: 1,
+        tipo: 'herramienta',
+        accion: 'odoo.listar_facturas_vencidas',
+        herramienta: 'listar_facturas_vencidas',
+        resultado: 'exito',
+        costeEuros: 0.0023,
+        nivel: 'n0',
+        claseAccion: 'lectura_erp',
+        porque: null,
+        creadoEn: '2026-10-02T09:00:30.000Z',
+      },
+    ],
+    aprobacionPendiente: {
+      aprobacionId: APROBACION,
+      claseAccion: 'escritura_erp',
+      nivelExigido: 'n1',
+      resumenLegible: 'Enviar la nota de seguimiento a Contoso.',
+      creadoEn: '2026-10-02T09:01:00.000Z',
+      venceEn: null,
+      puedeDecidir: true,
+    },
+    ...parcial,
+  };
+}
+
+describe('GET /inicio/tareas/:id', () => {
+  const urlDeTarea = (id: string = TAREA) => `/inicio/tareas/${id}`;
+
+  it('da el detalle de la tarea con la organización y la persona de la sesión', async () => {
+    const { puerto, lecturasDeDetalle } = puertoFalso({ detalle: detalleDeMuestra() });
+    const respuesta = await atender(peticion({ url: urlDeTarea() }), puerto);
+    expect(respuesta?.estado).toBe(200);
+    expect(respuesta?.cuerpo).toEqual({ tarea: detalleDeMuestra() });
+    expect(lecturasDeDetalle).toEqual([{ tenantId: TENANT, personaId: PERSONA, tareaId: TAREA }]);
+  });
+
+  it('sin sesión, 401, y no lee nada', async () => {
+    const { puerto, lecturasDeDetalle } = puertoFalso({ detalle: detalleDeMuestra() });
+    const respuesta = await atender(peticion({ url: urlDeTarea(), cabeceras: {} }), puerto);
+    expect(respuesta?.estado).toBe(401);
+    expect(lecturasDeDetalle).toEqual([]);
+  });
+
+  it('un id que no es UUID da 400 y no llega a la base', async () => {
+    const { puerto, lecturasDeDetalle } = puertoFalso();
+    const respuesta = await atender(peticion({ url: urlDeTarea('no-es-uuid') }), puerto);
+    expect(respuesta?.estado).toBe(400);
+    expect(lecturasDeDetalle).toEqual([]);
+  });
+
+  it('una tarea que no existe, 404', async () => {
+    const respuesta = await atender(peticion({ url: urlDeTarea() }), puertoFalso().puerto);
+    expect(respuesta?.estado).toBe(404);
+  });
+
+  it('solo se lee con GET: otro método da 405', async () => {
+    const respuesta = await atender(
+      peticion({ url: urlDeTarea(), metodo: 'POST' }),
+      puertoFalso({ detalle: detalleDeMuestra() }).puerto,
+    );
+    expect(respuesta?.estado).toBe(405);
+  });
+
+  it('una tarea sin pasos ni aprobación se devuelve tal cual (estado vacío)', async () => {
+    const vacia = detalleDeMuestra({
+      estado: 'pendiente',
+      pasos: [],
+      aprobacionPendiente: null,
+      costeEuros: 0,
+      costeTotalEuros: 0,
+    });
+    const respuesta = await atender(
+      peticion({ url: urlDeTarea() }),
+      puertoFalso({ detalle: vacia }).puerto,
+    );
+    expect(respuesta?.estado).toBe(200);
+    expect(respuesta?.cuerpo).toEqual({ tarea: vacia });
+  });
+
+  it('aislamiento: la sesión de otra organización pregunta con su tenant y no ve la tarea (criterio 6)', async () => {
+    const tenantsVistos: string[] = [];
+    const base = puertoFalso({ detalle: detalleDeMuestra() }).puerto;
+    const puerto: PuertoInicio = {
+      ...base,
+      detalleDeTarea: (tenantId) => {
+        tenantsVistos.push(tenantId);
+        return Promise.resolve(tenantId === TENANT ? detalleDeMuestra() : null);
+      },
+    };
+    const respuesta = await atender(
+      peticion({ url: urlDeTarea(), cabeceras: { cookie: 'aiw.session_token=otro-tenant' } }),
+      puerto,
+    );
+    expect(respuesta?.estado).toBe(404);
+    expect(JSON.stringify(respuesta?.cuerpo)).not.toContain('Contoso');
+    expect(tenantsVistos).toEqual([OTRO_TENANT]);
+  });
+});
+
+describe('qué entradas del libro son pasos', () => {
+  it('clasifica arranque, herramientas, aprobación pedida y decisión', () => {
+    expect(clasificarPaso('tarea.contada', null)).toBe('arranque');
+    expect(clasificarPaso('herramienta.llamada', 'listar_facturas')).toBe('herramienta');
+    expect(clasificarPaso('herramienta.rechazada', 'enviar_nota')).toBe('herramienta');
+    expect(clasificarPaso('herramienta.saltada', 'enviar_nota')).toBe('herramienta');
+    expect(clasificarPaso('aprobacion.solicitada', null)).toBe('aprobacion_pedida');
+    expect(clasificarPaso('aprobacion.aprobada', null)).toBe('decision');
+    expect(clasificarPaso('aprobacion.rechazada', null)).toBe('decision');
+    expect(clasificarPaso('aprobacion.vencida', null)).toBe('decision');
+  });
+
+  it('omite el ruido técnico, que sigue sumando al coste', () => {
+    for (const accion of [
+      'aprobacion.correo.enviado',
+      'aprobacion.enlace.abierto',
+      'aprobacion.senal.entregada',
+      'senal.registrada',
+      'modelo.uso',
+      'tarifa.registrada',
+      'conector.herramientas_descubiertas',
+    ]) {
+      expect(clasificarPaso(accion, null)).toBeNull();
+    }
+  });
+
+  it('lee una referencia por su tipo y no inventa la que falta', () => {
+    const datos = [
+      { tipo: 'clase_accion', id: 'escritura_erp' },
+      { tipo: 'motivo', id: '  ' },
+    ];
+    expect(referenciaDe(datos, 'clase_accion')).toBe('escritura_erp');
+    expect(referenciaDe(datos, 'motivo')).toBeNull();
+    expect(referenciaDe('no es una lista', 'motivo')).toBeNull();
   });
 });
