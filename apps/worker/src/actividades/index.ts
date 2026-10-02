@@ -84,6 +84,7 @@ import type {
 } from '../bucle/tipos.js';
 import { enTenant, type ContextoDeActividades } from './contexto.js';
 import { crearActividadesDeAprendizaje } from './aprendizaje.js';
+import { crearActividadesDeSupervisor } from './supervisor.js';
 import { crearActividadesDeSala } from './sala.js';
 
 /** Acciones del libro que escriben estas actividades. Un solo sitio, se añaden. */
@@ -1429,6 +1430,9 @@ export function crearActividades(contexto: ContextoDeActividades) {
 
     // Aprendizaje v0: de la edición a la señal y de la señal a la lección.
     ...crearActividadesDeAprendizaje(contexto),
+
+    // Supervisor de departamento v0: avisa en la sala de una delegación que no se cierra bien.
+    ...crearActividadesDeSupervisor(contexto),
   };
 }
 

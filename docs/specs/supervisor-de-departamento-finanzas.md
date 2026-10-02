@@ -30,14 +30,14 @@ La ficha de Finanzas habla de un supervisor de departamento y de memoria que com
 
 ## Paquetes tocados
 
-- `apps/platform-agents`: el supervisor de departamento, con sus reglas.
-- `apps/worker`: el evento que lo despierta desde el flujo de delegación y la carga de la memoria de departamento en el contexto del puesto.
+- `apps/platform-agents`: el supervisor de departamento, con sus reglas (`supervisor.ts`, función pura; depende de `@aiw/learning` solo para quitar datos personales del encargo citado).
+- `apps/worker`: los eventos que lo despiertan desde el bucle de la delegación (`delegacion.vencida`, `delegacion.respaldo_aplicado`, `delegacion.cerrada`) y su actividad, que publica el aviso. La memoria de departamento llega al prompt de cada puesto por su memoria congelada (decisión 5), sin una segunda vía de lectura que cambie el prompt sin una versión nueva.
 - `packages/learning`: el ámbito `departamento` en proponer y promocionar, la regla de quién promociona y la reversión de una versión que lo incluye.
 - `packages/db`: la migración `0011_promocion_version` con su reverso y la tabla `promocion_version` en el esquema tipado y en las listas de tablas.
 
 ## Endpoints, flujos y datos
 
-Sin endpoints. Una tabla nueva, `promocion_version` (decisión 7). El supervisor publica por las actividades de sala ya existentes, como participante de plataforma; el Constructor confirma el rol que corresponde en `rol_participante`.
+Sin endpoints. Una tabla nueva, `promocion_version` (decisión 7). El supervisor publica en la sala del departamento con las funciones de sala ya existentes, como actor de plataforma: mensaje sin puesto ni persona autora y con el adjunto `autor_plataforma` (`supervisor_departamento`), igual que el moderador. No hace falta fila en `sala_participante` ni valor nuevo en `rol_participante`: confirmado, el rol `moderador` es de quien modera y el supervisor no modera. Supervisa las delegaciones entre puestos del mismo departamento; una que cruza de departamento queda fuera de esta versión. El identificador del mensaje sale de la delegación, y por eso un segundo hecho de la misma (el plazo vence y se aplica el respaldo) no lo duplica.
 
 ## Criterios de hecho
 
@@ -47,7 +47,7 @@ Sin endpoints. Una tabla nueva, `promocion_version` (decisión 7). El supervisor
 4. Una lección propuesta con ámbito `departamento` pasa por `puerta` del Evaluador; si bloquea, no hay memoria ni versión; si certifica y la promociona quien puede (decisión 8), los tres puestos de Finanzas tienen una versión nueva con esa línea en su memoria, con una fila de `promocion_version` por puesto, y una promoción que falla a medias no deja ninguna.
 5. Un puesto de otro departamento de la misma organización no lee la memoria de departamento de Finanzas, y otra organización tampoco: prueba de aislamiento con RLS.
 6. La reversión de una versión de puesto que incluía la memoria de departamento la retira de ese puesto y deja las demás versiones intactas.
-7. Una lección de departamento con contenido marcado como categoría especial queda bloqueada.
+7. Una lección de departamento con contenido marcado como categoría especial, o que hablaba de una persona concreta (se quitaron datos personales al redactarla), queda bloqueada por la puerta del Evaluador. La marca de categoría especial la pone quien propone la lección (`proponerLeccion(..., { categoriaEspecial })`); no hay detección automática en v0.
 8. `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm evals:smoke` y `pnpm build` pasan en verde.
 9. Promociona la memoria de un departamento quien supervisa el departamento o un administrador (decisión 8); una persona de otra organización o inexistente queda rechazada.
 10. La migración `0011` se aplica en una base vacía, su reverso se aplica solo y la deja como antes, y se vuelve a aplicar sin error; la tabla nueva tiene RLS, es inmutable y entra en las listas de tablas del esquema.

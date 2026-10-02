@@ -24,6 +24,7 @@ import {
   evaluarPresupuesto,
   resolverRespaldo,
   type Nivel,
+  type PoliticaRespaldo,
   type VeredictoPolitica,
 } from '@aiw/domain';
 
@@ -104,6 +105,20 @@ export interface OperacionesDelBucle {
     | undefined;
   cerrarDelegacion?:
     ((delegacionId: string, resultado: Record<string, unknown>) => Promise<void>) | undefined;
+  /**
+   * Supervisor de departamento v0: cuenta un hecho de la delegación para que el
+   * supervisor decida si avisa en la sala. Es un aviso: no devuelve nada, no cambia
+   * la tarea y un fallo suyo no la hace fallar.
+   */
+  avisarSupervisor?: ((evento: EventoDeLaDelegacion) => Promise<void>) | undefined;
+}
+
+/** Hecho de una delegación que el bucle cuenta al supervisor. Eventos del ADR-014. */
+export interface EventoDeLaDelegacion {
+  tipo: 'delegacion.vencida' | 'delegacion.respaldo_aplicado' | 'delegacion.cerrada';
+  delegacionId: string;
+  politicaRespaldo?: PoliticaRespaldo | undefined;
+  entregado?: boolean | undefined;
 }
 
 interface Cuenta {
@@ -583,6 +598,15 @@ export async function ejecutarBucle(
         motivo: respaldo.motivo,
         politicaRespaldo: peticion.contrato.politicaRespaldo,
       });
+      // El plazo venció y el respaldo se aplicó en este mismo punto: son dos hechos
+      // de la misma delegación y el supervisor publica un solo aviso por delegación.
+      for (const tipo of ['delegacion.vencida', 'delegacion.respaldo_aplicado'] as const) {
+        await operaciones.avisarSupervisor?.({
+          tipo,
+          delegacionId: abierta.delegacionId,
+          politicaRespaldo: peticion.contrato.politicaRespaldo,
+        });
+      }
       return {
         tareaDestinoId: abierta.tareaDestinoId,
         entregado: false,
@@ -598,6 +622,11 @@ export async function ejecutarBucle(
       entregado: resultado.entregado,
       resumen: resultado.resumen,
       costeEuros: resultado.costeEuros,
+    });
+    await operaciones.avisarSupervisor?.({
+      tipo: 'delegacion.cerrada',
+      delegacionId: abierta.delegacionId,
+      entregado: resultado.entregado,
     });
     return {
       tareaDestinoId: resultado.tareaDestinoId,

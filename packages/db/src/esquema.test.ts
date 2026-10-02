@@ -441,7 +441,9 @@ describe('migración de la promoción de varias versiones (0011)', () => {
   });
 
   it('lleva tenant, RLS forzada y un índice único por promoción y puesto', () => {
-    expect(sql).toContain('tenant_id uuid not null references organizacion (id) on delete restrict');
+    expect(sql).toContain(
+      'tenant_id uuid not null references organizacion (id) on delete restrict',
+    );
     expect(sql).toContain('alter table promocion_version enable row level security');
     expect(sql).toContain('alter table promocion_version force row level security');
     expect(sql).toContain('using (tenant_id = aiw_tenant_actual())');

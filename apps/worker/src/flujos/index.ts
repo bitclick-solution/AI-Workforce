@@ -108,6 +108,7 @@ const internas = proxyActivities<
     | 'proyectarEstado'
     | 'abrirDelegacion'
     | 'cerrarDelegacion'
+    | 'supervisarDelegacion'
   >
 >({
   startToCloseTimeout: '1 minute',
@@ -372,6 +373,19 @@ export async function tareaAgente(entrada: EntradaTareaAgente): Promise<Resultad
 
     cerrarDelegacion: (delegacionId, resultado) =>
       internas.cerrarDelegacion({ tenantId: entrada.tenantId, delegacionId, resultado }),
+
+    /**
+     * El supervisor de departamento avisa en la sala. Es un aviso y no parte del
+     * trabajo: ni un fallo suyo ni su ausencia cambian la tarea. Solo sube la
+     * cancelación de la propia tarea.
+     */
+    async avisarSupervisor(evento) {
+      try {
+        await internas.supervisarDelegacion({ tenantId: entrada.tenantId, ...evento });
+      } catch (error) {
+        if (isCancellation(error)) throw error;
+      }
+    },
   };
 
   try {

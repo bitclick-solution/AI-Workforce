@@ -1,4 +1,5 @@
 import { PAQUETE as domain } from '@aiw/domain';
+import { PAQUETE as learning } from '@aiw/learning';
 import { PAQUETE as rooms } from '@aiw/rooms';
 
 /**
@@ -16,13 +17,16 @@ export const APLICACION = {
   tipo: 'aplicacion',
   responsabilidad:
     'Agentes de plataforma: moderador de sala, supervisor de departamento y Director de IA.',
-  dependeDe: [domain.nombre, rooms.nombre],
+  dependeDe: [domain.nombre, learning.nombre, rooms.nombre],
 } as const;
 
 export type Aplicacion = typeof APLICACION;
 
 // Sala v0
 export * from './director.js';
+
+// Supervisor de departamento v0: vigila delegaciones y avisa en la sala
+export * from './supervisor.js';
 
 // Habilidades en el bucle del agente: esquema y catálogo (sin contenido todavía)
 export * from './catalogo-habilidades.js';
