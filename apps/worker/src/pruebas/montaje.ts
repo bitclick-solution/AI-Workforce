@@ -75,6 +75,8 @@ function contextoDePrueba(
     enrutador: enrutador ?? enrutadorDeDemostracion(),
     secretos: resolvedorDeEntorno(ENTORNO_DE_PRUEBA),
     trazas,
+    // Las pruebas de la sala ejercitan el paso de modelo; la bandera apagada tiene las suyas.
+    salaConModelo: true,
   });
 }
 

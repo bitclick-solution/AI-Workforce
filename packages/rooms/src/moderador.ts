@@ -114,7 +114,8 @@ function mencionado(participante: ParticipanteDeSala, texto: string): boolean {
   );
 }
 
-function acotar(limite: number | undefined): number {
+/** Límite de intervenciones sin mención, acotado entre 1 y `LIMITE_MAXIMO`; un valor no finito vale el de por defecto. */
+export function acotar(limite: number | undefined): number {
   const valor = Math.trunc(limite ?? LIMITE_POR_DEFECTO);
   if (!Number.isFinite(valor) || valor < 1) return LIMITE_POR_DEFECTO;
   return Math.min(valor, LIMITE_MAXIMO);

@@ -45,6 +45,20 @@ import {
 } from '@aiw/rooms/centrifugo';
 import type postgres from 'postgres';
 
+/**
+ * Bandera del paso de modelo del moderador y del Director en la sala de un departamento
+ * (rebanada «Sala del departamento: moderador y Director con paso de modelo real»).
+ * Mismo patrón que `AIW_SALA_V1`: `'1'` o `'true'` la activan; cualquier otro valor,
+ * no. Apagada, el moderador y el Director son los de reglas de siempre, sin modelo y
+ * con coste cero, aunque haya un proveedor configurado.
+ */
+export const BANDERA_SALA_MODELO = 'AIW_SALA_MODELO';
+
+export function salaConModeloActiva(entorno: Record<string, string | undefined>): boolean {
+  const valor = entorno[BANDERA_SALA_MODELO]?.trim();
+  return valor === '1' || valor === 'true';
+}
+
 export interface OpcionesContexto {
   /** Cadena de conexión. Llega del entorno, nunca del código. */
   urlBaseDeDatos: string;
@@ -65,6 +79,8 @@ export interface OpcionesContexto {
   centrifugo?: ConfiguracionCentrifugo | undefined;
   /** Solo para pruebas: sustituye `fetch` al llamar al API HTTP de Centrifugo. */
   buscarCentrifugo?: BuscadorCentrifugo | undefined;
+  /** Paso de modelo en la sala de un departamento. Sin valor, lo dice `AIW_SALA_MODELO`. */
+  salaConModelo?: boolean | undefined;
 }
 
 export interface ContextoDeActividades {
@@ -83,6 +99,8 @@ export interface ContextoDeActividades {
    * vivo, nunca la verdad.
    */
   avisarSala: (tenantId: string, salaId: string, datos: Record<string, unknown>) => Promise<void>;
+  /** Si el moderador y el Director dan el paso de modelo en la sala de un departamento (`AIW_SALA_MODELO`). */
+  salaConModelo: boolean;
   cerrar: () => Promise<void>;
 }
 
@@ -253,6 +271,7 @@ export function crearContextoDeActividades(opciones: OpcionesContexto): Contexto
     observadorDeCoste: opciones.observadorDeCoste ?? observadorDesdeEntorno(),
     cachePrompts: crearCacheDePrompts(),
     trazas: opciones.trazas ?? new TrazasEnMemoria(),
+    salaConModelo: opciones.salaConModelo ?? salaConModeloActiva(process.env),
     async avisarSala(tenantId, salaId, datos) {
       if (!opciones.centrifugo) return;
       try {

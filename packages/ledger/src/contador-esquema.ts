@@ -149,12 +149,17 @@ export const usoModelo = pgTable(
   {
     id: idPrimario(),
     tenantId: tenantId(),
-    tareaId: uuid('tarea_id').notNull(),
+    /** Nulos en el uso de plataforma (moderador, Director): ver `0010_uso_modelo_de_plataforma.sql`. */
+    tareaId: uuid('tarea_id'),
     /** Raíz de consumo: el coste de una delegación se agrega a la tarea que la pidió. */
-    tareaRaizId: uuid('tarea_raiz_id').notNull(),
+    tareaRaizId: uuid('tarea_raiz_id'),
     pasoId: uuid('paso_id'),
-    puestoId: uuid('puesto_id').notNull(),
-    versionPuestoId: uuid('version_puesto_id').notNull(),
+    puestoId: uuid('puesto_id'),
+    versionPuestoId: uuid('version_puesto_id'),
+    /** Uso de plataforma: la sala desde la que llamó el moderador o el Director. */
+    salaId: uuid('sala_id'),
+    /** `moderador` o `director_ia`. Solo en el uso de plataforma. */
+    actorPlataforma: text('actor_plataforma'),
     proveedor: text('proveedor').notNull(),
     modelo: text('modelo').notNull(),
     /** Plataforma real que sirvió la llamada (ADR-017). Con default por lo mismo que en `tarifaModelo`. */

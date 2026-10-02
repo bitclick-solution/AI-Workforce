@@ -22,6 +22,9 @@
     "test": "vitest run --passWithNoTests",
     "clean": "rm -rf dist coverage .turbo"
   },
+  "dependencies": {
+    "zod": "catalog:"
+  },
   "devDependencies": {
     "@aiw/db": "workspace:*",
     "@types/node": "catalog:",
