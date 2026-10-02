@@ -30,3 +30,14 @@ Capturas de `/panel/inicio/tarea/:id` generadas por `e2e/detalle-tarea.spec.ts` 
 | `detalle-6-vacio.png`                  | Estado vacío: el agente aún no ha dado ningún paso.                              |
 | `detalle-8-delegadas.png`              | Tareas delegadas dentro de la tarea raíz, con coste total.                       |
 | `detalle-7-error.png`                  | Estado de error: el detalle no carga, con Reintentar.                            |
+
+## Expediente por agente en el panel
+
+Capturas de `/panel/inicio/agente/:id/expediente` generadas por `e2e/expediente.spec.ts` sobre la rebanada [Expediente por agente con niveles N0 y N1 en el panel](https://app.notion.com/p/3eb530661898817396f3f3be04edd538). La API se simula en la prueba y todos los datos son de prueba. Se regeneran con `pnpm e2e e2e/expediente.spec.ts`. Las capturas del detalle de la tarea se regeneraron en la misma rebanada porque su cabecera enlaza ahora al expediente.
+
+| Archivo                       | Qué enseña                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `expediente-1-escritorio.png` | Niveles por clase con su historial, los cuatro criterios de ascenso, una clase fija, lecciones y una acción rechazada con su porqué. |
+| `expediente-2-movil.png`      | El mismo expediente a 390 px, sin desbordar.                                                                                         |
+| `expediente-3-vacio.png`      | Estado vacío: sin lecciones ni acciones rechazadas.                                                                                  |
+| `expediente-4-error.png`      | Estado de error: no carga, dice que no se ha perdido nada y deja reintentar.                                                         |
