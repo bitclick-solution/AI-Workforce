@@ -23,6 +23,7 @@ import {
 } from './entorno.js';
 import { cargarGrabaciones } from './grabaciones/index.js';
 import { crearHerramientas } from './herramientas.js';
+import { NOMBRES_CONCILIACION } from './conciliacion.js';
 import { NOMBRES } from './herramientas.js';
 import { crearServidor } from './servidor.js';
 
@@ -133,6 +134,14 @@ describe('la clave no sale del proceso', () => {
     const grabaciones = {
       ...cargarGrabaciones(),
       // El MCP dinámico devuelve un fallo que repite la clave: el peor caso.
+      // El fallo del ERP al leer el apunte repite la clave: el peor caso en conciliación.
+      search_records: [
+        {
+          argumentos: { model: 'account.bank.statement.line', domain: [['id', '=', 55]] },
+          error: `Authentication failed for api_key=${CLAVE_SEMBRADA} on database pruebas`,
+        },
+        ...(cargarGrabaciones()['search_records'] ?? []),
+      ],
       chatter_post: [
         {
           argumentos: { record_id: 55 },
@@ -158,6 +167,28 @@ describe('la clave no sale del proceso', () => {
       JSON.stringify(
         await cliente
           .callTool({ name: NOMBRES.nota, arguments: { factura_id: 55, texto: 'Aviso.' } })
+          .catch((error: unknown) => ({ error: String(error), datos: error })),
+      ),
+    );
+    // Las dos herramientas de conciliación: lectura, y escritura con el fallo del peor caso.
+    registrado.push(
+      JSON.stringify(
+        await cliente.callTool({ name: NOMBRES_CONCILIACION.extracto, arguments: {} }),
+      ),
+    );
+    registrado.push(
+      JSON.stringify(
+        await cliente
+          .callTool({
+            name: NOMBRES_CONCILIACION.asiento,
+            arguments: {
+              apunte_id: '55',
+              documento_id: '46',
+              importe_diferencia: -12,
+              cuenta_contrapartida: '629000',
+              motivo: 'Comisión.',
+            },
+          })
           .catch((error: unknown) => ({ error: String(error), datos: error })),
       ),
     );

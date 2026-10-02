@@ -12,6 +12,10 @@ import { describe, expect, it } from 'vitest';
 import { clienteGrabado, clienteHttp, type ClienteMcpDinamico } from './cliente.js';
 import { MOTIVO_SALTO, hayCredenciales, leerConfiguracion } from './entorno.js';
 import { SalidaCrearNotaSeguimiento, SalidaListarFacturasVencidas } from './esquemas.js';
+import {
+  SalidaLeerExtractoBancario,
+  SalidaProponerAsientoDiferencia,
+} from './esquemas-conciliacion.js';
 import { DIA_DE_LA_GRABACION, cargarGrabaciones } from './grabaciones/index.js';
 import { crearHerramientas, type Herramientas } from './herramientas.js';
 
@@ -19,6 +23,26 @@ const CONTRA_ODOO = hayCredenciales();
 
 /** Una factura de la instancia de pruebas sobre la que se puede escribir. */
 const FACTURA_DE_PRUEBA = Number(process.env['ODOO_FACTURA_PRUEBA'] ?? '0');
+
+/**
+ * Datos de la instancia de pruebas para la escritura de conciliación. Sin las
+ * tres, esa prueba se salta: hace falta un extracto ficticio importado.
+ */
+const APUNTE_DE_PRUEBA = process.env['ODOO_APUNTE_PRUEBA'] ?? '';
+const DOCUMENTO_DE_PRUEBA = process.env['ODOO_DOCUMENTO_PRUEBA'] ?? '';
+const CONTRAPARTIDA_DE_PRUEBA = process.env['ODOO_CONTRAPARTIDA_PRUEBA'] ?? '';
+
+/** Invariantes del extracto que valen igual contra Odoo y contra las grabaciones. */
+function verificarExtracto(salida: unknown, soloSinCasar: boolean): void {
+  const extracto = SalidaLeerExtractoBancario.parse(salida);
+  expect(extracto.total).toBe(extracto.apuntes.length);
+  if (soloSinCasar) expect(extracto.apuntes.every((apunte) => !apunte.casado)).toBe(true);
+  for (const apunte of extracto.apuntes) {
+    expect(apunte.casado || apunte.documento_id === null).toBe(true);
+  }
+  const fechas = extracto.apuntes.map((apunte) => apunte.fecha);
+  expect(fechas).toEqual([...fechas].sort());
+}
 
 /** Invariantes que valen igual contra Odoo y contra las grabaciones. */
 function verificarLista(salida: unknown, minimo: number): void {
@@ -78,6 +102,26 @@ describe('contrato sobre respuestas grabadas', () => {
     });
   });
 
+  it('leer_extracto_bancario cumple el contrato con la envolvente «result» del MCP real', async () => {
+    verificarExtracto(await herramientas.leerExtractoBancario({}), true);
+    verificarExtracto(await herramientas.leerExtractoBancario({ solo_sin_casar: false }), false);
+  });
+
+  it('proponer_asiento_diferencia cumple el contrato y solo deja un borrador', async () => {
+    const salida = await herramientas.proponerAsientoDiferencia({
+      apunte_id: '301',
+      documento_id: '46',
+      importe_diferencia: -12,
+      cuenta_contrapartida: '629000',
+      motivo: 'Nota de contrato.',
+    });
+    expect(SalidaProponerAsientoDiferencia.parse(salida)).toMatchObject({
+      id: '7001',
+      apunte_id: '301',
+      estado: 'borrador',
+    });
+  });
+
   it('las grabaciones no llevan datos personales reales', () => {
     const crudo = JSON.stringify(cargarGrabaciones());
     expect(crudo).not.toMatch(/@[a-z0-9.-]+\.[a-z]{2,}/i);
@@ -123,6 +167,45 @@ describe.skipIf(!CONTRA_ODOO)(TITULO, () => {
     },
     60_000,
   );
+
+  it('leer_extracto_bancario cumple el contrato contra el ERP real', async () => {
+    verificarExtracto(await conectar().leerExtractoBancario({ limite: 5 }), true);
+  }, 60_000);
+
+  it.skipIf(
+    APUNTE_DE_PRUEBA === '' || DOCUMENTO_DE_PRUEBA === '' || CONTRAPARTIDA_DE_PRUEBA === '',
+  )(
+    'proponer_asiento_diferencia deja un borrador y escribe una vez por clave',
+    async () => {
+      const herramientas = conectar();
+      const entrada = {
+        apunte_id: APUNTE_DE_PRUEBA,
+        documento_id: DOCUMENTO_DE_PRUEBA,
+        importe_diferencia: 0.01,
+        cuenta_contrapartida: CONTRAPARTIDA_DE_PRUEBA,
+        motivo: `Borrador de contrato del conector, ${new Date().toISOString()}.`,
+        clave_idempotencia: `contrato-asiento-${String(Date.now())}`,
+      };
+      const primera = SalidaProponerAsientoDiferencia.parse(
+        await herramientas.proponerAsientoDiferencia(entrada),
+      );
+      expect(primera.estado).toBe('borrador');
+      expect(await herramientas.proponerAsientoDiferencia(entrada)).toEqual(primera);
+    },
+    60_000,
+  );
+
+  it('un apunte inexistente sale como no_encontrada', async () => {
+    await expect(
+      conectar().proponerAsientoDiferencia({
+        apunte_id: '999999999',
+        documento_id: '1',
+        importe_diferencia: 1,
+        cuenta_contrapartida: '629000',
+        motivo: 'Nota de contrato.',
+      }),
+    ).rejects.toMatchObject({ motivo: 'no_encontrada' });
+  }, 60_000);
 
   it('una factura inexistente sale como no_encontrada', async () => {
     await expect(

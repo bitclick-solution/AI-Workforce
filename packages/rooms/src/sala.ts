@@ -6,6 +6,7 @@
  * mismos nombres. Si cada lado escribiera el suyo, el primer cambio de nombre
  * dejaría mensajes sin moderar sin que nada fallase.
  */
+import type { PasoDeModeloDeSala } from './moderador-modelo.js';
 import { normalizar } from './moderador.js';
 
 export const FLUJO_MENSAJE_DE_SALA = 'mensajeDeSala';
@@ -83,6 +84,8 @@ export type AdjuntoDeSala =
       decision: 'intervenir' | 'operacion' | 'silencio';
       puestos: string[];
       motivo: string;
+      /** Paso de modelo: si se dio, con qué resultado y a qué coste. Ausente en las salas sin modelo. */
+      pasoDeModelo?: PasoDeModeloDeSala;
     }
   | { tipo: 'intervencion'; intervencionId: string; tareaId: string; estado: string }
   | { tipo: 'propuesta_operacion'; propuestaId: string };

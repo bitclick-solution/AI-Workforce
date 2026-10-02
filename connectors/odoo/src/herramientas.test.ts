@@ -113,24 +113,12 @@ describe('crear_nota_seguimiento', () => {
       'validate_write',
       'execute_approved_write',
     ]);
-    expect(cliente.llamadas[2]?.argumentos).toEqual({
-      approval: {
-        model: 'mail.activity',
-        operation: 'create',
-        record_ids: [],
-        values: {
-          res_model: 'account.move',
-          res_id: 42,
-          summary: 'Nota de contrato.',
-          note: 'Nota de contrato.',
-        },
-        context: {},
-        instance: 'default',
-        values_list: null,
-        token: 'odoo-write:prueba00000000000000000000000001',
-      },
-      confirm: true,
-    });
+    const argumentosEjecucion = cliente.llamadas[2]?.argumentos ?? {};
+    expect(Object.keys(argumentosEjecucion).sort()).toEqual(['approval', 'confirm']);
+    expect(argumentosEjecucion['confirm']).toBe(true);
+    expect((argumentosEjecucion['approval'] as Record<string, unknown>)['token']).toBe(
+      'odoo-write:prueba00000000000000000000000001',
+    );
   });
 
   it('con la misma clave de idempotencia devuelve la misma nota y no escribe dos veces', async () => {

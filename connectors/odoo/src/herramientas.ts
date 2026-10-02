@@ -7,6 +7,8 @@
  * que sirve `connectors/demo` en la prueba técnica del stack.
  */
 import { HERRAMIENTAS_DINAMICAS, type ClienteMcpDinamico } from './cliente.js';
+import { extraerAprobacion } from './aprobacion.js';
+import { crearHerramientasConciliacion, type HerramientasConciliacion } from './conciliacion.js';
 import { ErrorConector, traducirError } from './errores.js';
 import {
   EntradaCrearNotaSeguimiento,
@@ -97,7 +99,7 @@ export interface OpcionesHerramientas {
   readonly almacen?: AlmacenIdempotencia;
 }
 
-export interface Herramientas {
+export interface Herramientas extends HerramientasConciliacion {
   listarFacturasVencidas(entrada: unknown): Promise<SalidaListar>;
   crearNotaSeguimiento(entrada: unknown): Promise<SalidaNota>;
 }
@@ -123,39 +125,6 @@ function validar<T>(
     throw new ErrorConector('invalido', `Entrada inválida para «${herramienta}»: ${detalle}`);
   }
   return resultado.data;
-}
-
-/**
- * `preview_write` y `validate_write` del MCP dinámico real (v1.3.1) declaran su
- * tipo de vuelta como `Dict[str, Any]` genérico, no un modelo con campos propios
- * como `search_records`: FastMCP envuelve esa salida entera bajo `result`, igual
- * que hace con las de escritura. Sin probar también esa envolvente, `validate_write`
- * nunca encuentra la aprobación anidada en `result.approval` — el gemelo en
- * escrituras del bug que el PR #62 arregló en lecturas (`leerRegistros`).
- *
- * `execute_approved_write_tool` del MCP dinámico real exige un argumento
- * `approval` obligatorio con el objeto entero que devolvió `validate_write`
- * (con su `token` dentro, entre otros campos) — no un `approval_id` ni un
- * `token` sueltos: ese campo no existe en la herramienta real y Pydantic lo
- * rechazaría con «field required: approval». Hallazgo de esta misma rebanada
- * al construir la prueba de conformidad (`conformidad.test.ts`) del encargo
- * del 2-10: hasta ahora nunca se había ejercitado contra el MCP real porque
- * `tipo` por defecto es «nota», que no pasa por aquí.
- */
-function extraerAprobacion(carga: unknown): Record<string, unknown> {
-  if (typeof carga === 'object' && carga !== null) {
-    const objeto = carga as Record<string, unknown>;
-    const aprobacion = objeto['approval'];
-    if (typeof aprobacion === 'object' && aprobacion !== null && !Array.isArray(aprobacion)) {
-      return { approval: aprobacion };
-    }
-    if ('result' in objeto && objeto['result'] !== objeto)
-      return extraerAprobacion(objeto['result']);
-  }
-  throw new ErrorConector(
-    'invalido',
-    'El MCP dinámico no devolvió aprobación para la escritura: la actividad no se crea sin ella.',
-  );
 }
 
 export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas {
@@ -302,5 +271,9 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
     }
   }
 
-  return { listarFacturasVencidas, crearNotaSeguimiento };
+  return {
+    listarFacturasVencidas,
+    crearNotaSeguimiento,
+    ...crearHerramientasConciliacion({ cliente, ahora }),
+  };
 }

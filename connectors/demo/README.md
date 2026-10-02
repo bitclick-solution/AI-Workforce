@@ -73,6 +73,15 @@ Salida:
 
 **Idempotencia.** Con la misma `clave_idempotencia` se devuelve el mismo `id` y no se crea otra nota, aunque el resto de los argumentos lleguen distintos: manda la primera llamada. Es lo que hace seguro reintentar una escritura, y sin ella el reintento de una actividad de Temporal duplicaría notas.
 
+## Conciliación bancaria · referencia del contrato
+
+Dos herramientas más sobre un extracto inventado de cinco apuntes en dos cuentas (tres sin casar, dos casados con facturas de la cartera). Es la referencia del contrato de la rebanada «Herramientas de conciliación bancaria en los conectores» ([`docs/specs/conector-conciliacion-herramientas-v0.md`](../../docs/specs/conector-conciliacion-herramientas-v0.md)); los esquemas Zod de `src/conciliacion.ts` y los de `connectors/odoo` tienen la misma forma y una prueba (`connectors/odoo/src/contrato-comun.test.ts`) lo comprueba.
+
+- `leer_extracto_bancario` · `lectura`. Entrada `{ cuenta_id?, desde?, hasta?, solo_sin_casar? (true), limite? (1–200, 50) }`; salida `{ apuntes: [{ id, cuenta_id, fecha, concepto, importe, moneda, casado, documento_id }], total }`, del más antiguo al más reciente. `importe` lleva signo; `documento_id` es `null` si no está casado.
+- `proponer_asiento_diferencia` · `escritura`, siempre borrador. Entrada `{ apunte_id, documento_id, importe_diferencia, cuenta_contrapartida, motivo, clave_idempotencia? }`; salida `{ id, apunte_id, estado: 'borrador', creado_en }`. Con la misma clave devuelve el mismo `id`; con la misma clave y otros datos, `invalido`. El conector no ofrece ninguna herramienta que contabilice.
+
+Los argumentos se anuncian con el tipo y sin obligatoriedad, igual que en cobros: un argumento que falta o fuera de rango sale `invalido` con `datos.motivo`, no como error del protocolo. Un apunte, documento o cuenta (`629000`, `669000`, `759000`) que no existen salen `no_encontrada`. El fallo inyectable y la revocación de la credencial afectan a las cuatro herramientas. Contrato ejecutable: `src/conciliacion.test.ts`.
+
 ## Errores
 
 Un error de herramienta en MCP no es un error del protocolo: viaja como resultado con `isError: true`, porque la llamada llegó y se atendió, y lo que falló es lo que se pedía. El cuerpo es JSON y lleva siempre tres cosas:

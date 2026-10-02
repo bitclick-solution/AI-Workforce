@@ -2,7 +2,272 @@
   "_nota": "Respuestas grabadas del MCP dinámico contra la instancia de pruebas de Odoo. Datos inventados: ninguna persona, empresa, factura o importe real. Fecha de referencia de las pruebas: 2026-09-21.",
   "search_records": [
     {
-      "argumentos": { "limit": 3 },
+      "argumentos": {
+        "model": "account.bank.statement.line",
+        "domain": [["is_reconciled", "=", false]]
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "count": 3,
+          "result": [
+            {
+              "id": 301,
+              "journal_id": [7, "Banco de pruebas"],
+              "date": "2026-09-14",
+              "payment_ref": "TRANSF. DISTRIBUCIONES DE MUESTRA SL F-2026-0430",
+              "amount": 975.5,
+              "currency_id": [1, "EUR"],
+              "is_reconciled": false,
+              "move_id": false
+            },
+            {
+              "id": 303,
+              "journal_id": [7, "Banco de pruebas"],
+              "date": "2026-09-18",
+              "payment_ref": "COMISION MANTENIMIENTO CUENTA",
+              "amount": -12.0,
+              "currency_id": [1, "EUR"],
+              "is_reconciled": false,
+              "move_id": false
+            },
+            {
+              "id": 302,
+              "journal_id": [7, "Banco de pruebas"],
+              "date": "2026-09-16",
+              "payment_ref": "TRANSF. CLIENTE DE PRUEBAS SL F-2026-0418",
+              "amount": 420.5,
+              "currency_id": [1, "EUR"],
+              "is_reconciled": false,
+              "move_id": false
+            }
+          ],
+          "smart_fields_applied": false
+        }
+      }
+    },
+    {
+      "argumentos": {
+        "model": "account.bank.statement.line",
+        "domain": []
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "count": 4,
+          "result": [
+            {
+              "id": 301,
+              "journal_id": [7, "Banco de pruebas"],
+              "date": "2026-09-14",
+              "payment_ref": "TRANSF. DISTRIBUCIONES DE MUESTRA SL F-2026-0430",
+              "amount": 975.5,
+              "currency_id": [1, "EUR"],
+              "is_reconciled": false,
+              "move_id": false
+            },
+            {
+              "id": 303,
+              "journal_id": [7, "Banco de pruebas"],
+              "date": "2026-09-18",
+              "payment_ref": "COMISION MANTENIMIENTO CUENTA",
+              "amount": -12.0,
+              "currency_id": [1, "EUR"],
+              "is_reconciled": false,
+              "move_id": false
+            },
+            {
+              "id": 302,
+              "journal_id": [7, "Banco de pruebas"],
+              "date": "2026-09-16",
+              "payment_ref": "TRANSF. CLIENTE DE PRUEBAS SL F-2026-0418",
+              "amount": 420.5,
+              "currency_id": [1, "EUR"],
+              "is_reconciled": false,
+              "move_id": false
+            },
+            {
+              "id": 300,
+              "journal_id": [7, "Banco de pruebas"],
+              "date": "2026-09-10",
+              "payment_ref": "TRANSF. TALLERES IMAGINARIOS SA F-2026-0401",
+              "amount": 7600.0,
+              "currency_id": [1, "EUR"],
+              "is_reconciled": true,
+              "move_id": [8800, "BNK1/2026/08800"]
+            }
+          ],
+          "smart_fields_applied": false
+        }
+      }
+    },
+    {
+      "argumentos": {
+        "model": "account.bank.statement.line",
+        "domain": [["id", "=", 301]]
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "count": 1,
+          "result": [
+            {
+              "id": 301,
+              "journal_id": [7, "Banco de pruebas"],
+              "date": "2026-09-14"
+            }
+          ],
+          "smart_fields_applied": false
+        }
+      }
+    },
+    {
+      "argumentos": {
+        "model": "account.bank.statement.line",
+        "domain": [["id", "=", 999999]]
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "count": 0,
+          "result": [],
+          "smart_fields_applied": false
+        }
+      }
+    },
+    {
+      "argumentos": {
+        "model": "account.move",
+        "domain": [["id", "=", 46]]
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "count": 1,
+          "result": [
+            {
+              "id": 46,
+              "name": "F-2026-0430"
+            }
+          ],
+          "smart_fields_applied": false
+        }
+      }
+    },
+    {
+      "argumentos": {
+        "model": "account.move",
+        "domain": [["id", "=", 999998]]
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "count": 0,
+          "result": [],
+          "smart_fields_applied": false
+        }
+      }
+    },
+    {
+      "argumentos": {
+        "model": "account.journal",
+        "domain": [["id", "=", 7]]
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "count": 1,
+          "result": [
+            {
+              "id": 7,
+              "default_account_id": [572, "572000 Bancos"]
+            }
+          ],
+          "smart_fields_applied": false
+        }
+      }
+    },
+    {
+      "argumentos": {
+        "model": "account.account",
+        "domain": [["code", "=", "629000"]]
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "count": 1,
+          "result": [
+            {
+              "id": 640,
+              "code": "629000"
+            }
+          ],
+          "smart_fields_applied": false
+        }
+      }
+    },
+    {
+      "argumentos": {
+        "model": "account.account",
+        "domain": [["code", "=", "000000"]]
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "count": 0,
+          "result": [],
+          "smart_fields_applied": false
+        }
+      }
+    },
+    {
+      "argumentos": {
+        "model": "account.bank.statement.line"
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "count": 3,
+          "result": [
+            {
+              "id": 301,
+              "journal_id": [7, "Banco de pruebas"],
+              "date": "2026-09-14",
+              "payment_ref": "TRANSF. DISTRIBUCIONES DE MUESTRA SL F-2026-0430",
+              "amount": 975.5,
+              "currency_id": [1, "EUR"],
+              "is_reconciled": false,
+              "move_id": false
+            },
+            {
+              "id": 303,
+              "journal_id": [7, "Banco de pruebas"],
+              "date": "2026-09-18",
+              "payment_ref": "COMISION MANTENIMIENTO CUENTA",
+              "amount": -12.0,
+              "currency_id": [1, "EUR"],
+              "is_reconciled": false,
+              "move_id": false
+            },
+            {
+              "id": 302,
+              "journal_id": [7, "Banco de pruebas"],
+              "date": "2026-09-16",
+              "payment_ref": "TRANSF. CLIENTE DE PRUEBAS SL F-2026-0418",
+              "amount": 420.5,
+              "currency_id": [1, "EUR"],
+              "is_reconciled": false,
+              "move_id": false
+            }
+          ],
+          "smart_fields_applied": false
+        }
+      }
+    },
+    {
+      "argumentos": {
+        "limit": 3
+      },
       "carga": {
         "success": true,
         "count": 1,
@@ -94,6 +359,44 @@
   ],
   "preview_write": [
     {
+      "argumentos": {
+        "model": "account.move"
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "tool": "preview_write",
+          "model": "account.move",
+          "operation": "create",
+          "approval": {
+            "model": "account.move",
+            "operation": "create",
+            "record_ids": [],
+            "values": {
+              "move_type": "entry",
+              "date": "2026-09-14",
+              "ref": "Diferencia de conciliación: apunte 301, documento 46",
+              "narration": "Comisión bancaria descontada del cobro.",
+              "line_ids": []
+            },
+            "context": {},
+            "instance": "default",
+            "values_list": null,
+            "token": "odoo-write:prueba00000000000000000000000002"
+          },
+          "execute_method": {
+            "model": "account.move",
+            "method": "create"
+          },
+          "issues": [],
+          "warnings": [],
+          "metadata_used": {
+            "source": "cache"
+          }
+        }
+      }
+    },
+    {
       "carga": {
         "result": {
           "success": true,
@@ -115,15 +418,60 @@
             "values_list": null,
             "token": "odoo-write:prueba00000000000000000000000001"
           },
-          "execute_method": { "model": "mail.activity", "method": "create" },
+          "execute_method": {
+            "model": "mail.activity",
+            "method": "create"
+          },
           "issues": [],
           "warnings": [],
-          "metadata_used": { "source": "cache" }
+          "metadata_used": {
+            "source": "cache"
+          }
         }
       }
     }
   ],
   "validate_write": [
+    {
+      "argumentos": {
+        "model": "account.move"
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "tool": "validate_write",
+          "model": "account.move",
+          "operation": "create",
+          "issues": [],
+          "field_hints": [],
+          "approval": {
+            "model": "account.move",
+            "operation": "create",
+            "record_ids": [],
+            "values": {
+              "move_type": "entry",
+              "date": "2026-09-14",
+              "ref": "Diferencia de conciliación: apunte 301, documento 46",
+              "narration": "Comisión bancaria descontada del cobro.",
+              "line_ids": []
+            },
+            "context": {},
+            "instance": "default",
+            "values_list": null,
+            "token": "odoo-write:prueba00000000000000000000000002"
+          },
+          "metadata_used": {
+            "fields_get": {},
+            "source": "cache"
+          },
+          "approval_status": {
+            "stored": true,
+            "expires_in_seconds": 900,
+            "source": "validate_write"
+          }
+        }
+      }
+    },
     {
       "carga": {
         "result": {
@@ -148,7 +496,10 @@
             "values_list": null,
             "token": "odoo-write:prueba00000000000000000000000001"
           },
-          "metadata_used": { "fields_get": {}, "source": "cache" },
+          "metadata_used": {
+            "fields_get": {},
+            "source": "cache"
+          },
           "approval_status": {
             "stored": true,
             "expires_in_seconds": 900,
@@ -159,6 +510,21 @@
     }
   ],
   "execute_approved_write": [
+    {
+      "argumentos": {
+        "approval": { "token": "odoo-write:prueba00000000000000000000000002" }
+      },
+      "carga": {
+        "result": {
+          "success": true,
+          "tool": "execute_approved_write",
+          "model": "account.move",
+          "operation": "create",
+          "result": 7001,
+          "instance": "pruebas"
+        }
+      }
+    },
     {
       "carga": {
         "result": {

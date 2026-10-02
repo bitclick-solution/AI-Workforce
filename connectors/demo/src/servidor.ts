@@ -28,6 +28,15 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
+import {
+  CUENTAS_CONTRAPARTIDA_DEMO,
+  EntradaLeerExtractoBancario,
+  EntradaProponerAsientoDiferencia,
+  buscarApunte,
+  buscarDocumento,
+  extractoDemo,
+  type AsientoGuardado,
+} from './conciliacion.js';
 import { HOY_DEMO, buscarFactura, facturasVencidas } from './datos.js';
 import { errorDeHerramienta } from './errores.js';
 
@@ -41,6 +50,8 @@ export const REFERENCIA_SECRETO_DEMO = `env:${VARIABLE_SECRETO_DEMO}`;
 
 export const HERRAMIENTA_LISTAR = 'listar_facturas_vencidas';
 export const HERRAMIENTA_NOTA = 'crear_nota_seguimiento';
+export const HERRAMIENTA_EXTRACTO = 'leer_extracto_bancario';
+export const HERRAMIENTA_ASIENTO = 'proponer_asiento_diferencia';
 
 /** Tipos de anotación que acepta el contrato. */
 export const TIPOS_DE_NOTA = ['nota', 'actividad'] as const;
@@ -110,6 +121,45 @@ const entradaNota = {
     .describe('Con la misma clave se devuelve la misma nota sin crear otra.'),
 };
 
+/**
+ * Las entradas de conciliación se declaran con el tipo y sin obligatoriedad ni
+ * rango, por la misma razón que las de cobros: un argumento que falta o que se
+ * sale de rango tiene que salir como `invalido` con `datos.motivo`, y no como un
+ * error del protocolo. Quien valida es el esquema Zod del contrato
+ * (`conciliacion.ts`); aquí solo se anuncia lo que acepta cada herramienta.
+ */
+const entradaExtracto = {
+  cuenta_id: z.string().optional().describe('Identificador de la cuenta bancaria.'),
+  desde: z.string().optional().describe('Fecha de inicio, inclusiva, en YYYY-MM-DD.'),
+  hasta: z
+    .string()
+    .optional()
+    .describe('Fecha de fin, inclusiva, en YYYY-MM-DD. No anterior a desde.'),
+  solo_sin_casar: z
+    .boolean()
+    .optional()
+    .describe('Por defecto true: solo los apuntes que aún no están casados.'),
+  limite: z.number().optional().describe('Máximo de apuntes, entre 1 y 200. Por defecto 50.'),
+};
+
+const entradaAsiento = {
+  apunte_id: z.string().optional().describe('Obligatorio. Identificador del apunte bancario.'),
+  documento_id: z.string().optional().describe('Obligatorio. Factura o documento con el que casa.'),
+  importe_diferencia: z
+    .number()
+    .optional()
+    .describe('Obligatorio. Dos decimales, distinto de cero. Positivo: el banco recibió más.'),
+  cuenta_contrapartida: z
+    .string()
+    .optional()
+    .describe('Obligatorio. Código de la cuenta contable donde se lleva la diferencia.'),
+  motivo: z.string().optional().describe('Obligatorio. De 1 a 500 caracteres, sin HTML.'),
+  clave_idempotencia: z
+    .string()
+    .optional()
+    .describe('Con la misma clave se devuelve el mismo borrador sin crear otro.'),
+};
+
 export interface OpcionesServidorDemo {
   /**
    * Credencial que trae la conexión. El servidor la compara con la que espera y
@@ -137,6 +187,8 @@ export interface NotaGuardada {
 
 export interface ServidorDemo {
   servidor: McpServer;
+  /** Asientos en borrador escritos por `proponer_asiento_diferencia`. Nunca contabilizados. */
+  readonly asientos: readonly AsientoGuardado[];
   /** Notas escritas por `crear_nota_seguimiento`. Es el efecto que se aprueba. */
   readonly notas: readonly NotaGuardada[];
   /** Cuántas veces se ha llamado a cada herramienta, incluidos los fallos. */
@@ -161,6 +213,27 @@ export class CredencialDemoNoValida extends Error {
   }
 }
 
+/** Quita los argumentos que el SDK entrega como `undefined`: el esquema estricto no los acepta. */
+function sinIndefinidos(argumentos: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(argumentos).filter(([, valor]) => valor !== undefined));
+}
+
+function detalle(error: { issues: readonly { message: string }[] }): string {
+  return error.issues
+    .map((problema) => problema.message)
+    .join(' ')
+    .slice(0, 300);
+}
+
+function salidaDeAsiento(asiento: AsientoGuardado) {
+  return {
+    id: asiento.id,
+    apunte_id: asiento.apunte_id,
+    estado: asiento.estado,
+    creado_en: asiento.creado_en,
+  };
+}
+
 /** Texto JSON de una respuesta correcta. El contrato devuelve JSON, no prosa. */
 function respuesta(carga: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(carga) }] };
@@ -181,6 +254,9 @@ export function crearServidorDemo(opciones: OpcionesServidorDemo): ServidorDemo 
   const notas: NotaGuardada[] = [];
   /** Notas por clave de idempotencia. Con la misma clave se devuelve la misma nota. */
   const porClave = new Map<string, NotaGuardada>();
+  const asientos: AsientoGuardado[] = [];
+  /** Asientos por clave de idempotencia, con la huella de los datos que los crearon. */
+  const asientosPorClave = new Map<string, { huella: string; asiento: AsientoGuardado }>();
   const llamadas = new Map<string, number>();
   let fallosPendientes = opciones.fallosIniciales ?? 0;
   let credencialRevocada = false;
@@ -336,8 +412,100 @@ export function crearServidorDemo(opciones: OpcionesServidorDemo): ServidorDemo 
     },
   );
 
+  servidor.registerTool(
+    HERRAMIENTA_EXTRACTO,
+    {
+      title: 'Leer extracto bancario',
+      description:
+        'Devuelve los apuntes del extracto bancario, del más antiguo al más reciente, ' +
+        'por defecto solo los que aún no están casados.',
+      inputSchema: entradaExtracto,
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+      _meta: { 'aiw.clase': 'lectura' },
+    },
+    (argumentos) => {
+      const fallo = fallarSiToca(HERRAMIENTA_EXTRACTO);
+      if (fallo) return fallo;
+      const entrada = EntradaLeerExtractoBancario.safeParse(sinIndefinidos(argumentos));
+      if (!entrada.success) return errorDeHerramienta('invalido', detalle(entrada.error));
+      const apuntes = extractoDemo(entrada.data);
+      return respuesta({ apuntes, total: apuntes.length });
+    },
+  );
+
+  servidor.registerTool(
+    HERRAMIENTA_ASIENTO,
+    {
+      title: 'Proponer asiento de diferencia',
+      description:
+        'Crea el borrador de un asiento por la diferencia entre un apunte bancario y su ' +
+        'documento. Nunca lo contabiliza: lo publica una persona en el sistema de gestión.',
+      inputSchema: entradaAsiento,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      _meta: { 'aiw.clase': 'escritura' },
+    },
+    (argumentos) => {
+      const fallo = fallarSiToca(HERRAMIENTA_ASIENTO);
+      if (fallo) return fallo;
+      const entrada = EntradaProponerAsientoDiferencia.safeParse(sinIndefinidos(argumentos));
+      if (!entrada.success) return errorDeHerramienta('invalido', detalle(entrada.error));
+      const datos = entrada.data;
+      const huella = JSON.stringify([
+        datos.apunte_id,
+        datos.documento_id,
+        datos.importe_diferencia,
+        datos.cuenta_contrapartida,
+        datos.motivo,
+      ]);
+
+      if (datos.clave_idempotencia !== undefined) {
+        const ya = asientosPorClave.get(datos.clave_idempotencia);
+        if (ya) {
+          if (ya.huella !== huella) {
+            return errorDeHerramienta(
+              'invalido',
+              `La clave de idempotencia «${datos.clave_idempotencia}» ya se usó para otro asiento.`,
+            );
+          }
+          return respuesta(salidaDeAsiento(ya.asiento));
+        }
+      }
+
+      if (!buscarApunte(datos.apunte_id)) {
+        return errorDeHerramienta('no_encontrada', `No existe el apunte ${datos.apunte_id}.`);
+      }
+      if (!buscarDocumento(datos.documento_id)) {
+        return errorDeHerramienta('no_encontrada', `No existe el documento ${datos.documento_id}.`);
+      }
+      if (!CUENTAS_CONTRAPARTIDA_DEMO.includes(datos.cuenta_contrapartida)) {
+        return errorDeHerramienta(
+          'no_encontrada',
+          `No existe la cuenta ${datos.cuenta_contrapartida}.`,
+        );
+      }
+
+      const asiento: AsientoGuardado = {
+        id: `asi-${String(asientos.length + 1).padStart(4, '0')}`,
+        apunte_id: datos.apunte_id,
+        documento_id: datos.documento_id,
+        importe_diferencia: datos.importe_diferencia,
+        cuenta_contrapartida: datos.cuenta_contrapartida,
+        motivo: datos.motivo,
+        // Siempre borrador: la demo no tiene ruta que lo contabilice.
+        estado: 'borrador',
+        creado_en: `${hoy}T09:00:00.000Z`,
+      };
+      asientos.push(asiento);
+      if (datos.clave_idempotencia !== undefined) {
+        asientosPorClave.set(datos.clave_idempotencia, { huella, asiento });
+      }
+      return respuesta(salidaDeAsiento(asiento));
+    },
+  );
+
   return {
     servidor,
+    asientos,
     notas,
     llamadas,
     revocarCredencial() {

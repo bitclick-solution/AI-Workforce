@@ -379,3 +379,47 @@ describe('migración del contador de tareas v0', () => {
     }
   });
 });
+
+describe('migración del uso de modelo de plataforma (0010)', () => {
+  const migracion = MIGRACIONES.find((m) => m.nombre === '0010_uso_modelo_de_plataforma');
+  if (!migracion) throw new Error('No hay migración del uso de modelo de plataforma.');
+  const sql = readFileSync(migracion.ruta, 'utf8');
+  const reverso = readFileSync(migracion.rutaReverso, 'utf8');
+
+  it('solo altera uso_modelo, asumiendo el dueño del esquema antes de tocarlo', () => {
+    expect(sql).not.toContain('create table');
+    expect(sql).not.toContain('create extension');
+    expect(sql).not.toContain('drop table');
+    expect(sql.match(/alter table (\w+)/g)).toEqual([
+      'alter table uso_modelo',
+      'alter table uso_modelo',
+    ]);
+    expect(sql.indexOf('set local role aiw_migrador')).toBeLessThan(
+      sql.indexOf('alter table uso_modelo'),
+    );
+  });
+
+  it('una fila es de un puesto o de la plataforma, nunca de las dos ni de ninguna', () => {
+    expect(sql).toContain('constraint uso_modelo_origen_coherente check');
+    expect(sql).toContain("actor_plataforma in ('moderador', 'director_ia')");
+    for (const columna of ['tarea_id', 'tarea_raiz_id', 'puesto_id', 'version_puesto_id']) {
+      expect(sql).toContain(`alter column ${columna} drop not null`);
+    }
+    expect(sql).toContain('sala_id uuid references sala (id) on delete restrict');
+  });
+
+  it('su reverso borra el uso de plataforma antes de volver a exigir tarea y puesto', () => {
+    expect(reverso.indexOf('delete from uso_modelo where sala_id is not null')).toBeLessThan(
+      reverso.indexOf('alter column tarea_id set not null'),
+    );
+    expect(reverso.indexOf('drop constraint if exists uso_modelo_origen_coherente')).toBeLessThan(
+      reverso.indexOf('drop column if exists sala_id'),
+    );
+    expect(reverso).not.toContain('drop table');
+  });
+
+  it('el uso de modelo se purga antes que la sala, que ahora referencia', () => {
+    expect(ORDEN_PURGA.indexOf('uso_modelo')).toBeLessThan(ORDEN_PURGA.indexOf('sala'));
+    expect(ORDEN_PURGA.indexOf('uso_modelo')).toBeLessThan(ORDEN_PURGA.indexOf('tarifa_modelo'));
+  });
+});

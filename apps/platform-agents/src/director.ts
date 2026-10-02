@@ -13,10 +13,18 @@
  * no existe, un departamento que la organización no tiene o un puesto que ya está.
  */
 import { decidirPaso, type Nivel, type PapelModelo } from '@aiw/domain';
-import { aparece } from '@aiw/rooms';
+import {
+  AMBITO_CON_MODELO,
+  aparece,
+  clasificar,
+  type PuertoDeClasificacion,
+  type UsoDeClasificacion,
+} from '@aiw/rooms';
+import { z } from 'zod';
 
 import catalogoDePlantillas from './catalogo/plantillas.json' with { type: 'json' };
 import politicaDeOperaciones from './catalogo/operaciones.json' with { type: 'json' };
+import promptDelDirector from './catalogo/prompt-director.json' with { type: 'json' };
 
 export type TipoHerramienta = 'lectura' | 'escritura';
 
@@ -80,6 +88,8 @@ export interface PoliticaDeOperaciones {
 export const CATALOGO: CatalogoDePlantillas = catalogoDePlantillas as CatalogoDePlantillas;
 export const POLITICA_OPERACIONES: PoliticaDeOperaciones =
   politicaDeOperaciones as PoliticaDeOperaciones;
+
+export const PROMPT_DEL_DIRECTOR: { version: number; sistema: string } = promptDelDirector;
 
 /** Clase de acción de la operación en la política de operaciones. */
 export const CLASE_CONTRATAR = 'organizacion.contratar';
@@ -156,13 +166,20 @@ function euros(valor: number): string {
   return `${valor.toLocaleString('es-ES', { maximumFractionDigits: 2 })} €`;
 }
 
+/** Lo que eligió el paso de modelo: una plantilla del catálogo y, si la frase lo dice, un departamento. */
+export interface EleccionDelModelo {
+  plantilla: Plantilla;
+  departamentoId?: string | undefined;
+}
+
 export function proponerContratacion(
   frase: string,
   contexto: ContextoDelDirector,
   catalogo: CatalogoDePlantillas = CATALOGO,
   politica: PoliticaDeOperaciones = POLITICA_OPERACIONES,
+  eleccion?: EleccionDelModelo,
 ): RespuestaDelDirector {
-  const plantilla = elegirPlantilla(frase, catalogo);
+  const plantilla = eleccion?.plantilla ?? elegirPlantilla(frase, catalogo);
   if (!plantilla) {
     const nombres = catalogo.plantillas.map((p) => p.nombre).join(', ');
     return {
@@ -172,7 +189,11 @@ export function proponerContratacion(
   }
 
   // El departamento que dice la frase manda; si no dice ninguno, el de la plantilla.
-  const nombrado = contexto.departamentos.find((d) => aparece(d.nombre, frase));
+  const nombrado =
+    (eleccion?.departamentoId === undefined
+      ? undefined
+      : contexto.departamentos.find((d) => d.id === eleccion.departamentoId)) ??
+    contexto.departamentos.find((d) => aparece(d.nombre, frase));
   const departamento =
     nombrado ?? contexto.departamentos.find((d) => aparece(d.nombre, plantilla.departamento));
   if (!departamento || departamento.estado !== 'activo') {
@@ -292,4 +313,134 @@ export function proponerContratacion(
     `Arranca en prueba ${politica.diasDePrueba} días con las escrituras en N1. ` +
     `Necesita tu confirmación (${nivelExigido.toUpperCase()}).`;
   return { tipo: 'propuesta', propuesta, mensaje };
+}
+
+/** Qué pasó con el paso de modelo del Director: va al libro con el coste. */
+export type PasoDeModeloDelDirector =
+  | { usado: false; razon: 'reglas_decidieron' | 'sala_general' | 'sin_puerto' }
+  | {
+      usado: true;
+      resultado: 'plantilla' | 'ninguna' | 'no_disponible';
+      costeEuros: number;
+      llamadas: number;
+      /** Un uso por llamada con precio, para registrarlo en `uso_modelo`. */
+      usos: UsoDeClasificacion[];
+      version: number;
+      motivo: string;
+    };
+
+export interface OpcionesDelDirectorConModelo {
+  /** `sala.ambito`. Solo `departamento` da el paso de modelo. */
+  ambito: string;
+  /** Sin puerto, el Director es el de reglas de siempre. */
+  clasificador?: PuertoDeClasificacion | undefined;
+}
+
+function esquemaDelDirector(plantillaIds: readonly string[], departamentoIds: readonly string[]) {
+  const plantillas = ['ninguno', ...plantillaIds] as [string, ...string[]];
+  const departamentos =
+    departamentoIds.length > 0 ? (departamentoIds as [string, ...string[]]) : undefined;
+  return z.object({
+    plantillaId: z.enum(plantillas),
+    departamentoId: departamentos === undefined ? z.null() : z.enum(departamentos).nullable(),
+    motivo: z.string().min(1).max(300),
+  });
+}
+
+function entradaDelModelo(
+  frase: string,
+  contexto: ContextoDelDirector,
+  catalogo: CatalogoDePlantillas,
+): string {
+  return JSON.stringify({
+    frase,
+    plantillas: catalogo.plantillas.map((p) => ({
+      plantillaId: p.id,
+      nombre: p.nombre,
+      departamento: p.departamento,
+      mision: p.ficha.mision,
+      sinonimos: p.sinonimos,
+    })),
+    departamentos: contexto.departamentos.map((d) => ({
+      departamentoId: d.id,
+      nombre: d.nombre,
+      estado: d.estado,
+    })),
+  });
+}
+
+/**
+ * `proponerContratacion` con paso de modelo cuando las reglas no encuentran plantilla.
+ *
+ * El modelo clasifica entre las plantillas y departamentos que ya recibe el Director
+ * (enumeración cerrada más «ninguno»): la propuesta que sale pasa por el mismo
+ * `decidirPaso` y el mismo motor de políticas que la de reglas, sin ninguna vía
+ * nueva. Un fallo del modelo, una salida fuera del esquema o «ninguno» dejan la
+ * misma aclaración que daría el Director sin modelo.
+ */
+export async function proponerContratacionConModelo(
+  frase: string,
+  contexto: ContextoDelDirector,
+  opciones: OpcionesDelDirectorConModelo,
+  catalogo: CatalogoDePlantillas = CATALOGO,
+  politica: PoliticaDeOperaciones = POLITICA_OPERACIONES,
+): Promise<{ respuesta: RespuestaDelDirector; pasoDeModelo: PasoDeModeloDelDirector }> {
+  if (elegirPlantilla(frase, catalogo) !== undefined) {
+    return {
+      respuesta: proponerContratacion(frase, contexto, catalogo, politica),
+      pasoDeModelo: { usado: false, razon: 'reglas_decidieron' },
+    };
+  }
+  const sinModelo = proponerContratacion(frase, contexto, catalogo, politica);
+  if (opciones.ambito !== AMBITO_CON_MODELO) {
+    return { respuesta: sinModelo, pasoDeModelo: { usado: false, razon: 'sala_general' } };
+  }
+  if (opciones.clasificador === undefined || catalogo.plantillas.length === 0) {
+    return { respuesta: sinModelo, pasoDeModelo: { usado: false, razon: 'sin_puerto' } };
+  }
+
+  const resultado = await clasificar(opciones.clasificador, {
+    sistema: PROMPT_DEL_DIRECTOR.sistema,
+    usuario: entradaDelModelo(frase, contexto, catalogo),
+    esquema: esquemaDelDirector(
+      catalogo.plantillas.map((p) => p.id),
+      contexto.departamentos.map((d) => d.id),
+    ),
+  });
+  const version = PROMPT_DEL_DIRECTOR.version;
+
+  if (resultado.tipo === 'no_disponible') {
+    return {
+      respuesta: sinModelo,
+      pasoDeModelo: {
+        usado: true,
+        resultado: 'no_disponible',
+        costeEuros: resultado.costeEuros,
+        llamadas: resultado.llamadas,
+        usos: resultado.usos,
+        version,
+        motivo: resultado.motivo,
+      },
+    };
+  }
+
+  const { plantillaId, departamentoId, motivo } = resultado.salida;
+  const base = {
+    costeEuros: resultado.costeEuros,
+    llamadas: resultado.llamadas,
+    usos: resultado.usos,
+    version,
+    motivo,
+  };
+  const plantilla = catalogo.plantillas.find((p) => p.id === plantillaId);
+  if (plantilla === undefined) {
+    return { respuesta: sinModelo, pasoDeModelo: { usado: true, resultado: 'ninguna', ...base } };
+  }
+  return {
+    respuesta: proponerContratacion(frase, contexto, catalogo, politica, {
+      plantilla,
+      departamentoId: departamentoId ?? undefined,
+    }),
+    pasoDeModelo: { usado: true, resultado: 'plantilla', ...base },
+  };
 }

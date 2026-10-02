@@ -12,6 +12,7 @@ import { clienteGrabado } from './cliente.js';
 import { CODIGO_POR_MOTIVO, esReintentable } from './errores.js';
 import { ESQUEMA_ENTRADA_LISTAR, ESQUEMA_ENTRADA_NOTA } from './esquema-json.js';
 import { DIA_DE_LA_GRABACION, cargarGrabaciones } from './grabaciones/index.js';
+import { NOMBRES_CONCILIACION } from './conciliacion.js';
 import { NOMBRES, crearHerramientas } from './herramientas.js';
 import { CATALOGO, crearServidor } from './servidor.js';
 
@@ -29,10 +30,15 @@ async function conectar(): Promise<Client> {
 }
 
 describe('catálogo del conector', () => {
-  it('anuncia exactamente dos herramientas', async () => {
+  it('anuncia exactamente cuatro herramientas: cobros y conciliación', async () => {
     const cliente = await conectar();
     const { tools } = await cliente.listTools();
-    expect(tools.map((herramienta) => herramienta.name)).toEqual([NOMBRES.listar, NOMBRES.nota]);
+    expect(tools.map((herramienta) => herramienta.name)).toEqual([
+      NOMBRES.listar,
+      NOMBRES.nota,
+      NOMBRES_CONCILIACION.extracto,
+      NOMBRES_CONCILIACION.asiento,
+    ]);
     expect(tools.every((herramienta) => (herramienta.description ?? '').length > 20)).toBe(true);
     await cliente.close();
   });
@@ -45,8 +51,14 @@ describe('catálogo del conector', () => {
     const { tools } = await cliente.listTools();
     const listar = tools.find((herramienta) => herramienta.name === NOMBRES.listar);
     const nota = tools.find((herramienta) => herramienta.name === NOMBRES.nota);
+    const extracto = tools.find(
+      (herramienta) => herramienta.name === NOMBRES_CONCILIACION.extracto,
+    );
+    const asiento = tools.find((herramienta) => herramienta.name === NOMBRES_CONCILIACION.asiento);
     expect(listar?.annotations?.readOnlyHint).toBe(true);
     expect(nota?.annotations?.readOnlyHint).toBe(false);
+    expect(extracto?.annotations?.readOnlyHint).toBe(true);
+    expect(asiento?.annotations?.readOnlyHint).toBe(false);
     await cliente.close();
   });
 
@@ -57,6 +69,40 @@ describe('catálogo del conector', () => {
     expect(ESQUEMA_ENTRADA_LISTAR.properties.limite.maximum).toBe(200);
     expect(ESQUEMA_ENTRADA_NOTA.properties.texto.maxLength).toBe(2000);
     expect([...ESQUEMA_ENTRADA_NOTA.required]).toEqual(['factura_id', 'texto']);
+  });
+});
+
+describe('conciliación por el protocolo', () => {
+  it('leer_extracto_bancario viaja como contenido estructurado y cuadra el total', async () => {
+    const cliente = await conectar();
+    const resultado = await cliente.callTool({
+      name: NOMBRES_CONCILIACION.extracto,
+      arguments: {},
+    });
+    const salida = resultado.structuredContent as { apuntes: unknown[]; total: number };
+    expect(salida.total).toBe(3);
+    expect(salida.apuntes).toHaveLength(3);
+    await cliente.close();
+  });
+
+  it('proponer_asiento_diferencia devuelve un borrador', async () => {
+    const cliente = await conectar();
+    const resultado = await cliente.callTool({
+      name: NOMBRES_CONCILIACION.asiento,
+      arguments: {
+        apunte_id: '301',
+        documento_id: '46',
+        importe_diferencia: -12,
+        cuenta_contrapartida: '629000',
+        motivo: 'Comisión bancaria descontada del cobro.',
+      },
+    });
+    expect(resultado.structuredContent).toMatchObject({
+      id: '7001',
+      apunte_id: '301',
+      estado: 'borrador',
+    });
+    await cliente.close();
   });
 });
 
@@ -78,6 +124,33 @@ describe('resultados y errores por el protocolo', () => {
     [
       'factura inexistente',
       { name: NOMBRES.nota, arguments: { factura_id: 999999, texto: 'Aviso.' } },
+      'no_encontrada',
+    ],
+    [
+      'asiento sin documento',
+      {
+        name: NOMBRES_CONCILIACION.asiento,
+        arguments: {
+          apunte_id: '301',
+          importe_diferencia: 5,
+          cuenta_contrapartida: '629000',
+          motivo: 'Comisión.',
+        },
+      },
+      'invalido',
+    ],
+    [
+      'apunte inexistente',
+      {
+        name: NOMBRES_CONCILIACION.asiento,
+        arguments: {
+          apunte_id: '999999',
+          documento_id: '46',
+          importe_diferencia: 5,
+          cuenta_contrapartida: '629000',
+          motivo: 'Comisión.',
+        },
+      },
       'no_encontrada',
     ],
     ['herramienta que no sirve', { name: 'borrar_factura', arguments: {} }, 'no_encontrada'],

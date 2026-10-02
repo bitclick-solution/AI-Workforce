@@ -1,0 +1,291 @@
+{
+  "_nota": "Esquemas de entrada (inputSchema) reales del MCP dinámico de Odoo v1.3.1, capturados del tools/list de la imagen viva por el Probador (2-10-2026). Copia de referencia en la sección «Esquemas vivos del MCP de Odoo v1.3.1» de la rebanada «Bitclick como primera organización». Sin datos de conexión ni de ningún ERP.",
+  "version": "1.3.1",
+  "herramientas": {
+    "search_records": {
+      "properties": {
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "domain": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Domain"
+        },
+        "fields": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fields"
+        },
+        "limit": {
+          "default": 10,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "offset": {
+          "default": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "order": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Order"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        },
+        "instance": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instance"
+        }
+      },
+      "required": ["model"],
+      "type": "object",
+      "title": "search_recordsArguments"
+    },
+    "preview_write": {
+      "properties": {
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "operation": {
+          "title": "Operation",
+          "type": "string"
+        },
+        "values": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Values"
+        },
+        "values_list": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Values List"
+        },
+        "record_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Record Ids"
+        },
+        "context": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Context"
+        },
+        "instance": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instance"
+        }
+      },
+      "required": ["model", "operation"],
+      "type": "object",
+      "title": "preview_writeArguments"
+    },
+    "validate_write": {
+      "properties": {
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "operation": {
+          "title": "Operation",
+          "type": "string"
+        },
+        "values": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Values"
+        },
+        "values_list": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Values List"
+        },
+        "record_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Record Ids"
+        },
+        "context": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Context"
+        },
+        "fields_metadata": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fields Metadata"
+        },
+        "use_live_metadata": {
+          "default": true,
+          "title": "Use Live Metadata",
+          "type": "boolean"
+        },
+        "instance": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instance"
+        }
+      },
+      "required": ["model", "operation"],
+      "type": "object",
+      "title": "validate_writeArguments"
+    },
+    "execute_approved_write": {
+      "properties": {
+        "approval": {
+          "additionalProperties": true,
+          "title": "Approval",
+          "type": "object"
+        },
+        "confirm": {
+          "default": false,
+          "title": "Confirm",
+          "type": "boolean"
+        }
+      },
+      "required": ["approval"],
+      "type": "object",
+      "title": "execute_approved_write_toolArguments"
+    }
+  }
+}
