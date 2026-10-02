@@ -79,6 +79,12 @@ export type { ListaDeAvisosProps } from './lista-de-avisos';
 export { ListaDePasos, PasoDeTarea } from './paso-de-tarea';
 export type { ListaDePasosProps, PasoDeTareaProps, ResultadoDePaso } from './paso-de-tarea';
 
+export { MedidorDeCriterio } from './medidor-de-criterio';
+export type { MedidorDeCriterioProps } from './medidor-de-criterio';
+
+export { LineaDeNiveles } from './linea-de-niveles';
+export type { CambioEnLinea, LineaDeNivelesProps } from './linea-de-niveles';
+
 export { AvisoDeAprobacion } from './aviso-de-aprobacion';
 export type { AvisoDeAprobacionProps } from './aviso-de-aprobacion';
 
