@@ -61,12 +61,21 @@ function valorCrudo(resultado: ResultadoHerramienta, texto: string): unknown {
  * marcar: `{ success: false, error: "…" }`. Sin esto, `leerRegistros` la veía
  * como una respuesta sin lista y el motivo real del ERP se perdía detrás de
  * «no trae ninguna lista de registros».
+ *
+ * Las cuatro herramientas de escritura (`chatter_post`, `preview_write`,
+ * `validate_write`, `execute_approved_write`) declaran su tipo de vuelta como un
+ * diccionario genérico: FastMCP envuelve la respuesta entera en `result` (ver el
+ * README del conector), así que el `success: false` de un rechazo real de Odoo
+ * queda anidado ahí. Se prueba recursivamente, igual que `idDeObjeto` en
+ * `mapeo.ts`.
  */
 function falloBlando(carga: unknown): string | undefined {
   if (typeof carga !== 'object' || carga === null || Array.isArray(carga)) return undefined;
   const objeto = carga as Record<string, unknown>;
-  if (objeto['success'] !== false) return undefined;
-  return typeof objeto['error'] === 'string' ? objeto['error'] : 'sin detalle del ERP';
+  if (objeto['success'] === false) {
+    return typeof objeto['error'] === 'string' ? objeto['error'] : 'sin detalle del ERP';
+  }
+  return 'result' in objeto ? falloBlando(objeto['result']) : undefined;
 }
 
 /** El MCP dinámico responde en texto JSON o en contenido estructurado; valen las dos. */
