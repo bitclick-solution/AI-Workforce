@@ -123,6 +123,25 @@ describe('moderarConModelo · sala de un departamento', () => {
   });
 });
 
+describe('moderarConModelo · límite de intervenciones', () => {
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, 0, -3])(
+    'un límite no válido (%s) vale el de por defecto y no vacía la intervención',
+    async (limite) => {
+      const puerto = puertoQueResponde({
+        puestoIds: ['p-cobros', 'p-conciliacion'],
+        pideOperacion: false,
+        motivo: 'Los dos.',
+      });
+      const { decision } = await moderarConModelo(PARAFRASIS, SALA, {
+        ambito: 'departamento',
+        clasificador: puerto,
+        limite,
+      });
+      expect(decision.tipo === 'intervenir' && decision.turnos.length).toBe(1);
+    },
+  );
+});
+
 describe('moderarConModelo · el modelo solo elige de la lista', () => {
   it.each([
     ['un puestoId inventado', ['p-inventado']],

@@ -18,7 +18,7 @@ import {
 import {
   ESTADOS_QUE_INTERVIENEN,
   LIMITE_MAXIMO,
-  LIMITE_POR_DEFECTO,
+  acotar,
   moderar,
   type DecisionDelModerador,
   type OpcionesModerador,
@@ -129,10 +129,7 @@ export async function moderarConModelo(
     version,
     motivo,
   };
-  const limite = Math.min(
-    Math.max(Math.trunc(opciones.limite ?? LIMITE_POR_DEFECTO), LIMITE_POR_DEFECTO),
-    LIMITE_MAXIMO,
-  );
+  const limite = acotar(opciones.limite);
 
   const elegidos = [...new Set(puestoIds)]
     .map((id) => disponibles.find((p) => p.puestoId === id))
