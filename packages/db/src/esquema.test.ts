@@ -19,6 +19,7 @@ import {
   NOMBRES_TABLAS_INMUTABLES,
   NOMBRES_TABLAS_INMUTABLES_CON_DISPARADOR_PROPIO,
   NOMBRES_TABLAS_INMUTABLES_EN_BUCLE,
+  NOMBRES_TABLAS_PROMOCION,
   NOMBRES_TABLAS_LIBRO,
   NOMBRES_TABLAS_PARTICIONADAS,
   ORDEN_PURGA,
@@ -421,5 +422,48 @@ describe('migración del uso de modelo de plataforma (0010)', () => {
   it('el uso de modelo se purga antes que la sala, que ahora referencia', () => {
     expect(ORDEN_PURGA.indexOf('uso_modelo')).toBeLessThan(ORDEN_PURGA.indexOf('sala'));
     expect(ORDEN_PURGA.indexOf('uso_modelo')).toBeLessThan(ORDEN_PURGA.indexOf('tarifa_modelo'));
+  });
+});
+
+describe('migración de la promoción de varias versiones (0011)', () => {
+  const migracion = MIGRACIONES.find((m) => m.nombre === '0011_promocion_version');
+  if (!migracion) throw new Error('No hay migración de la promoción de varias versiones.');
+  const sql = readFileSync(migracion.ruta, 'utf8');
+  const reverso = readFileSync(migracion.rutaReverso, 'utf8');
+
+  it('solo crea promocion_version, asumiendo el dueño del esquema antes', () => {
+    expect(sql.match(/create table (\w+)/g)).toEqual(['create table promocion_version']);
+    expect(sql).not.toContain('alter table promocion ');
+    expect(sql).not.toContain('drop ');
+    expect(sql.indexOf('set local role aiw_migrador')).toBeLessThan(
+      sql.indexOf('create table promocion_version'),
+    );
+  });
+
+  it('lleva tenant, RLS forzada y un índice único por promoción y puesto', () => {
+    expect(sql).toContain('tenant_id uuid not null references organizacion (id) on delete restrict');
+    expect(sql).toContain('alter table promocion_version enable row level security');
+    expect(sql).toContain('alter table promocion_version force row level security');
+    expect(sql).toContain('using (tenant_id = aiw_tenant_actual())');
+    expect(sql).toContain('on promocion_version (tenant_id, promocion_id, puesto_id)');
+    expect(sql).toContain('on promocion_version (tenant_id, version_puesto_id)');
+  });
+
+  it('es inmutable: el rol de aplicación solo lee e inserta y un disparador rechaza UPDATE', () => {
+    for (const nombre of NOMBRES_TABLAS_PROMOCION) {
+      expect(sql).toContain(`grant select, insert on ${nombre} to aiw_app`);
+      expect(sql).toContain(`create trigger ${nombre}_sin_actualizar`);
+    }
+    expect(sql).not.toContain('grant select, insert, update, delete on promocion_version');
+  });
+
+  it('su reverso solo borra la tabla nueva y no toca promocion', () => {
+    expect(reverso).toContain('drop table if exists promocion_version');
+    expect(reverso.match(/drop table/g)).toHaveLength(1);
+    expect(reverso).not.toContain('promocion;');
+  });
+
+  it('se purga antes que la promoción que referencia', () => {
+    expect(ORDEN_PURGA.indexOf('promocion_version')).toBeLessThan(ORDEN_PURGA.indexOf('promocion'));
   });
 });

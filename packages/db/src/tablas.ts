@@ -176,6 +176,15 @@ export const NOMBRES_TABLAS_CONTADOR = ['tarifa_modelo', 'uso_modelo'] as const;
  */
 export const NOMBRES_TABLAS_CONTADOR_INMUTABLES = ['tarifa_modelo', 'uso_modelo'] as const;
 
+/**
+ * Tablas del aprendizaje que crea una migración posterior a la inicial: las versiones
+ * que deja una promoción de departamento (`0011_promocion_version`). Es inmutable;
+ * la migración le pone su propio disparador y le da solo `select` e `insert` al rol
+ * de aplicación. Va aparte de `NOMBRES_TABLAS_INMUTABLES` porque no la crea el bucle
+ * de la migración inicial.
+ */
+export const NOMBRES_TABLAS_PROMOCION = ['promocion_version'] as const;
+
 export const NOMBRES_TABLAS_CON_TENANT: readonly string[] = TABLAS_CON_TENANT.map((t) =>
   getTableName(t),
 );
@@ -188,6 +197,7 @@ export const NOMBRES_TABLAS: readonly string[] = [
   ...NOMBRES_TABLAS_CON_TENANT,
   ...NOMBRES_TABLAS_LIBRO,
   ...NOMBRES_TABLAS_CONTADOR,
+  ...NOMBRES_TABLAS_PROMOCION,
   ...NOMBRES_TABLAS_IDENTIDAD,
   ...TABLAS_INFRAESTRUCTURA.map((t) => getTableName(t)),
 ];
@@ -215,6 +225,8 @@ export const ORDEN_PURGA: readonly string[] = [
   'mensaje',
   'sala_participante',
   'sala',
+  // Las versiones de una promoción la referencian: se vacía antes.
+  'promocion_version',
   'promocion',
   'leccion_senal',
   'leccion',

@@ -96,6 +96,13 @@ export const MIGRACIONES: readonly Migracion[] = [
       new URL('../drizzle/reverso/0010_uso_modelo_de_plataforma.sql', import.meta.url),
     ),
   },
+  {
+    nombre: '0011_promocion_version',
+    ruta: fileURLToPath(new URL('../drizzle/0011_promocion_version.sql', import.meta.url)),
+    rutaReverso: fileURLToPath(
+      new URL('../drizzle/reverso/0011_promocion_version.sql', import.meta.url),
+    ),
+  },
 ];
 
 export function huellaDe(contenido: string): string {

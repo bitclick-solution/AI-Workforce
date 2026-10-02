@@ -33,10 +33,15 @@ export interface LeccionRedactada {
   datosPersonalesQuitados: ClaseDatoPersonal[];
 }
 
+/** A quién enseña la lección: a un puesto o a todos los puestos de su departamento. */
+export type AmbitoDeLeccion = 'puesto' | 'departamento';
+
 export interface ContextoDeLeccion {
   /** Tipo del borrador opaco, p. ej. `herramienta.redactar_nota`. */
   tipoBorrador: string;
   claseAccion: string;
+  /** Por defecto, `puesto`. Es el `destino` de los parámetros de la lección. */
+  ambito?: AmbitoDeLeccion | undefined;
 }
 
 function citar(valor: unknown): string {
@@ -74,7 +79,7 @@ export function redactarLeccion(
 
   const parametros = validarParametros({
     clase: 'memoria',
-    destino: 'puesto',
+    destino: contexto.ambito ?? 'puesto',
     valor: saneada.texto,
   });
 

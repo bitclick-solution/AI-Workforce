@@ -32,6 +32,7 @@ export type CodigoErrorAprendizaje =
   | 'no_es_edicion'
   | 'sin_cambios'
   | 'sin_persona'
+  | 'sin_permiso'
   | 'ya_promocionada'
   | 'version_ajena'
   | 'ya_activa';

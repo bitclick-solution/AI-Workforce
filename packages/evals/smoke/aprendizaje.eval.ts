@@ -1,11 +1,14 @@
+import type { ResultadoDeLaPuerta, VersionCandidata } from '@aiw/learning';
 import { describe, expect, it } from 'vitest';
 
 import {
   CASO_APRENDIZAJE,
+  CASO_APRENDIZAJE_DEPARTAMENTO,
   EDICION,
   certificarPromocion,
   ejecutarCasoAprendizaje,
   evaluarLeccion,
+  evaluarLeccionDeDepartamento,
 } from '../src/plataforma/aprendizaje.js';
 
 /**
@@ -80,5 +83,66 @@ describe('evals de humo · aprendizaje', () => {
 
   it('el caso usa una edición con datos personales de verdad', () => {
     expect(EDICION.despues.argumentos.texto).toContain('@');
+  });
+
+  describe('memoria de departamento', () => {
+    /** La puerta de v0 es síncrona; el tipo admite también una promesa. */
+    const certificar = (c: VersionCandidata) => certificarPromocion(c) as ResultadoDeLaPuerta;
+
+    const candidata = {
+      tenantId: 't',
+      puestoId: 'p',
+      leccionId: 'l1',
+      ambito: 'departamento' as const,
+      departamentoId: 'd',
+      parametros: { clase: 'memoria' as const, destino: 'departamento', valor: 'Cita la factura.' },
+      memoria: { lineas: [{ leccionId: 'l1', texto: 'Cita la factura.' }] },
+    };
+
+    it('una lección de departamento que cumple pasa la puerta', () => {
+      expect(evaluarLeccionDeDepartamento(candidata).diagnostico).toBe(
+        `${CASO_APRENDIZAJE_DEPARTAMENTO}: superado`,
+      );
+      const puerta = certificar(candidata);
+      expect(puerta.certificada).toBe(true);
+      expect(puerta.casos.map((caso) => caso.id)).toContain(CASO_APRENDIZAJE_DEPARTAMENTO);
+    });
+
+    it('una lección de puesto no pasa por las reglas de departamento', () => {
+      const puerta = certificar({
+        ...candidata,
+        ambito: undefined,
+        parametros: { ...candidata.parametros, destino: 'puesto' },
+      });
+      expect(puerta.casos.map((caso) => caso.id)).not.toContain(CASO_APRENDIZAJE_DEPARTAMENTO);
+    });
+
+    it('bloquea una lección marcada como categoría especial', () => {
+      const puerta = certificar({ ...candidata, categoriaEspecial: true });
+      expect(puerta.certificada).toBe(false);
+      expect(JSON.stringify(puerta.casos)).toContain('categoría especial');
+    });
+
+    it('bloquea una lección que hablaba de una persona concreta', () => {
+      const puerta = certificar({ ...candidata, datosPersonalesQuitados: ['correo'] });
+      expect(puerta.certificada).toBe(false);
+      expect(JSON.stringify(puerta.casos)).toContain('persona concreta');
+    });
+
+    it('bloquea una lección con destino de puesto que se intenta compartir', () => {
+      const r = evaluarLeccionDeDepartamento({
+        ...candidata,
+        parametros: { ...candidata.parametros, destino: 'puesto' },
+      });
+      expect(r.superado).toBe(false);
+    });
+
+    it('bloquea si la memoria candidata baja la certificación (datos personales en una línea)', () => {
+      const puerta = certificar({
+        ...candidata,
+        memoria: { lineas: [{ leccionId: 'l1', texto: 'IBAN ES91 2100 0418 4502 0005 1332' }] },
+      });
+      expect(puerta.certificada).toBe(false);
+    });
   });
 });
