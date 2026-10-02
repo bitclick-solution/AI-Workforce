@@ -37,6 +37,19 @@ describe('catálogo del conector', () => {
     await cliente.close();
   });
 
+  it('listar_facturas_vencidas se anuncia de solo lectura; crear_nota_seguimiento, de escritura', async () => {
+    // Sin `readOnlyHint: true` el gateway MCP tipa cualquier herramienta como
+    // escritura (lo más restrictivo por defecto) y pediría aprobación N1 hasta
+    // para leer las facturas vencidas.
+    const cliente = await conectar();
+    const { tools } = await cliente.listTools();
+    const listar = tools.find((herramienta) => herramienta.name === NOMBRES.listar);
+    const nota = tools.find((herramienta) => herramienta.name === NOMBRES.nota);
+    expect(listar?.annotations?.readOnlyHint).toBe(true);
+    expect(nota?.annotations?.readOnlyHint).toBe(false);
+    await cliente.close();
+  });
+
   it('el esquema anunciado dice lo mismo que el esquema que valida', () => {
     expect(CATALOGO[0].inputSchema).toBe(ESQUEMA_ENTRADA_LISTAR);
     expect(CATALOGO[1].inputSchema).toBe(ESQUEMA_ENTRADA_NOTA);

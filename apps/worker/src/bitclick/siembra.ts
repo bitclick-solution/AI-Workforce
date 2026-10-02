@@ -67,6 +67,8 @@ export function plantillaCobros(): Plantilla {
 export interface OpcionesSiembraBitclick {
   /** Correo de Jesús. Por defecto, el de Bitclick. */
   correoJesus?: string | undefined;
+  /** Raíz del repositorio para el estado local. Por defecto, la real; las pruebas pasan una de usar y tirar. */
+  raiz?: string | undefined;
 }
 
 export interface ResultadoSiembra extends EstadoBitclick {
@@ -201,8 +203,8 @@ async function crearOrganizacion(
       insert into puesto (
         tenant_id, departamento_id, nombre, ficha, clase_riesgo, enrutado_modelo, estado
       ) values (
-        ${tenantId}, ${departamentoId}, ${plantilla.nombre}, ${JSON.stringify(ficha)}::jsonb,
-        ${plantilla.claseRiesgo}, ${JSON.stringify(plantilla.enrutadoModelo)}::jsonb, 'en_prueba'
+        ${tenantId}, ${departamentoId}, ${plantilla.nombre}, ${JSON.stringify(ficha)}::text::jsonb,
+        ${plantilla.claseRiesgo}, ${JSON.stringify(plantilla.enrutadoModelo)}::text::jsonb, 'en_prueba'
       )
       returning id
     `;
@@ -217,7 +219,7 @@ async function crearOrganizacion(
     };
     const [version] = await tx<{ id: string }[]>`
       insert into version_puesto (tenant_id, puesto_id, numero, prompt, politica)
-      values (${tenantId}, ${puestoId}, 1, ${plantilla.prompt}, ${JSON.stringify(politica)}::jsonb)
+      values (${tenantId}, ${puestoId}, 1, ${plantilla.prompt}, ${JSON.stringify(politica)}::text::jsonb)
       returning id
     `;
     const versionPuestoId = exigir(version?.id, 'la versión del puesto de Cobros');
@@ -229,7 +231,8 @@ async function crearOrganizacion(
         tenant_id, puesto_id, conector_id, lista_blanca, niveles_por_clase, concedida_por_persona_id
       ) values (
         ${tenantId}, ${puestoId}, ${conectorId},
-        ${JSON.stringify(LISTA_BLANCA_COBROS)}::jsonb, ${JSON.stringify(plantilla.niveles)}::jsonb,
+        ${JSON.stringify(LISTA_BLANCA_COBROS)}::text::jsonb,
+        ${JSON.stringify(plantilla.niveles)}::text::jsonb,
         ${personaId}
       )
       returning id
@@ -257,7 +260,7 @@ export async function sembrarBitclick(
   cliente: postgres.Sql,
   opciones: OpcionesSiembraBitclick = {},
 ): Promise<ResultadoSiembra> {
-  const existente = leerEstadoBitclick();
+  const existente = leerEstadoBitclick(opciones.raiz);
   if (existente && (await organizacionSigueViva(cliente, existente.tenantId))) {
     const enrutadoActualizado = await ponerEnrutadoDeLaPlantilla(
       cliente,
@@ -271,7 +274,7 @@ export async function sembrarBitclick(
   const plantilla = plantillaCobros();
   const correoJesus = opciones.correoJesus ?? CORREO_JESUS_POR_DEFECTO;
   const estado = await crearOrganizacion(cliente, plantilla, correoJesus);
-  guardarEstadoBitclick(estado);
+  guardarEstadoBitclick(estado, opciones.raiz);
   const tarifasCargadas = await cargarTarifasDeBitclick(cliente, estado.tenantId);
   return { ...estado, creada: true, tarifasCargadas, enrutadoActualizado: false };
 }

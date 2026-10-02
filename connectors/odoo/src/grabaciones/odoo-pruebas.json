@@ -78,36 +78,94 @@
     { "argumentos": { "res_id": 777777 }, "error": "Read timed out after 60s talking to Odoo" },
     {
       "carga": {
-        "success": true,
-        "mode": "direct",
-        "model": "account.move",
-        "record_id": 42,
-        "approval_required": false,
-        "result": 9001
+        "result": {
+          "success": true,
+          "mode": "direct",
+          "model": "account.move",
+          "record_id": 42,
+          "approval_required": false,
+          "result": 9001
+        }
       }
     }
   ],
   "preview_write": [
-    { "carga": { "payload": { "model": "mail.activity", "operation": "create" } } }
+    {
+      "carga": {
+        "result": {
+          "success": true,
+          "tool": "preview_write",
+          "model": "mail.activity",
+          "operation": "create",
+          "approval": {
+            "model": "mail.activity",
+            "operation": "create",
+            "record_ids": [],
+            "values": {
+              "res_model": "account.move",
+              "res_id": 42,
+              "summary": "Nota de contrato.",
+              "note": "Nota de contrato."
+            },
+            "context": {},
+            "instance": "default",
+            "values_list": null,
+            "token": "odoo-write:prueba00000000000000000000000001"
+          },
+          "execute_method": { "model": "mail.activity", "method": "create" },
+          "issues": [],
+          "warnings": [],
+          "metadata_used": { "source": "cache" }
+        }
+      }
+    }
   ],
   "validate_write": [
     {
       "carga": {
-        "approval_status": { "stored": true },
-        "approval_id": "apr-2026-0001",
-        "issues": []
+        "result": {
+          "success": true,
+          "tool": "validate_write",
+          "model": "mail.activity",
+          "operation": "create",
+          "issues": [],
+          "field_hints": [],
+          "approval": {
+            "model": "mail.activity",
+            "operation": "create",
+            "record_ids": [],
+            "values": {
+              "res_model": "account.move",
+              "res_id": 42,
+              "summary": "Nota de contrato.",
+              "note": "Nota de contrato."
+            },
+            "context": {},
+            "instance": "default",
+            "values_list": null,
+            "token": "odoo-write:prueba00000000000000000000000001"
+          },
+          "metadata_used": { "fields_get": {}, "source": "cache" },
+          "approval_status": {
+            "stored": true,
+            "expires_in_seconds": 900,
+            "source": "validate_write"
+          }
+        }
       }
     }
   ],
   "execute_approved_write": [
     {
       "carga": {
-        "success": true,
-        "tool": "execute_approved_write",
-        "model": "mail.activity",
-        "operation": "create",
-        "result": 5501,
-        "instance": "pruebas"
+        "result": {
+          "success": true,
+          "tool": "execute_approved_write",
+          "model": "mail.activity",
+          "operation": "create",
+          "result": 5501,
+          "instance": "pruebas"
+        }
       }
     }
   ]

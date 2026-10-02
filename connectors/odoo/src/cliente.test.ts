@@ -58,4 +58,46 @@ describe('leerCarga con un fallo «blando» (success: false, isError sin marcar)
       CARGA_FASTMCP,
     );
   });
+
+  it('lo encuentra también anidado en «result», la envolvente real de las herramientas de escritura', () => {
+    // chatter_post, preview_write, validate_write y execute_approved_write
+    // declaran su tipo de vuelta como un diccionario genérico: FastMCP envuelve
+    // la respuesta entera en result, así que un rechazo real de Odoo (permiso,
+    // registro inexistente…) queda anidado ahí, no en el nivel superior.
+    const resultado = {
+      structuredContent: {
+        result: {
+          success: false,
+          tool: 'execute_approved_write',
+          error: 'Record does not exist: account.move(999999,)',
+        },
+      },
+    };
+    try {
+      leerCarga(resultado, 'execute_approved_write');
+      expect.unreachable('debía fallar');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ErrorConector);
+      expect((error as ErrorConector).motivo).toBe('no_encontrada');
+      expect((error as ErrorConector).message).toContain(
+        'Record does not exist: account.move(999999,)',
+      );
+    }
+  });
+
+  it('una escritura de éxito real, con «result» anidado dos veces, no se confunde con un fallo', () => {
+    const resultado = {
+      structuredContent: {
+        result: {
+          success: true,
+          tool: 'execute_approved_write',
+          model: 'mail.activity',
+          operation: 'create',
+          result: 5501,
+          instance: 'pruebas',
+        },
+      },
+    };
+    expect(leerCarga(resultado, 'execute_approved_write')).toEqual(resultado.structuredContent);
+  });
 });
