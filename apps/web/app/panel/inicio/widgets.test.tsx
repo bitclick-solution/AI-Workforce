@@ -98,6 +98,12 @@ describe('WidgetTuEquipo', () => {
     expect(html).toContain('Página del agente');
   });
 
+  it('cada tarjeta enlaza al expediente de su agente', () => {
+    const html = renderToStaticMarkup(<WidgetTuEquipo agentes={[AGENTE_COBROS]} />);
+    expect(html).toContain('Expediente de Cobros');
+    expect(html).toContain(`href="/panel/inicio/agente/${AGENTE_COBROS.puestoId}/expediente"`);
+  });
+
   it('sin sala del departamento, no hay enlace a ella', () => {
     const html = renderToStaticMarkup(<WidgetTuEquipo agentes={[AGENTE_CONCILIACION]} />);
     expect(html).not.toContain('Ver la sala de');

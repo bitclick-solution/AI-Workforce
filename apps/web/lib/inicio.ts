@@ -138,7 +138,11 @@ export function rutaDelDetalle(tareaId: string): string {
 
 export type Buscador = (url: string, opciones?: RequestInit) => Promise<Response>;
 
-async function pedirJson<T>(ruta: string, opciones: RequestInit, buscar: Buscador): Promise<T> {
+export async function pedirJson<T>(
+  ruta: string,
+  opciones: RequestInit,
+  buscar: Buscador,
+): Promise<T> {
   const respuesta = await buscar(ruta, { ...opciones, cache: 'no-store' });
   const cuerpo = (await respuesta.json().catch(() => ({}))) as T & { error?: string };
   if (!respuesta.ok) {

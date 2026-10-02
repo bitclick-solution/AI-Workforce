@@ -32,7 +32,6 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
   let personaId = '';
   let cobrosId = '';
   let conciliacionId = '';
-  let version1 = '';
   let version2 = '';
   let version3 = '';
   let leccionId = '';
@@ -62,7 +61,6 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     personaId = s.personaId;
     cobrosId = s.cobros.puestoId;
     conciliacionId = s.conciliacion.puestoId;
-    version1 = s.cobros.versionPuestoId;
 
     const otro = await sembrarFinanzas(cliente, {
       nombre: `Expediente ajeno ${uuidV7()}`,

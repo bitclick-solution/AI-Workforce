@@ -27,6 +27,7 @@ import {
 } from '@aiw/ui';
 import { useEffect, useState, type ReactNode } from 'react';
 
+import { rutaDelExpediente } from '../../../lib/expediente';
 import { rutaDelDetalle, type AgenteDelInicio, type TareaDelInicio } from '../../../lib/inicio';
 
 const EMBLEMA_POR_NOMBRE: Record<string, PuestoConEmblema> = {
@@ -51,7 +52,7 @@ export function AgenteAvatar({ nombre }: { nombre: string }) {
   );
 }
 
-const TONO_POR_ESTADO: Record<string, TonoDeInsignia> = {
+export const TONO_POR_ESTADO: Record<string, TonoDeInsignia> = {
   activo: 'exito',
   en_prueba: 'neutro',
   propuesto: 'neutro',
@@ -60,7 +61,7 @@ const TONO_POR_ESTADO: Record<string, TonoDeInsignia> = {
   dado_de_baja: 'peligro',
 };
 
-const ETIQUETA_ESTADO: Record<string, string> = {
+export const ETIQUETA_ESTADO: Record<string, string> = {
   propuesto: 'Propuesto',
   en_prueba: 'En prueba',
   activo: 'Activo',
@@ -302,6 +303,9 @@ export function WidgetTuEquipo({ agentes }: PropsDeTuEquipo) {
                   Ver la sala de {agente.departamento}
                 </a>
               ) : null}
+              <a className={cn('underline', TEMA.foco)} href={rutaDelExpediente(agente.puestoId)}>
+                Expediente de {agente.nombre}
+              </a>
               {/* Preparados sin destino (fuera de alcance): páginas propias todavía sin construir. */}
               <span className={TEMA.texto.apagado} aria-disabled="true" title="Todavía no existe">
                 Página del equipo
