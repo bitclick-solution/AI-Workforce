@@ -156,6 +156,21 @@ describe('delegación · plazo vencido y contrato del ADR-014', () => {
       });
       expect(cerrada[0]?.resultado['entregado']).toBe(false);
       expect(cerrada[0]?.resultado['politicaRespaldo']).toBe('seguir_sin_ello');
+
+      // El supervisor de Finanzas avisa en la sala, una sola vez aunque el plazo y el
+      // respaldo sean dos hechos de la misma delegación.
+      const avisos = await conTenant(montaje.cliente, montaje.semilla.tenantId, async (tx) => {
+        const filas = await tx<{ cuerpo: string }[]>`
+          select m.cuerpo from mensaje m
+          join sala s on s.tenant_id = m.tenant_id and s.id = m.sala_id
+          where m.tenant_id = ${montaje.semilla.tenantId}
+            and s.departamento_id = ${montaje.semilla.departamentoId}
+        `;
+        return [...filas];
+      });
+      expect(avisos).toHaveLength(1);
+      expect(avisos[0]?.cuerpo).toContain('Cobros → Conciliación');
+      expect(avisos[0]?.cuerpo).toContain('no respondió dentro del plazo');
     }
   }, 300_000);
 

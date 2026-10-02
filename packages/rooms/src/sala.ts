@@ -71,7 +71,7 @@ export function mencionaAPersona(nombrePersona: string, texto: string): boolean 
     );
 }
 
-export type AgentePlataforma = 'moderador' | 'director_ia';
+export type AgentePlataforma = 'moderador' | 'director_ia' | 'supervisor_departamento';
 
 /**
  * Adjuntos de un mensaje. Un mensaje de un agente de plataforma no tiene puesto ni

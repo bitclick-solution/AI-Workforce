@@ -116,3 +116,38 @@ export const promocion = pgTable(
     index('promocion_tenant_creado_idx').on(t.tenantId, t.creadoEn),
   ],
 );
+
+/**
+ * Versiones que crea una promoción: una fila por puesto. Solo la escribe una promoción
+ * de ámbito departamento (migración 0011); una promoción de puesto no escribe aquí.
+ * Fila inmutable.
+ */
+export const promocionVersion = pgTable(
+  'promocion_version',
+  {
+    id: idPrimario(),
+    tenantId: tenantId().references(() => organizacion.id, { onDelete: 'restrict' }),
+    promocionId: uuid('promocion_id')
+      .notNull()
+      .references(() => promocion.id, { onDelete: 'restrict' }),
+    puestoId: uuid('puesto_id')
+      .notNull()
+      .references(() => puesto.id, { onDelete: 'restrict' }),
+    versionPuestoId: uuid('version_puesto_id')
+      .notNull()
+      .references(() => versionPuesto.id, { onDelete: 'restrict' }),
+    versionAnteriorId: uuid('version_anterior_id')
+      .notNull()
+      .references(() => versionPuesto.id, { onDelete: 'restrict' }),
+    creadoEn: creadoEn(),
+  },
+  (t) => [
+    uniqueIndex('promocion_version_tenant_promocion_puesto_key').on(
+      t.tenantId,
+      t.promocionId,
+      t.puestoId,
+    ),
+    uniqueIndex('promocion_version_tenant_version_key').on(t.tenantId, t.versionPuestoId),
+    index('promocion_version_tenant_puesto_idx').on(t.tenantId, t.puestoId, t.creadoEn),
+  ],
+);

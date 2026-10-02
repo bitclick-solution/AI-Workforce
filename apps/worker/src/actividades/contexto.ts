@@ -59,6 +59,21 @@ export function salaConModeloActiva(entorno: Record<string, string | undefined>)
   return valor === '1' || valor === 'true';
 }
 
+/**
+ * Bandera del supervisor de departamento v0 (rebanada «Supervisor de departamento y
+ * memoria compartida en Finanzas»). Mismo patrón que `AIW_SALA_MODELO`: `'1'` o
+ * `'true'` la activan; cualquier otro valor, no. Apagada, el supervisor no publica
+ * nada en la sala aunque una delegación venza: hasta la demo, nadie ve sus avisos.
+ */
+export const BANDERA_SUPERVISOR_DEPARTAMENTO = 'AIW_SUPERVISOR_DEPARTAMENTO';
+
+export function supervisorDeDepartamentoActivo(
+  entorno: Record<string, string | undefined>,
+): boolean {
+  const valor = entorno[BANDERA_SUPERVISOR_DEPARTAMENTO]?.trim();
+  return valor === '1' || valor === 'true';
+}
+
 export interface OpcionesContexto {
   /** Cadena de conexión. Llega del entorno, nunca del código. */
   urlBaseDeDatos: string;
@@ -81,6 +96,8 @@ export interface OpcionesContexto {
   buscarCentrifugo?: BuscadorCentrifugo | undefined;
   /** Paso de modelo en la sala de un departamento. Sin valor, lo dice `AIW_SALA_MODELO`. */
   salaConModelo?: boolean | undefined;
+  /** Supervisor de departamento. Sin valor, lo dice `AIW_SUPERVISOR_DEPARTAMENTO`. */
+  supervisorDeDepartamento?: boolean | undefined;
 }
 
 export interface ContextoDeActividades {
@@ -101,6 +118,8 @@ export interface ContextoDeActividades {
   avisarSala: (tenantId: string, salaId: string, datos: Record<string, unknown>) => Promise<void>;
   /** Si el moderador y el Director dan el paso de modelo en la sala de un departamento (`AIW_SALA_MODELO`). */
   salaConModelo: boolean;
+  /** Si el supervisor de departamento publica avisos en la sala (`AIW_SUPERVISOR_DEPARTAMENTO`). */
+  supervisorDeDepartamento: boolean;
   cerrar: () => Promise<void>;
 }
 
@@ -272,6 +291,8 @@ export function crearContextoDeActividades(opciones: OpcionesContexto): Contexto
     cachePrompts: crearCacheDePrompts(),
     trazas: opciones.trazas ?? new TrazasEnMemoria(),
     salaConModelo: opciones.salaConModelo ?? salaConModeloActiva(process.env),
+    supervisorDeDepartamento:
+      opciones.supervisorDeDepartamento ?? supervisorDeDepartamentoActivo(process.env),
     async avisarSala(tenantId, salaId, datos) {
       if (!opciones.centrifugo) return;
       try {

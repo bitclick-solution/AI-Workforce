@@ -138,6 +138,45 @@ export function evaluarMemoriaCandidata(candidata: VersionCandidata): ResultadoE
   };
 }
 
+export const CASO_APRENDIZAJE_DEPARTAMENTO = 'aprendizaje-departamento-001';
+
+/**
+ * Reglas propias de una lección de departamento (decisión 6 de
+ * docs/specs/supervisor-de-departamento-finanzas.md): la memoria compartida llega al
+ * prompt de varios puestos, así que no admite contenido marcado como categoría
+ * especial ni datos de una persona concreta. Si la lección tuvo que quitarse datos
+ * personales al redactarla, hablaba de alguien concreto: no es una lección del
+ * departamento. Solo se evalúa si la candidata es de ámbito departamento.
+ */
+export function evaluarLeccionDeDepartamento(candidata: VersionCandidata): ResultadoEval {
+  const fallos: string[] = [];
+  if (candidata.ambito !== 'departamento') {
+    fallos.push('la candidata no es de ámbito departamento');
+  }
+  if (candidata.parametros.destino !== 'departamento') {
+    fallos.push(`el destino es «${candidata.parametros.destino}» y no el departamento`);
+  }
+  if (candidata.parametros.clase !== 'memoria') {
+    fallos.push('solo la memoria se comparte entre los puestos de un departamento');
+  }
+  if (candidata.categoriaEspecial === true) {
+    fallos.push('la lección está marcada como categoría especial');
+  }
+  const quitados = candidata.datosPersonalesQuitados ?? [];
+  if (quitados.length > 0) {
+    fallos.push(`la lección hablaba de una persona concreta (${quitados.join(', ')})`);
+  }
+  const superado = fallos.length === 0;
+  return {
+    id: CASO_APRENDIZAJE_DEPARTAMENTO,
+    superado,
+    puntuacion: superado ? 1 : 0,
+    diagnostico: superado
+      ? `${CASO_APRENDIZAJE_DEPARTAMENTO}: superado`
+      : `${CASO_APRENDIZAJE_DEPARTAMENTO}: ${fallos.join('; ')}`,
+  };
+}
+
 /** Más pasos o comprobaciones que esto en una habilidad es una que no cabe en un paso. */
 export const MAXIMO_PASOS_HABILIDAD = 20;
 
@@ -212,6 +251,7 @@ export const certificarPromocion: PuertaDeEvaluacion = (candidata): ResultadoDeL
     candidata.parametros.clase === 'habilidad'
       ? evaluarHabilidadCandidata(candidata)
       : evaluarMemoriaCandidata(candidata),
+    ...(candidata.ambito === 'departamento' ? [evaluarLeccionDeDepartamento(candidata)] : []),
   ].map((resultado) => ({ ...resultado }));
   return {
     certificada: casos.every((caso) => caso.superado),

@@ -187,7 +187,20 @@ export async function purgarPuesto(
     `;
     borradas['tarea'] = tareas.count;
 
-    // Lo que cuelga de las lecciones del puesto, antes que las propias lecciones.
+    // Lo que cuelga de las lecciones del puesto, antes que las propias lecciones. Las
+    // versiones de una promoción de departamento (migración 0011) van primero: las del
+    // puesto que se da de baja y las de las promociones de sus lecciones.
+    const versionesDePromocion = await tx`
+      delete from promocion_version
+      where tenant_id = ${tenantId}
+        and (puesto_id = ${puestoId}
+          or promocion_id in (
+            select p.id from promocion p
+            join leccion l on l.tenant_id = p.tenant_id and l.id = p.leccion_id
+            where p.tenant_id = ${tenantId} and l.puesto_id = ${puestoId}
+          ))
+    `;
+    borradas['promocion_version'] = versionesDePromocion.count;
     const promociones = await tx`
       delete from promocion
       where tenant_id = ${tenantId}

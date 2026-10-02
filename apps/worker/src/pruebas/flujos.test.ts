@@ -436,6 +436,15 @@ describe('flujos durables · tareaAgente con servidor de Temporal', () => {
     expect(delegada?.formato.criteriosAceptacion).toHaveLength(1);
     expect(delegada?.resultado['entregado']).toBe(true);
 
+    // Una delegación que se cierra a tiempo y entregada no produce aviso del supervisor.
+    const avisos = await conTenant(montaje.cliente, tenantId, async (tx) => {
+      const filas = await tx<{ id: string }[]>`
+        select id from mensaje where tenant_id = ${tenantId}
+      `;
+      return [...filas];
+    });
+    expect(avisos).toHaveLength(0);
+
     // El consumo del hijo suma en la raíz del padre y no cuenta como tarea nueva.
     const usos = await conTenant(montaje.cliente, tenantId, async (tx) => {
       const filas = await tx<{ tarea_raiz_id: string; tarea_id: string }[]>`

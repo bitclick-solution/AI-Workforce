@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@aiw/domain": "workspace:*",
+    "@aiw/learning": "workspace:*",
     "@aiw/rooms": "workspace:*",
     "zod": "catalog:"
   },

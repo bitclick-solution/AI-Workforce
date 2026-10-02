@@ -32,7 +32,7 @@ import {
 import { sanearValor } from './datos-personales.js';
 import { diferenciaDeBorradores, type Cambio } from './diferencia.js';
 import { leerHabilidadesCongeladas } from './habilidades.js';
-import { redactarLeccion } from './leccion.js';
+import { redactarLeccion, type AmbitoDeLeccion } from './leccion.js';
 
 export {
   ACCIONES_APRENDIZAJE,
@@ -243,20 +243,39 @@ export async function registrarSenalDeEdicion(
 export interface LeccionPropuesta {
   leccionId: string;
   puestoId: string;
+  /** A quién enseña: al puesto de la señal o a todos los de su departamento. */
+  ambito: AmbitoDeLeccion;
   titulo: string;
   linea: string;
   /** Falso cuando la lección de esa señal ya existía. */
   nueva: boolean;
 }
 
+export interface OpcionesDeLeccion {
+  /** Por defecto, `puesto`. Con `departamento` la lección acaba en la memoria compartida. */
+  ambito?: AmbitoDeLeccion | undefined;
+  /**
+   * Marca el contenido como categoría especial (salud, ideología, afiliación…). Quien
+   * propone es quien lo clasifica; la puerta del Evaluador bloquea una lección de
+   * departamento marcada, y la memoria no la guarda nunca (decisión 6 de la
+   * especificación del supervisor de departamento).
+   */
+  categoriaEspecial?: boolean | undefined;
+}
+
 /**
  * Propone la lección de memoria de una señal de edición. Queda en `propuesta` hasta
  * que una persona la promociona: en v0 no hay promoción automática.
+ *
+ * Con `ambito: 'departamento'` la lección es la misma, pero sus parámetros llevan
+ * `destino: 'departamento'` y su promoción deja una versión en cada puesto del
+ * departamento del puesto que originó la señal.
  */
 export async function proponerLeccion(
   cliente: postgres.Sql,
   tenantId: string,
   senal: { senalId: string; senalCreadoEn: string },
+  opciones: OpcionesDeLeccion = {},
 ): Promise<LeccionPropuesta> {
   exigirUuid(tenantId, 'tenantId');
   exigirUuid(senal.senalId, 'senalId');
@@ -276,6 +295,10 @@ export async function proponerLeccion(
       return {
         leccionId: previa.id,
         puestoId: previa.puesto_id,
+        ambito:
+          (previa.parametros as { destino?: unknown }).destino === 'departamento'
+            ? 'departamento'
+            : 'puesto',
         titulo: previa.titulo,
         linea: String(previa.parametros.valor ?? ''),
         nueva: false,
@@ -313,6 +336,7 @@ export async function proponerLeccion(
     const redactada = redactarLeccion(detalle.cambios ?? [], {
       tipoBorrador: detalle.tipoBorrador ?? 'borrador',
       claseAccion: detalle.claseAccion ?? 'desconocida',
+      ambito: opciones.ambito,
     });
 
     const contenido = {
@@ -321,6 +345,7 @@ export async function proponerLeccion(
       senalIds: [fila.id],
       aprobacionId: detalle.aprobacionId ?? null,
       datosPersonalesQuitados: redactada.datosPersonalesQuitados,
+      categoriaEspecial: opciones.categoriaEspecial === true,
     };
     const [leccion] = await tx<{ id: string }[]>`
       insert into leccion (tenant_id, puesto_id, titulo, contenido, parametros, estado)
@@ -345,6 +370,7 @@ export async function proponerLeccion(
         { tipo: 'leccion', id: leccion.id },
         { tipo: 'senal', id: fila.id },
         { tipo: 'clase_leccion', id: redactada.parametros.clase },
+        { tipo: 'ambito_leccion', id: opciones.ambito ?? 'puesto' },
       ],
       resultado: 'exito',
     });
@@ -352,6 +378,7 @@ export async function proponerLeccion(
     return {
       leccionId: leccion.id,
       puestoId: fila.puesto_id,
+      ambito: opciones.ambito ?? 'puesto',
       titulo: redactada.titulo,
       linea: redactada.linea,
       nueva: true,
@@ -429,6 +456,14 @@ export interface VersionCandidata {
    * nombra una herramienta fuera de esa lista (decisión 4 de la especificación).
    */
   listaBlancaHerramientas?: readonly string[] | undefined;
+  /** Ámbito de la promoción. Ausente es `puesto`. */
+  ambito?: AmbitoDeLeccion | undefined;
+  /** Departamento que recibe la lección. Solo con `ambito: 'departamento'`. */
+  departamentoId?: string | undefined;
+  /** La lección está marcada como categoría especial. */
+  categoriaEspecial?: boolean | undefined;
+  /** Clases de dato personal que se quitaron al redactarla, sin valores. */
+  datosPersonalesQuitados?: readonly string[] | undefined;
 }
 
 export interface CasoDeLaPuerta {
@@ -461,6 +496,13 @@ export interface PeticionDePromocion {
   motivo?: string | undefined;
 }
 
+export interface VersionPromovida {
+  puestoId: string;
+  versionAnteriorId: string;
+  versionPuestoId: string;
+  numero: number;
+}
+
 export type ResultadoDePromocion =
   | {
       estado: 'promocionada';
@@ -470,6 +512,12 @@ export type ResultadoDePromocion =
       versionPuestoId: string;
       numero: number;
       resultados: ResultadoDeLaPuerta;
+      /**
+       * Todas las versiones que dejó la promoción: una para una lección de puesto, una
+       * por puesto del departamento para una de departamento. La primera campo a campo
+       * (`puestoId`, `versionPuestoId`…) es la del puesto que originó la lección.
+       */
+      versiones: VersionPromovida[];
     }
   | { estado: 'bloqueada'; puestoId: string; resultados: ResultadoDeLaPuerta };
 
@@ -496,8 +544,8 @@ export async function promocionarLeccion(
   }
 
   return conTenant(cliente, tenantId, async (tx) => {
-    const [persona] = await tx<{ id: string }[]>`
-      select id from persona where tenant_id = ${tenantId} and id = ${peticion.personaId}
+    const [persona] = await tx<{ id: string; activa: boolean }[]>`
+      select id, activa from persona where tenant_id = ${tenantId} and id = ${peticion.personaId}
     `;
     if (!persona) {
       throw new ErrorDeAprendizaje(
@@ -507,13 +555,30 @@ export async function promocionarLeccion(
     }
 
     const [leccion] = await tx<
-      { id: string; puesto_id: string; parametros: unknown; contenido: { senalIds?: string[] } }[]
+      {
+        id: string;
+        puesto_id: string;
+        parametros: unknown;
+        contenido: {
+          senalIds?: string[];
+          categoriaEspecial?: boolean;
+          datosPersonalesQuitados?: string[];
+        };
+      }[]
     >`
       select id, puesto_id, parametros, contenido from leccion
       where tenant_id = ${tenantId} and id = ${peticion.leccionId}
     `;
     if (!leccion) {
       throw new ErrorDeAprendizaje('no_encontrada', `No hay lección ${peticion.leccionId}.`);
+    }
+    const parametros = esquemas.validarCarga(
+      esquemas.parametrosLeccion,
+      leccion.parametros,
+      'leccion.parametros',
+    );
+    if (parametros.destino === 'departamento') {
+      return promocionarParaElDepartamento(tx, tenantId, peticion, persona, leccion, parametros);
     }
     await bloquear(tx, `puesto:${leccion.puesto_id}`);
 
@@ -527,11 +592,6 @@ export async function promocionarLeccion(
       );
     }
 
-    const parametros = esquemas.validarCarga(
-      esquemas.parametrosLeccion,
-      leccion.parametros,
-      'leccion.parametros',
-    );
     const [activa] = await tx<
       {
         id: string;
@@ -718,7 +778,353 @@ export async function promocionarLeccion(
       versionPuestoId: version.id,
       numero,
       resultados,
+      versiones: [
+        {
+          puestoId: leccion.puesto_id,
+          versionAnteriorId: activa.id,
+          versionPuestoId: version.id,
+          numero,
+        },
+      ],
     };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Promoción de una lección de departamento
+// ---------------------------------------------------------------------------
+
+/**
+ * Quién promociona la memoria de un departamento (decisión 8 de la especificación,
+ * Jesús, 2-10-2026): la persona que supervisa el departamento o un administrador de
+ * la organización.
+ *
+ * Hoy no hay roles: toda persona activa es propietaria de su organización, y por tanto
+ * administradora, hasta la rebanada «Personas, roles y permisos por equipo» (prevista
+ * para el 7-12-2026). Cuando existan, `esAdministrador` pasa a mirar el rol y esta
+ * regla se estrecha sin tocar a quien la llama.
+ */
+export function puedePromocionarDepartamento(
+  departamento: { supervisorPersonaId: string | null },
+  persona: { id: string; activa: boolean },
+): boolean {
+  if (!persona.activa) return false;
+  const esSupervisor = departamento.supervisorPersonaId === persona.id;
+  const esAdministrador = true;
+  return esSupervisor || esAdministrador;
+}
+
+/** El libro anota la regla aplicada para que una auditoría vea por qué se permitió. */
+function motivoDePermiso(
+  departamento: { supervisorPersonaId: string | null },
+  personaId: string,
+): 'supervisor' | 'administrador' {
+  return departamento.supervisorPersonaId === personaId ? 'supervisor' : 'administrador';
+}
+
+/**
+ * Promociona una lección de ámbito departamento: pasa por la misma puerta del
+ * Evaluador que la de puesto —una vez por puesto, porque cada uno tendría una memoria
+ * candidata distinta— y deja una versión inmutable nueva en cada puesto activo del
+ * departamento, más una fila de memoria de ámbito `departamento`. Todo en la misma
+ * transacción: o quedan todas las versiones o ninguna.
+ *
+ * Cada versión se revierte por puesto con `revertirVersion`, sin tocar las demás.
+ */
+async function promocionarParaElDepartamento(
+  tx: postgres.TransactionSql,
+  tenantId: string,
+  peticion: PeticionDePromocion,
+  persona: { id: string; activa: boolean },
+  leccion: {
+    id: string;
+    puesto_id: string;
+    contenido: {
+      senalIds?: string[];
+      categoriaEspecial?: boolean;
+      datosPersonalesQuitados?: string[];
+    };
+  },
+  parametros: esquemas.ParametrosLeccion,
+): Promise<ResultadoDePromocion> {
+  if (parametros.clase !== 'memoria') {
+    throw new ErrorDeAprendizaje(
+      'no_encontrada',
+      'Solo una lección de memoria puede tener ámbito departamento.',
+    );
+  }
+  const [origen] = await tx<{ departamento_id: string; supervisor_persona_id: string | null }[]>`
+    select p.departamento_id, d.supervisor_persona_id
+    from puesto p
+    join departamento d on d.tenant_id = p.tenant_id and d.id = p.departamento_id
+    where p.tenant_id = ${tenantId} and p.id = ${leccion.puesto_id}
+  `;
+  if (!origen) {
+    throw new ErrorDeAprendizaje('no_encontrada', `No hay puesto ${leccion.puesto_id}.`);
+  }
+  const departamento = { supervisorPersonaId: origen.supervisor_persona_id };
+  if (!puedePromocionarDepartamento(departamento, persona)) {
+    throw new ErrorDeAprendizaje(
+      'sin_permiso',
+      `La persona ${persona.id} no puede promocionar la memoria del departamento ${origen.departamento_id}.`,
+    );
+  }
+
+  // Primero el departamento y después los puestos en orden: dos promociones del mismo
+  // departamento se serializan en la primera, y ninguna espera a otra con un puesto en
+  // la mano. Una promoción o reversión de un solo puesto toma solo su cerrojo.
+  await bloquear(tx, `departamento:${origen.departamento_id}`);
+
+  const [yaPromocionada] = await tx<{ id: string }[]>`
+    select id from promocion where tenant_id = ${tenantId} and leccion_id = ${leccion.id}
+  `;
+  if (yaPromocionada) {
+    throw new ErrorDeAprendizaje(
+      'ya_promocionada',
+      `La lección ${leccion.id} ya se promocionó (${yaPromocionada.id}). Para recuperarla, vuelve a la versión anterior de cada puesto.`,
+    );
+  }
+
+  const puestos = await tx<{ id: string }[]>`
+    select id from puesto
+    where tenant_id = ${tenantId} and departamento_id = ${origen.departamento_id}
+      and (estado = 'activo' or id = ${leccion.puesto_id})
+    order by id
+  `;
+  for (const puesto of puestos) await bloquear(tx, `puesto:${puesto.id}`);
+
+  const activas = await tx<
+    {
+      puesto_id: string;
+      id: string;
+      prompt: string;
+      politica: unknown;
+      habilidades_congeladas: unknown;
+      memoria_congelada: unknown;
+      lecciones_origen: unknown;
+      ultimo: string;
+    }[]
+  >`
+    select p.id as puesto_id, v.id, v.prompt, v.politica, v.habilidades_congeladas,
+      v.memoria_congelada, v.lecciones_origen,
+      (select max(numero) from version_puesto
+        where tenant_id = ${tenantId} and puesto_id = p.id) as ultimo
+    from puesto p
+    join version_puesto v on v.tenant_id = p.tenant_id and v.id = p.version_activa_id
+    where p.tenant_id = ${tenantId} and p.id in ${tx(puestos.map((p) => p.id))}
+    order by p.id
+  `;
+  const sinVersion = puestos.filter((p) => !activas.some((a) => a.puesto_id === p.id));
+  if (sinVersion.length > 0) {
+    throw new ErrorDeAprendizaje(
+      'no_encontrada',
+      `El puesto ${sinVersion[0]?.id} no tiene versión activa sobre la que promocionar.`,
+    );
+  }
+
+  // La puerta, una vez por puesto y sin escribir nada. La primera que bloquea gana.
+  const candidatas = [];
+  for (const activa of activas) {
+    const memoriaAnterior = leerMemoriaCongelada(activa.memoria_congelada);
+    const memoria: esquemas.MemoriaCongelada = {
+      lineas: [
+        ...memoriaAnterior.lineas,
+        { leccionId: leccion.id, texto: String(parametros.valor) },
+      ],
+    };
+    const resultados = await peticion.puerta({
+      tenantId,
+      puestoId: activa.puesto_id,
+      leccionId: leccion.id,
+      parametros,
+      memoria,
+      ambito: 'departamento',
+      departamentoId: origen.departamento_id,
+      categoriaEspecial: leccion.contenido.categoriaEspecial === true,
+      datosPersonalesQuitados: leccion.contenido.datosPersonalesQuitados ?? [],
+    });
+    if (!resultados.certificada) {
+      await anotar(tx, tenantId, {
+        actorTipo: 'persona',
+        actorId: peticion.personaId,
+        puestoId: activa.puesto_id,
+        versionPuestoId: activa.id,
+        accion: ACCIONES_APRENDIZAJE.promocionBloqueada,
+        datosReferenciados: [
+          { tipo: 'leccion', id: leccion.id },
+          { tipo: 'ambito_leccion', id: 'departamento' },
+          ...resultados.casos
+            .filter((caso) => !caso.superado)
+            .map((caso) => ({ tipo: 'caso_dorado', id: caso.id })),
+        ],
+        resultado: 'rechazado',
+      });
+      return { estado: 'bloqueada', puestoId: activa.puesto_id, resultados };
+    }
+    candidatas.push({ activa, memoria, resultados });
+  }
+
+  const senalIds = leccion.contenido.senalIds ?? [];
+  const versiones: (VersionPromovida & {
+    resultados: ResultadoDeLaPuerta;
+    versionAnteriorId: string;
+  })[] = [];
+  for (const { activa, memoria, resultados } of candidatas) {
+    const leccionesOrigen: esquemas.LeccionesOrigen = [
+      ...leerLeccionesOrigen(activa.lecciones_origen),
+      { leccionId: leccion.id, senalIds, promocionadaPorPersonaId: peticion.personaId },
+    ];
+    const numero = Number(activa.ultimo) + 1;
+    const [version] = await tx<{ id: string }[]>`
+      insert into version_puesto (
+        tenant_id, puesto_id, numero, prompt, politica, habilidades_congeladas,
+        memoria_congelada, lecciones_origen, resultados_eval
+      ) values (
+        ${tenantId}, ${activa.puesto_id}, ${numero}, ${activa.prompt},
+        ${json(activa.politica)}::text::jsonb, ${json(activa.habilidades_congeladas)}::text::jsonb,
+        ${json(memoria)}::text::jsonb, ${json(leccionesOrigen)}::text::jsonb,
+        ${json(resultados)}::text::jsonb
+      )
+      returning id
+    `;
+    if (!version) throw new Error('La versión nueva del puesto no se insertó.');
+    versiones.push({
+      puestoId: activa.puesto_id,
+      versionAnteriorId: activa.id,
+      versionPuestoId: version.id,
+      numero,
+      resultados,
+    });
+  }
+
+  const deOrigen = versiones.find((v) => v.puestoId === leccion.puesto_id);
+  if (!deOrigen) throw new Error('El puesto de origen no recibió su versión.');
+
+  let promocion: { id: string } | undefined;
+  try {
+    [promocion] = await tx<{ id: string }[]>`
+      insert into promocion (
+        tenant_id, leccion_id, version_puesto_resultante_id, decidida_por_persona_id,
+        evidencia, resultados_eval
+      ) values (
+        ${tenantId}, ${leccion.id}, ${deOrigen.versionPuestoId}, ${peticion.personaId},
+        ${json({
+          senalIds,
+          versionAnteriorId: deOrigen.versionAnteriorId,
+          motivo: peticion.motivo ?? null,
+          manual: true,
+          ambito: 'departamento',
+          departamentoId: origen.departamento_id,
+          permiso: motivoDePermiso(departamento, peticion.personaId),
+        })}::text::jsonb,
+        ${json(deOrigen.resultados)}::text::jsonb
+      )
+      returning id
+    `;
+  } catch (error) {
+    if (!esViolacionDeUnicidad(error)) throw error;
+    throw new ErrorDeAprendizaje(
+      'ya_promocionada',
+      `La lección ${leccion.id} ya se promocionó. Para recuperarla, vuelve a la versión anterior de cada puesto.`,
+    );
+  }
+  if (!promocion) throw new Error('La promoción no se insertó.');
+
+  for (const version of versiones) {
+    await tx`
+      insert into promocion_version (
+        tenant_id, promocion_id, puesto_id, version_puesto_id, version_anterior_id
+      ) values (
+        ${tenantId}, ${promocion.id}, ${version.puestoId}, ${version.versionPuestoId},
+        ${version.versionAnteriorId}
+      )
+    `;
+    await tx`
+      update puesto set version_activa_id = ${version.versionPuestoId}, actualizado_en = now()
+      where tenant_id = ${tenantId} and id = ${version.puestoId}
+    `;
+  }
+
+  // Una sola fila viva para todo el departamento. El prompt de cada puesto se compone
+  // con su memoria congelada; esta fila sirve a la búsqueda y a la lectura por
+  // departamento (`leerMemoriaDeDepartamento`). Una lección de categoría especial no
+  // llega aquí: la puerta la bloquea antes, y la columna lo recuerda.
+  await tx`
+    insert into memoria (
+      tenant_id, ambito, ambito_id, clave, contenido, metadatos, categoria_especial
+    ) values (
+      ${tenantId}, 'departamento', ${origen.departamento_id}, ${claveDeMemoria(leccion.id)},
+      ${String(parametros.valor)},
+      ${json({ leccionId: leccion.id, promocionId: promocion.id })}::text::jsonb,
+      ${leccion.contenido.categoriaEspecial === true}
+    )
+  `;
+
+  for (const version of versiones) {
+    await anotar(tx, tenantId, {
+      actorTipo: 'persona',
+      actorId: peticion.personaId,
+      puestoId: version.puestoId,
+      versionPuestoId: version.versionPuestoId,
+      accion: ACCIONES_APRENDIZAJE.leccionPromocionada,
+      datosReferenciados: [
+        { tipo: 'leccion', id: leccion.id },
+        { tipo: 'promocion', id: promocion.id },
+        { tipo: 'ambito_leccion', id: 'departamento' },
+        { tipo: 'version_puesto', id: version.versionPuestoId },
+        { tipo: 'version_puesto_anterior', id: version.versionAnteriorId },
+      ],
+      resultado: 'exito',
+      aprobadaPorPersonaId: peticion.personaId,
+      leccionAplicadaId: leccion.id,
+    });
+  }
+
+  return {
+    estado: 'promocionada',
+    promocionId: promocion.id,
+    puestoId: deOrigen.puestoId,
+    versionAnteriorId: deOrigen.versionAnteriorId,
+    versionPuestoId: deOrigen.versionPuestoId,
+    numero: deOrigen.numero,
+    resultados: deOrigen.resultados,
+    versiones: versiones.map(({ puestoId, versionAnteriorId, versionPuestoId, numero }) => ({
+      puestoId,
+      versionAnteriorId,
+      versionPuestoId,
+      numero,
+    })),
+  };
+}
+
+/**
+ * La memoria viva de departamento que lee un puesto: las líneas de su departamento
+ * que no han caducado ni son de categoría especial. Un puesto de otro departamento, o
+ * de otra organización, no ve ninguna: la consulta cruza por el departamento del
+ * puesto y la RLS acota el tenant.
+ *
+ * El prompt no usa esto: se compone con la memoria congelada de la versión, que es la
+ * que reproduce lo que vio cada tarea. Esto es para consultas y para comprobar el
+ * aislamiento.
+ */
+export async function leerMemoriaDeDepartamento(
+  cliente: postgres.Sql,
+  tenantId: string,
+  puestoId: string,
+): Promise<string[]> {
+  exigirUuid(tenantId, 'tenantId');
+  exigirUuid(puestoId, 'puestoId');
+  return conTenant(cliente, tenantId, async (tx) => {
+    const filas = await tx<{ contenido: string }[]>`
+      select m.contenido
+      from puesto p
+      join memoria m on m.tenant_id = p.tenant_id and m.ambito = 'departamento'
+        and m.ambito_id = p.departamento_id
+      where p.tenant_id = ${tenantId} and p.id = ${puestoId}
+        and m.caduca_en is null and not m.categoria_especial
+      order by m.creado_en, m.id
+    `;
+    return filas.map((fila) => fila.contenido);
   });
 }
 
@@ -832,6 +1238,30 @@ export async function revertirVersion(
         where tenant_id = ${tenantId} and ambito = 'puesto' and ambito_id = ${peticion.puestoId}
           and clave in ${tx(repuestas.map(claveDeMemoria))}
       `;
+    }
+
+    // La memoria viva de departamento es de todos los puestos: solo caduca cuando
+    // ningún puesto la conserva en su versión activa, y vuelve cuando algún puesto la
+    // recupera. Revertir un puesto no la quita a los demás.
+    for (const [lista, caduca] of [
+      [retiradas, true],
+      [repuestas, false],
+    ] as const) {
+      for (const leccionId of lista) {
+        const [viva] = await tx<{ n: string }[]>`
+          select count(*)::text as n from puesto p
+          join version_puesto v on v.tenant_id = p.tenant_id and v.id = p.version_activa_id
+          where p.tenant_id = ${tenantId}
+            and v.lecciones_origen @> ${json([{ leccionId }])}::text::jsonb
+        `;
+        const algunaLaTiene = Number(viva?.n ?? 0) > 0;
+        if (caduca && algunaLaTiene) continue;
+        await tx`
+          update memoria set caduca_en = ${caduca ? tx`now()` : null}, actualizado_en = now()
+          where tenant_id = ${tenantId} and ambito = 'departamento'
+            and clave = ${claveDeMemoria(leccionId)}
+        `;
+      }
     }
 
     await anotar(tx, tenantId, {

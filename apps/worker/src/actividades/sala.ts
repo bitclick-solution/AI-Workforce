@@ -49,7 +49,7 @@ function errorDeDatos(mensaje: string): ApplicationFailure {
   return ApplicationFailure.create({ message: mensaje, type: 'DatosDeSala', nonRetryable: true });
 }
 
-interface MensajeNuevo {
+export interface MensajeNuevo {
   id: string;
   salaId: string;
   cuerpo: string;
@@ -69,7 +69,7 @@ interface MensajeNuevo {
  * aviso que llegara antes de que la transacción confirme, y que luego no
  * confirmara, deja como mucho una relectura de balde, nunca un dato inventado.
  */
-async function insertarMensaje(
+export async function insertarMensaje(
   contexto: ContextoDeActividades,
   tx: postgres.TransactionSql,
   tenantId: string,
@@ -124,7 +124,7 @@ export interface DecisionRegistrada {
  * Encuentra la sala del departamento o la crea. Una por departamento: se busca por
  * `departamento_id` y no por nombre, así que dos ejecuciones a la vez no crean dos.
  */
-async function asegurarSala(
+export async function asegurarSala(
   tx: postgres.TransactionSql,
   tenantId: string,
   departamento: { id: string; nombre: string },
