@@ -42,6 +42,8 @@ interface Tarea {
   desde: string;
   actualizadoEn: string;
   costeEuros: number;
+  costeTotalEuros: number;
+  delegadas: unknown[];
   pasos: Paso[];
   aprobacionPendiente: {
     aprobacionId: string;
@@ -127,6 +129,8 @@ function crearApiSimulada() {
         desde: ahora(),
         actualizadoEn: ahora(),
         costeEuros: 0,
+        costeTotalEuros: 0,
+        delegadas: [],
         pasos: [
           {
             orden: 1,
@@ -149,6 +153,7 @@ function crearApiSimulada() {
       if (!tarea) return;
       tarea.estado = 'esperando_aprobacion';
       tarea.costeEuros = 0.0123;
+      tarea.costeTotalEuros = 0.0123;
       tarea.pasos.push(
         {
           orden: 2,
@@ -388,4 +393,64 @@ test('una tarea de otra organización responde como si no existiera', async ({ p
 
   await page.goto('/panel/inicio/tarea/t-de-otra-organizacion?fuenteSimulada=1');
   await expect(page.getByTestId('detalle-no-existe')).toContainText('No encontramos esa tarea');
+});
+
+test('las tareas delegadas aparecen dentro de la tarea raíz y abren su propio detalle', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1180, height: 900 });
+  const api = crearApiSimulada();
+  api.encargar({ encargo: 'Cobra y concilia las facturas de septiembre.' });
+  api.avanzarHastaLaAprobacion();
+  const raiz = api.tarea();
+  if (raiz) {
+    raiz.costeTotalEuros = 0.0323;
+    raiz.delegadas = [
+      {
+        tareaId: 't-hija',
+        tareaPadreId: 't-nueva',
+        encargo: 'Concilia el extracto con las facturas cobradas.',
+        estado: 'en_curso',
+        puestoId: 'p-conciliacion',
+        agente: 'Conciliación',
+        departamento: 'Finanzas',
+        cruzaDepartamento: false,
+        desde: ahora(),
+        costeEuros: 0.02,
+      },
+    ];
+  }
+  await montarApi(page, api);
+  await page.route('**/api/inicio/tareas/t-hija', (ruta) =>
+    ruta.fulfill({
+      json: {
+        tarea: {
+          ...raiz,
+          tareaId: 't-hija',
+          encargo: 'Concilia el extracto con las facturas cobradas.',
+          agente: 'Conciliación',
+          estado: 'en_curso',
+          delegadas: [],
+          aprobacionPendiente: null,
+          pasos: [],
+          costeEuros: 0.02,
+          costeTotalEuros: 0.02,
+        },
+      },
+    }),
+  );
+
+  await page.goto('/panel/inicio/tarea/t-nueva?fuenteSimulada=1');
+  const seccion = page.getByTestId('detalle-delegadas');
+  await expect(seccion).toContainText('Concilia el extracto con las facturas cobradas.');
+  await expect(page.getByTestId('detalle-coste')).toContainText('con delegadas');
+  await page.screenshot({ path: `${CAPTURAS}/detalle-8-delegadas.png`, fullPage: true });
+
+  await seccion
+    .getByRole('link', { name: 'Concilia el extracto con las facturas cobradas.' })
+    .click();
+  await expect(page).toHaveURL(/\/panel\/inicio\/tarea\/t-hija/);
+  await expect(
+    page.getByRole('heading', { name: 'Concilia el extracto con las facturas cobradas.' }),
+  ).toBeVisible();
 });

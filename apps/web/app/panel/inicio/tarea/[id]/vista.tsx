@@ -31,6 +31,7 @@ import {
   INTERVALO_RESPALDO_MS,
   decidirAviso,
   leerDetalleDeTarea,
+  rutaDelDetalle,
   suscribirseAAgentesEnVivo,
   type DetalleDeTarea,
 } from '../../../../../lib/inicio';
@@ -208,7 +209,14 @@ function Detalle({
             <Insignia etiqueta="Estado" valor={estado.etiqueta} tono={estado.tono} />
           </span>
           <span data-testid="detalle-coste">
-            <Insignia etiqueta="Coste" valor={formatearEuros(detalle.costeEuros)} />
+            {detalle.delegadas.length > 0 ? (
+              <Insignia
+                etiqueta="Coste con delegadas"
+                valor={formatearEuros(detalle.costeTotalEuros)}
+              />
+            ) : (
+              <Insignia etiqueta="Coste" valor={formatearEuros(detalle.costeEuros)} />
+            )}
           </span>
         </div>
         <p className={cn(TEMA.texto.apagado, 'text-xs')}>
@@ -317,6 +325,54 @@ function Detalle({
           </ListaDePasos>
         )}
       </section>
+
+      {detalle.delegadas.length > 0 ? (
+        <section
+          aria-labelledby="detalle-delegadas"
+          className="flex flex-col gap-3"
+          data-testid="detalle-delegadas"
+        >
+          <h2 id="detalle-delegadas" className={cn(TEMA.texto.titulo, 'text-lg')}>
+            Tareas que ha delegado
+          </h2>
+          <ul className="flex flex-col gap-3">
+            {detalle.delegadas.map((delegada) => {
+              const estadoDelegada = estadoDeLaTarea(delegada.estado);
+              return (
+                <li
+                  key={delegada.tareaId}
+                  className={cn(TEMA.superficie.tarjeta, 'flex flex-col gap-2 p-4')}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <AgenteAvatar nombre={delegada.agente} />
+                    <span className={cn(TEMA.texto.titulo, 'text-sm')}>{delegada.agente}</span>
+                    <span className={cn(TEMA.texto.apagado, 'text-sm')}>
+                      · {delegada.departamento}
+                    </span>
+                  </div>
+                  <a
+                    className={cn('text-sm underline', TEMA.foco)}
+                    href={rutaDelDetalle(delegada.tareaId)}
+                  >
+                    {delegada.encargo ?? 'Sin encargo anotado'}
+                  </a>
+                  <div className="flex flex-wrap gap-2">
+                    <Insignia
+                      etiqueta="Estado"
+                      valor={estadoDelegada.etiqueta}
+                      tono={estadoDelegada.tono}
+                    />
+                    <Insignia etiqueta="Coste" valor={formatearEuros(delegada.costeEuros)} />
+                    {delegada.cruzaDepartamento ? (
+                      <Insignia etiqueta="Alcance" valor="Pide a otro departamento" />
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
     </>
   );
 }

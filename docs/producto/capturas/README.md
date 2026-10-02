@@ -28,4 +28,5 @@ Capturas de `/panel/inicio/tarea/:id` generadas por `e2e/detalle-tarea.spec.ts` 
 | `detalle-4-movil.png`                  | El mismo detalle a 390 px.                                                       |
 | `detalle-5-necesita-a-una-persona.png` | Aprobación pedida a otra persona: se ve el resumen, sin botones.                 |
 | `detalle-6-vacio.png`                  | Estado vacío: el agente aún no ha dado ningún paso.                              |
+| `detalle-8-delegadas.png`              | Tareas delegadas dentro de la tarea raíz, con coste total.                       |
 | `detalle-7-error.png`                  | Estado de error: el detalle no carga, con Reintentar.                            |

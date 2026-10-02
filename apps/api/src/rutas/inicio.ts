@@ -165,6 +165,22 @@ export interface AprobacionPendienteDeLaTarea {
   puedeDecidir: boolean;
 }
 
+/** Tarea delegada (flujo hijo) dentro de la tarea que se está mirando. */
+export interface TareaDelegada {
+  tareaId: string;
+  tareaPadreId: string;
+  /** El encargo del contrato de delegación; `null` si la tarea no tiene fila de delegación. */
+  encargo: string | null;
+  estado: string;
+  puestoId: string;
+  agente: string;
+  departamento: string;
+  cruzaDepartamento: boolean;
+  desde: string;
+  /** Suma del coste de las entradas del libro de esta tarea delegada. */
+  costeEuros: number;
+}
+
 export interface DetalleDeTarea {
   tareaId: string;
   encargo: string;
@@ -176,6 +192,10 @@ export interface DetalleDeTarea {
   actualizadoEn: string;
   /** Suma del coste de las entradas del libro de esta tarea. */
   costeEuros: number;
+  /** Lo anterior más el coste de todas sus tareas delegadas. */
+  costeTotalEuros: number;
+  /** Descendientes (hijas, nietas…) en orden de creación. */
+  delegadas: TareaDelegada[];
   pasos: PasoDeLaTarea[];
   aprobacionPendiente: AprobacionPendienteDeLaTarea | null;
 }
@@ -293,7 +313,7 @@ export async function atenderInicio(
     return respuesta(200, { avisos: await puerto.avisos(tenantId, personaId) });
   }
 
-  const detalle = /^\/inicio\/tareas\/([^/]+)$/.exec(camino);
+  const detalle = new RegExp(`^${PREFIJO_INICIO}/tareas/([^/]+)$`).exec(camino);
   if (detalle) {
     if (peticion.metodo !== 'GET') return respuesta(405, { error: 'El detalle se lee con GET.' });
     const tareaId = detalle[1] ?? '';
@@ -444,6 +464,57 @@ export function puertoInicio(
           });
         }
 
+        const filasDelegadas = await tx<
+          {
+            id: string;
+            tarea_padre_id: string;
+            estado: string;
+            creado_en: Date;
+            puesto_id: string;
+            puesto: string;
+            departamento: string;
+            encargo: string | null;
+            cruza_departamento: boolean | null;
+            coste_euros: string;
+          }[]
+        >`
+          with recursive descendientes as (
+            select t.id, t.tarea_padre_id, t.estado, t.creado_en, t.puesto_id
+            from tarea t
+            where t.tenant_id = ${tenantId} and t.tarea_padre_id = ${tareaId}
+            union all
+            select t.id, t.tarea_padre_id, t.estado, t.creado_en, t.puesto_id
+            from tarea t
+            join descendientes d on t.tarea_padre_id = d.id
+            where t.tenant_id = ${tenantId}
+          )
+          select d.id, d.tarea_padre_id, d.estado::text as estado, d.creado_en,
+            d.puesto_id, pu.nombre as puesto, dp.nombre as departamento,
+            del.encargo, del.cruza_departamento,
+            coalesce((
+              select sum(e.coste_euros) from entrada_auditoria e
+              where e.tenant_id = ${tenantId} and e.tarea_id = d.id
+            ), 0)::text as coste_euros
+          from descendientes d
+          join puesto pu on pu.tenant_id = ${tenantId} and pu.id = d.puesto_id
+          join departamento dp on dp.tenant_id = pu.tenant_id and dp.id = pu.departamento_id
+          left join delegacion del on del.tenant_id = ${tenantId} and del.tarea_destino_id = d.id
+          order by d.creado_en asc, d.id asc
+        `;
+        const delegadas: TareaDelegada[] = filasDelegadas.map((f) => ({
+          tareaId: f.id,
+          tareaPadreId: f.tarea_padre_id,
+          encargo: f.encargo,
+          estado: f.estado,
+          puestoId: f.puesto_id,
+          agente: f.puesto,
+          departamento: f.departamento,
+          cruzaDepartamento: f.cruza_departamento ?? false,
+          desde: f.creado_en.toISOString(),
+          costeEuros: Math.round(Number(f.coste_euros) * 1e4) / 1e4,
+        }));
+        const costeTotal = delegadas.reduce((suma, d) => suma + d.costeEuros, costeEuros);
+
         const [pendiente] = await tx<
           {
             id: string;
@@ -480,6 +551,8 @@ export function puertoInicio(
           desde: tarea.creado_en.toISOString(),
           actualizadoEn: tarea.actualizado_en.toISOString(),
           costeEuros: Math.round(costeEuros * 1e4) / 1e4,
+          costeTotalEuros: Math.round(costeTotal * 1e4) / 1e4,
+          delegadas,
           pasos,
           aprobacionPendiente: pendiente
             ? {

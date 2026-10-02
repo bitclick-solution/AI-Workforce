@@ -23,6 +23,7 @@ La demo del 2-10 no convenció porque el trabajo del agente solo se veía en la 
 
 - `tarea`: `tareaId`, `encargo`, `estado` (`pendiente`, `en_curso`, `esperando_aprobacion`, `completada`, `fallida`, `cancelada`), `puestoId`, `agente`, `departamento`, `desde`, `actualizadoEn`, `costeEuros` (suma de las entradas del libro de esa tarea).
 - `pasos[]` en orden del libro (`numero_orden`): `orden`, `tipo` (`arranque`, `herramienta`, `aprobacion_pedida`, `decision`), `accion`, `herramienta`, `resultado` (`exito`, `error`, `rechazado`, `parcial`), `costeEuros`, `nivel` (`n0`–`n3` o `null`), `porque` (el `motivo` que ya anota el bucle del agente en `datos_referenciados` con tipo `motivo`, o `null`), `creadoEn`. Se omiten las entradas técnicas (correo enviado, enlace abierto, señal entregada).
+- `delegadas[]`: todas las tareas descendientes (hijas, nietas…) por `tarea_padre_id`, en orden de creación, con `tareaId`, `tareaPadreId`, `encargo` (el de `delegacion`, o `null` si no hay fila: no se inventa), `estado`, `puestoId`, `agente`, `departamento`, `cruzaDepartamento`, `desde` y `costeEuros` (suma de sus entradas del libro). `costeTotalEuros` suma la tarea y sus delegadas. Cada delegada enlaza a su propio detalle. Sin tablas ni consultas nuevas más allá de leer `tarea`, `delegacion` y el libro. Decidido por Jesús el 2-10 (respuesta a la pregunta abierta).
 - `aprobacionPendiente`: la aprobación sin decisión de esa tarea con `aprobacionId`, `claseAccion`, `nivelExigido`, `resumenLegible` (el mismo texto que lleva el correo), `creadoEn`, `venceEn` y `puedeDecidir` (`true` solo si se le pidió a la persona de la sesión, igual que la ruta de decidir). Si no hay, `null`.
 
 Errores: 401 sin sesión, 400 con un id que no es UUID, 404 si la tarea no existe **o es de otra organización** (misma respuesta, para no revelar existencia), 405 con otro método.
@@ -39,7 +40,8 @@ Sin cambios de esquema. Tiempo real: se reutiliza `suscribirseAAgentesEnVivo` co
 4. El detalle se actualiza en tiempo real con la conexión de Centrifugo del Inicio, y con respaldo periódico si falla.
 5. Diseño según ADR-020, con componentes de `packages/ui` y sin clases de Tailwind a mano fuera del sistema. Estados diseñados: vacío (sin pasos aún), error (no carga, no existe) y «necesita a una persona».
 6. Ningún dato de otra organización aparece: prueba de aislamiento con dos organizaciones sembradas.
-7. Prueba de Playwright: encargar en el Inicio, abrir el detalle, ver llegar los pasos y aprobar desde el detalle; capturas en `docs/producto/capturas/`.
+7. Las tareas delegadas aparecen dentro de la tarea raíz, con su estado y coste, y el coste total las suma.
+8. Prueba de Playwright: encargar en el Inicio, abrir el detalle, ver llegar los pasos y aprobar desde el detalle; capturas en `docs/producto/capturas/`.
 
 ## Casos de prueba y de eval
 
@@ -53,7 +55,7 @@ Sin cambios de esquema. Tiempo real: se reutiliza `suscribirseAAgentesEnVivo` co
 
 ## Fuera de alcance
 
-- Datos que hoy no existen: el porqué de las llamadas que el bucle no anota con motivo, el desglose de tokens y la traza de tareas delegadas (se anotan en el PR con propuesta de rebanada).
+- Datos que hoy no existen: el porqué de las llamadas que el bucle no anota con motivo y el desglose de tokens (se anotan en el PR con propuesta de rebanada).
 - Roles por departamento (ADR-033, previsto 7-12): el detalle se limita a la organización de la sesión.
 - Bandeja completa, aprobación en lote y plazos: «Bandeja humana v1».
 - Aviso en tiempo real al completarse cada paso desde `apps/worker`.
@@ -64,4 +66,4 @@ Presupuesto: 30 €. Consumo real: se registra en la rebanada al abrir el PR. Su
 
 ## Pregunta abierta
 
-¿Quieres que el detalle muestre también las tareas delegadas (flujos hijo) dentro de la tarea raíz? Hoy no existe una consulta de ese árbol en la interfaz y esta rebanada no la inventa; sigo sin ello.
+Ninguna. La anterior (¿mostrar las tareas delegadas?) la respondió Jesús: sí, y está en el alcance.

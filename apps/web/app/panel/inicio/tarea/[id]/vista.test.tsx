@@ -35,6 +35,8 @@ function detalle(parcial: Partial<DetalleDeTarea> = {}): DetalleDeTarea {
     desde: new Date(Date.now() - 120_000).toISOString(),
     actualizadoEn: new Date().toISOString(),
     costeEuros: 0.0123,
+    costeTotalEuros: 0.0123,
+    delegadas: [],
     pasos: [
       {
         orden: 1,
@@ -147,6 +149,64 @@ describe('VistaDelDetalle', () => {
     expect(pasos[1]).toContain('no anota el motivo');
     expect(pasos[2]).toContain('Pidió tu aprobación');
     expect(pasos[2]).toContain('Escribir en el ERP exige tu aprobación en nivel N1.');
+  });
+
+  it('sin delegadas no pinta la sección; con delegadas las lista con enlace, estado y coste, y suma el total', async () => {
+    const sin = buscarDeMuestra([() => respuestaJson({ tarea: detalle() })]);
+    vi.stubGlobal('fetch', sin.buscar);
+    const primera = render(<VistaDelDetalle tareaId={TAREA} />);
+    await screen.findByRole('heading', { name: 'Revisa las facturas vencidas de hoy.' });
+    expect(screen.queryByTestId('detalle-delegadas')).toBeNull();
+    primera.unmount();
+    cleanup();
+
+    const con = detalle({
+      costeTotalEuros: 0.0323,
+      delegadas: [
+        {
+          tareaId: 't2',
+          tareaPadreId: TAREA,
+          encargo: 'Concilia el extracto con las facturas cobradas.',
+          estado: 'en_curso',
+          puestoId: 'p-conciliacion',
+          agente: 'Conciliación',
+          departamento: 'Finanzas',
+          cruzaDepartamento: false,
+          desde: new Date().toISOString(),
+          costeEuros: 0.02,
+        },
+        {
+          tareaId: 't3',
+          tareaPadreId: 't2',
+          encargo: null,
+          estado: 'pendiente',
+          puestoId: 'p-cobros',
+          agente: 'Cobros',
+          departamento: 'Finanzas',
+          cruzaDepartamento: true,
+          desde: new Date().toISOString(),
+          costeEuros: 0,
+        },
+      ],
+    });
+    const { buscar } = buscarDeMuestra([() => respuestaJson({ tarea: con })]);
+    vi.stubGlobal('fetch', buscar);
+    render(<VistaDelDetalle tareaId={TAREA} />);
+
+    const seccion = await screen.findByTestId('detalle-delegadas');
+    const filas = Array.from(seccion.querySelectorAll('li')).map((li) => li.textContent ?? '');
+    expect(filas).toHaveLength(2);
+    expect(filas[0]).toContain('Conciliación');
+    expect(filas[0]).toContain('Concilia el extracto con las facturas cobradas.');
+    expect(filas[0]).toContain('En curso');
+    expect(filas[0]).toContain('0,02');
+    expect(filas[1]).toContain('Cobros');
+    expect(filas[1]).toContain('Sin encargo anotado');
+    expect(filas[1]).toContain('otro departamento');
+    const enlace = seccion.querySelector('a[href="/panel/inicio/tarea/t2"]');
+    expect(enlace).not.toBeNull();
+    expect(screen.getByTestId('detalle-coste').textContent).toContain('0,0323');
+    expect(screen.getByTestId('detalle-coste').textContent).toContain('con delegadas');
   });
 
   it('una aprobación pendiente enseña lo que va a escribir y se aprueba por la ruta de los avisos', async () => {

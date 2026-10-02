@@ -102,6 +102,19 @@ export interface AprobacionPendienteDeLaTarea {
   puedeDecidir: boolean;
 }
 
+export interface TareaDelegada {
+  tareaId: string;
+  tareaPadreId: string;
+  encargo: string | null;
+  estado: string;
+  puestoId: string;
+  agente: string;
+  departamento: string;
+  cruzaDepartamento: boolean;
+  desde: string;
+  costeEuros: number;
+}
+
 export interface DetalleDeTarea {
   tareaId: string;
   encargo: string;
@@ -112,6 +125,8 @@ export interface DetalleDeTarea {
   desde: string;
   actualizadoEn: string;
   costeEuros: number;
+  costeTotalEuros: number;
+  delegadas: TareaDelegada[];
   pasos: PasoDeLaTarea[];
   aprobacionPendiente: AprobacionPendienteDeLaTarea | null;
 }

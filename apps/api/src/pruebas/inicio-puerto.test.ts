@@ -353,4 +353,80 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     expect(await puerto.detalleDeTarea(otroTenantId, personaId, tareaId)).toBeNull();
     expect(await puerto.detalleDeTarea(tenantId, personaId, uuidV7())).toBeNull();
   });
+
+  it('detalleDeTarea: lista las tareas delegadas (también las nietas) con su coste y suma el total', async () => {
+    const puerto = puertoInicio(conexion.cliente, flujos, configuracion);
+    const { tareaId } = await puerto.crearTareaDeEncargo(tenantId, {
+      puestoId: cobrosId,
+      personaId,
+      encargo: 'Cobra y concilia las facturas de septiembre.',
+    });
+    const { hijaId, nietaId } = await conTenant(cliente, tenantId, async (tx) => {
+      const [fila] = await tx<{ version_puesto_id: string }[]>`
+        select version_puesto_id from tarea where tenant_id = ${tenantId} and id = ${tareaId}
+      `;
+      const version = fila?.version_puesto_id ?? '';
+      const [hija] = await tx<{ id: string }[]>`
+        insert into tarea (tenant_id, tarea_raiz_id, tarea_padre_id, puesto_id, version_puesto_id, origen, estado)
+        values (${tenantId}, ${tareaId}, ${tareaId}, ${conciliacionId}, ${version}, 'delegacion', 'en_curso')
+        returning id
+      `;
+      const hijaId = hija?.id ?? '';
+      const [nieta] = await tx<{ id: string }[]>`
+        insert into tarea (tenant_id, tarea_raiz_id, tarea_padre_id, puesto_id, version_puesto_id, origen, estado)
+        values (${tenantId}, ${tareaId}, ${hijaId}, ${cobrosId}, ${version}, 'delegacion', 'pendiente')
+        returning id
+      `;
+      await tx`
+        insert into delegacion (tenant_id, tarea_origen_id, tarea_destino_id, puesto_origen_id,
+          puesto_destino_id, encargo, cruza_departamento)
+        values (${tenantId}, ${tareaId}, ${hijaId}, ${cobrosId}, ${conciliacionId},
+          'Concilia el extracto con las facturas cobradas.', false)
+      `;
+      await anotar(tx, tenantId, {
+        actorTipo: 'agente',
+        puestoId: cobrosId,
+        versionPuestoId: version,
+        tareaId,
+        accion: 'herramienta.llamada',
+        herramienta: 'listar_facturas_vencidas',
+        resultado: 'exito',
+        costeEuros: 0.01,
+      });
+      await anotar(tx, tenantId, {
+        actorTipo: 'agente',
+        puestoId: conciliacionId,
+        versionPuestoId: version,
+        tareaId: hijaId,
+        accion: 'herramienta.llamada',
+        herramienta: 'leer_extracto',
+        resultado: 'exito',
+        costeEuros: 0.02,
+      });
+      return { hijaId, nietaId: nieta?.id ?? '' };
+    });
+
+    const detalle = await puerto.detalleDeTarea(tenantId, personaId, tareaId);
+    expect(detalle?.delegadas.map((d) => d.tareaId)).toEqual([hijaId, nietaId]);
+    expect(detalle?.delegadas[0]).toMatchObject({
+      encargo: 'Concilia el extracto con las facturas cobradas.',
+      estado: 'en_curso',
+      agente: 'Conciliación',
+      puestoId: conciliacionId,
+      tareaPadreId: tareaId,
+      cruzaDepartamento: false,
+    });
+    expect(detalle?.delegadas[0]?.costeEuros).toBeCloseTo(0.02, 4);
+    // La nieta no tiene fila de delegación: el encargo no se inventa.
+    expect(detalle?.delegadas[1]).toMatchObject({ tareaPadreId: hijaId, encargo: null });
+    expect(detalle?.costeEuros).toBeCloseTo(0.01, 4);
+    expect(detalle?.costeTotalEuros).toBeCloseTo(0.03, 4);
+
+    // La hija, vista como raíz de su propio detalle, solo trae sus descendientes.
+    const deLaHija = await puerto.detalleDeTarea(tenantId, personaId, hijaId);
+    expect(deLaHija?.delegadas.map((d) => d.tareaId)).toEqual([nietaId]);
+
+    // Otra organización no ve ninguna.
+    expect(await puerto.detalleDeTarea(otroTenantId, personaId, tareaId)).toBeNull();
+  });
 });

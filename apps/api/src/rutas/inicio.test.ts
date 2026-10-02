@@ -365,6 +365,8 @@ function detalleDeMuestra(parcial: Partial<DetalleDeTarea> = {}): DetalleDeTarea
     desde: '2026-10-02T09:00:00.000Z',
     actualizadoEn: '2026-10-02T09:01:00.000Z',
     costeEuros: 0.0123,
+    costeTotalEuros: 0.0123,
+    delegadas: [],
     pasos: [
       {
         orden: 1,
@@ -436,6 +438,7 @@ describe('GET /inicio/tareas/:id', () => {
       pasos: [],
       aprobacionPendiente: null,
       costeEuros: 0,
+      costeTotalEuros: 0,
     });
     const respuesta = await atender(
       peticion({ url: urlDeTarea() }),
