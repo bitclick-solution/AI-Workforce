@@ -1,19 +1,44 @@
 import { describe, expect, it } from 'vitest';
 
-import { BANDERA_SALA_MODELO, salaConModeloActiva } from './contexto.js';
+import { entornoDelHijoDeOdoo, registroDeOdooPorProceso } from './contexto.js';
 
-describe('bandera AIW_SALA_MODELO', () => {
-  it('solo «1» y «true» la activan, igual que el resto de banderas', () => {
-    expect(BANDERA_SALA_MODELO).toBe('AIW_SALA_MODELO');
-    for (const valor of ['1', 'true', ' 1 ', 'true ']) {
-      expect(salaConModeloActiva({ [BANDERA_SALA_MODELO]: valor }), valor).toBe(true);
-    }
+describe('entornoDelHijoDeOdoo', () => {
+  it('enciende la bandera y copia la URL, la base y el usuario, nunca la clave', () => {
+    const entorno = entornoDelHijoDeOdoo({
+      ODOO_URL: 'https://odoo.ejemplo.local',
+      ODOO_BASE: 'pruebas',
+      ODOO_USUARIO: 'agente-mcp@ejemplo.local',
+      ODOO_CLAVE_API: 'no-debe-viajar-por-aqui',
+    });
+    expect(entorno).toEqual({
+      AIW_CONECTOR_ODOO: '1',
+      ODOO_URL: 'https://odoo.ejemplo.local',
+      ODOO_BASE: 'pruebas',
+      ODOO_USUARIO: 'agente-mcp@ejemplo.local',
+    });
+    expect(Object.values(entorno)).not.toContain('no-debe-viajar-por-aqui');
   });
 
-  it('apagada por defecto: sin variable, a 0 o con cualquier otro valor', () => {
-    expect(salaConModeloActiva({})).toBe(false);
-    for (const valor of ['0', '', 'false', 'TRUE', 'si', 'yes', '2']) {
-      expect(salaConModeloActiva({ [BANDERA_SALA_MODELO]: valor }), valor).toBe(false);
-    }
+  it('sin ODOO_MCP_URL en el entorno, no la incluye: el conector usa su valor por defecto', () => {
+    const entorno = entornoDelHijoDeOdoo({});
+    expect(entorno['ODOO_MCP_URL']).toBeUndefined();
+  });
+
+  it('con ODOO_MCP_URL, la incluye tal cual', () => {
+    const entorno = entornoDelHijoDeOdoo({ ODOO_MCP_URL: 'http://odoo-mcp:8000/mcp' });
+    expect(entorno['ODOO_MCP_URL']).toBe('http://odoo-mcp:8000/mcp');
+  });
+});
+
+describe('registroDeOdooPorProceso', () => {
+  it('registra el conector con el nombre pedido', () => {
+    const registro = registroDeOdooPorProceso({
+      nombreConector: 'Odoo',
+      comando: 'pnpm',
+      argumentos: ['--filter', '@aiw/connector-odoo', 'iniciar'],
+      entorno: {},
+    });
+    expect(registro.tiene('Odoo')).toBe(true);
+    expect(registro.nombres).toEqual(['Odoo']);
   });
 });
