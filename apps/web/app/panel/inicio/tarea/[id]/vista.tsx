@@ -309,6 +309,7 @@ function Detalle({
                 coste={formatearEuros(paso.costeEuros)}
                 {...(paso.nivel ? { nivel: etiquetaDeNivel(paso.nivel) } : {})}
                 porque={paso.porque}
+                sinNecesitarPorque={paso.tipo === 'arranque' || paso.tipo === 'decision'}
               >
                 {paso.claseAccion ? `Clase de acción: ${paso.claseAccion}` : null}
               </PasoDeTarea>

@@ -472,9 +472,7 @@ export function puertoInicio(
         return {
           tareaId: tarea.id,
           encargo:
-            typeof encargo === 'string' && encargo.trim().length > 0
-              ? encargo
-              : 'Sin descripción.',
+            typeof encargo === 'string' && encargo.trim().length > 0 ? encargo : 'Sin descripción.',
           estado: tarea.estado,
           puestoId: tarea.puesto_id,
           agente: tarea.puesto,

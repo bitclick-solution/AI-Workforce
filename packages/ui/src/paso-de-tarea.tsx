@@ -38,6 +38,8 @@ export interface PasoDeTareaProps {
   nivel?: string;
   /** El motivo que anotó el agente. Sin él, el paso lo dice en vez de callarlo. */
   porque?: string | null | undefined;
+  /** Pasos que no se explican (recibir el encargo): no repiten «sin motivo». */
+  sinNecesitarPorque?: boolean;
   /** Detalle opcional bajo el título (la clase de acción, por ejemplo). */
   children?: ReactNode;
   className?: string;
@@ -57,6 +59,7 @@ export function PasoDeTarea({
   coste,
   nivel,
   porque,
+  sinNecesitarPorque = false,
   children,
   className,
   ...resto
@@ -84,7 +87,7 @@ export function PasoDeTarea({
       </div>
       {porque ? (
         <Porque id={id}>{porque}</Porque>
-      ) : (
+      ) : sinNecesitarPorque ? null : (
         <p className={cn(TEMA.texto.apagado, 'text-xs')}>{t('ui.paso.sinPorque')}</p>
       )}
     </li>

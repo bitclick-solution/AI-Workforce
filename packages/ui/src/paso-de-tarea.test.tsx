@@ -27,7 +27,9 @@ describe('PasoDeTarea', () => {
   });
 
   it('con motivo, lo ofrece plegado en «Por qué lo hice»', () => {
-    const html = renderToStaticMarkup(paso({ porque: 'La clase está prohibida para este puesto.' }));
+    const html = renderToStaticMarkup(
+      paso({ porque: 'La clase está prohibida para este puesto.' }),
+    );
     expect(html).toContain('Por qué lo hice');
     expect(html).toContain('La clase está prohibida para este puesto.');
     expect(html).toContain('hidden');
@@ -37,6 +39,11 @@ describe('PasoDeTarea', () => {
     const html = renderToStaticMarkup(paso({ porque: null }));
     expect(html).toContain('no anota el motivo de este paso');
     expect(html).not.toContain('aria-expanded');
+  });
+
+  it('un paso que no se explica no repite «sin motivo»', () => {
+    const html = renderToStaticMarkup(paso({ sinNecesitarPorque: true }));
+    expect(html).not.toContain('no anota el motivo');
   });
 
   it.each([

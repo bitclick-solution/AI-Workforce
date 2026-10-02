@@ -15,3 +15,17 @@ Todos los datos que aparecen son de ejemplo.
 | `3-aprobacion-movil.png`               | La petición de escritura a 390 px, con el resumen legible y las tres salidas. |
 | `3b-aprobacion-editando.png`           | Editar el borrador antes de aprobar.                                          |
 | `4-resumen-tiempo.png`                 | El tiempo del primer clic a la primera tarea aprobada.                        |
+
+## Detalle de la tarea en el panel
+
+Capturas de `/panel/inicio/tarea/:id` generadas por `e2e/detalle-tarea.spec.ts` sobre la rebanada [Detalle de la tarea en el panel](https://app.notion.com/p/3ed530661898818382e3fc5609085e2f). La API se simula en la prueba y todos los datos son de prueba (la organización, la factura y el importe no existen). Se regeneran con `pnpm e2e e2e/detalle-tarea.spec.ts`.
+
+| Archivo                                | Qué enseña                                                                       |
+| -------------------------------------- | -------------------------------------------------------------------------------- |
+| `detalle-1-recien-encargada.png`       | La tarea recién encargada desde el Inicio: solo el arranque.                     |
+| `detalle-2-aprobacion-pendiente.png`   | Los pasos que llegan y el resumen de lo que va a escribir, con Aprobar/Rechazar. |
+| `detalle-3-aprobada.png`               | Tras aprobar desde el detalle: la decisión aparece como paso.                    |
+| `detalle-4-movil.png`                  | El mismo detalle a 390 px.                                                       |
+| `detalle-5-necesita-a-una-persona.png` | Aprobación pedida a otra persona: se ve el resumen, sin botones.                 |
+| `detalle-6-vacio.png`                  | Estado vacío: el agente aún no ha dado ningún paso.                              |
+| `detalle-7-error.png`                  | Estado de error: el detalle no carga, con Reintentar.                            |

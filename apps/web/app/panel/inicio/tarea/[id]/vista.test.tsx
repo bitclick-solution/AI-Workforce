@@ -140,6 +140,7 @@ describe('VistaDelDetalle', () => {
     const pasos = screen.getAllByRole('listitem').map((li) => li.textContent ?? '');
     expect(pasos).toHaveLength(3);
     expect(pasos[0]).toContain('Recibió el encargo');
+    expect(pasos[0]).not.toContain('no anota el motivo');
     expect(pasos[1]).toContain('Usó «listar_facturas_vencidas»');
     expect(pasos[1]).toContain('N0 · manual');
     expect(pasos[1]).toContain('0,0023');

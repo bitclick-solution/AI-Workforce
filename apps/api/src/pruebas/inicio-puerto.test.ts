@@ -324,7 +324,10 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     await puerto.decidirAprobacion(tenantId, { aprobacionId, personaId, sentido: 'aprobada' });
     const despues = await puerto.detalleDeTarea(tenantId, personaId, tareaId);
     expect(despues?.aprobacionPendiente).toBeNull();
-    expect(despues?.pasos.at(-1)).toMatchObject({ tipo: 'decision', accion: 'aprobacion.aprobada' });
+    expect(despues?.pasos.at(-1)).toMatchObject({
+      tipo: 'decision',
+      accion: 'aprobacion.aprobada',
+    });
   });
 
   it('detalleDeTarea: una tarea recién encargada tiene el arranque y ninguna aprobación', async () => {
