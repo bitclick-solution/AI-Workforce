@@ -80,9 +80,7 @@
           "title": "Instance"
         }
       },
-      "required": [
-        "model"
-      ],
+      "required": ["model"],
       "type": "object",
       "title": "search_recordsArguments"
     },
@@ -166,10 +164,7 @@
           "title": "Instance"
         }
       },
-      "required": [
-        "model",
-        "operation"
-      ],
+      "required": ["model", "operation"],
       "type": "object",
       "title": "preview_writeArguments"
     },
@@ -271,10 +266,7 @@
           "title": "Instance"
         }
       },
-      "required": [
-        "model",
-        "operation"
-      ],
+      "required": ["model", "operation"],
       "type": "object",
       "title": "validate_writeArguments"
     },
@@ -291,9 +283,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "approval"
-      ],
+      "required": ["approval"],
       "type": "object",
       "title": "execute_approved_write_toolArguments"
     }
