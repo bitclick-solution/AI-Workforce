@@ -17,8 +17,19 @@ export const CONECTOR = {
 
 export { clienteGrabado, clienteSse, leerRespuesta, HERRAMIENTAS_FACTUSOL } from './cliente.js';
 export type { ClienteFactusol, Grabaciones, LlamadaGrabada } from './cliente.js';
-export { confirmacionPorPersona, elegirConfirmador } from './confirmacion.js';
+export {
+  OPERACION_CONFIRMAR,
+  comprobarCoincidencia,
+  confirmacionPorGateway,
+  confirmacionPorPersona,
+  leerOpcionDeConfirmacion,
+} from './confirmacion.js';
 export type { ConfirmadorDeBorrador } from './confirmacion.js';
+export {
+  almacenDeBorradoresEnFichero,
+  almacenDeBorradoresEnMemoria,
+} from './almacen-borradores.js';
+export type { AlmacenDeBorradores } from './almacen-borradores.js';
 export {
   LONGITUD_MINIMA_SECRETO,
   MOTIVO_SALTO,

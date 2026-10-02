@@ -6,8 +6,23 @@
  * `docs/specs/conector-factusol-v0.md`.
  */
 import { HERRAMIENTAS_FACTUSOL, type ClienteFactusol } from './cliente.js';
-import { elegirConfirmador, type ConfirmadorDeBorrador } from './confirmacion.js';
-import { leerBorrador } from './borrador.js';
+import {
+  almacenDeBorradoresEnMemoria,
+  type AlmacenDeBorradores,
+  type BorradorGuardado,
+} from './almacen-borradores.js';
+import {
+  leerBorrador,
+  leerCambios,
+  leerEstado,
+  leerIdDeBorrador,
+  type BorradorLeido,
+} from './borrador.js';
+import {
+  confirmacionPorPersona,
+  observacionesTrasAnotar,
+  type ConfirmadorDeBorrador,
+} from './confirmacion.js';
 import { registrar as registrarPorDefecto } from './entorno.js';
 import { ErrorConector, recortarDetalle, traducirError } from './errores.js';
 import {
@@ -99,6 +114,8 @@ export interface OpcionesHerramientas {
   readonly almacen?: AlmacenIdempotencia;
   readonly vencimiento?: ResolutorDeVencimiento;
   readonly confirmador?: ConfirmadorDeBorrador;
+  /** Borrador pendiente por clave: con él, una reanudación no crea un segundo borrador. */
+  readonly borradores?: AlmacenDeBorradores;
   /** Registro del conector: solo recuentos, nunca datos de facturas ni credenciales. */
   readonly registrar?: (mensaje: string) => void;
 }
@@ -152,7 +169,8 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
   const { cliente } = opciones;
   const ahora = opciones.ahora ?? (() => new Date());
   const almacen = opciones.almacen ?? almacenEnMemoria();
-  const confirmador = opciones.confirmador ?? elegirConfirmador('A');
+  const confirmador = opciones.confirmador ?? confirmacionPorPersona(cliente);
+  const borradores = opciones.borradores ?? almacenDeBorradoresEnMemoria();
   const registrar = opciones.registrar ?? ((mensaje: string) => registrarPorDefecto(mensaje));
   /** Escrituras en vuelo por clave de idempotencia, para las llamadas simultáneas. */
   const enCurso = new Map<string, { huella: string; promesa: Promise<SalidaNota> }>();
@@ -279,9 +297,70 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
     }
   }
 
+  function salidaDe(
+    argumentos: EntradaNotaResuelta,
+    draftId: string,
+    creadoEn: string,
+  ): SalidaNota {
+    return SalidaCrearNotaSeguimiento.parse({
+      id: draftId,
+      factura_id: argumentos.factura_id,
+      tipo: argumentos.tipo,
+      creado_en: creadoEn,
+    });
+  }
+
+  /**
+   * Reanudación tras una caída entre el borrador y la confirmación: consulta el estado del
+   * borrador guardado para esa clave, que se guardó ya comprobado. Devuelve la nota si ya
+   * está escrita o si se confirma ahora ese mismo borrador; `undefined` si hay que crear
+   * uno nuevo (se canceló o caducó, y no se había escrito nada).
+   */
+  async function reanudar(
+    argumentos: EntradaNotaResuelta,
+    previo: BorradorGuardado,
+    clave: string,
+  ): Promise<SalidaNota | undefined> {
+    const estado = leerEstado(
+      (await cliente.llamar(HERRAMIENTAS_FACTUSOL.estadoBorrador, { draft_id: previo.draftId }))
+        .estructurado,
+    );
+    if (estado.estado === 'ejecutado') return salidaDe(argumentos, previo.draftId, previo.creadoEn);
+    if (estado.estado === 'pendiente') {
+      await confirmador.confirmar(previo.draftId);
+      return salidaDe(argumentos, previo.draftId, previo.creadoEn);
+    }
+    await borradores.borrar(clave);
+    return undefined;
+  }
+
+  /** Un borrador con una forma que no se entiende se cancela si se puede identificar: no queda pendiente. */
+  async function leerOCancelar(estructurado: unknown): Promise<BorradorLeido> {
+    try {
+      return leerBorrador(estructurado);
+    } catch (error) {
+      const id = leerIdDeBorrador(estructurado);
+      if (id !== undefined) await confirmador.cancelar(id).catch(() => undefined);
+      throw error;
+    }
+  }
+
   async function escribir(argumentos: EntradaNotaResuelta): Promise<SalidaNota> {
     const momento = ahora();
     try {
+      // Sin lo necesario para confirmar, la escritura falla aquí y no deja borrador.
+      confirmador.antesDeEscribir();
+      const clave = argumentos.clave_idempotencia;
+      const huella = huellaDeNota(argumentos);
+      if (clave !== undefined) {
+        const previo = await borradores.leer(clave);
+        if (previo !== undefined) {
+          comprobarHuella(previo.huella, huella, clave);
+          const hecha = await reanudar(argumentos, previo, clave);
+          if (hecha !== undefined) return hecha;
+        }
+      }
+
       const { serie, numero } = separarFactura(argumentos.factura_id);
       const detalle = analizarDetalleDeFactura(
         await texto(HERRAMIENTAS_FACTUSOL.factura, { serie, numero }),
@@ -296,30 +375,37 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
         cliente: codigo,
         observaciones: linea,
       });
-      const leido = leerBorrador(sondeo.estructurado);
-      await cliente.llamar(HERRAMIENTAS_FACTUSOL.cancelarBorrador, { draft_id: leido.draftId });
+      const leido = await leerOCancelar(sondeo.estructurado);
+      await confirmador.cancelar(leido.draftId);
 
-      const observaciones =
-        leido.observacionesActuales.trim() === ''
-          ? linea
-          : `${leido.observacionesActuales.replace(/\s+$/, '')}\n${linea}`;
+      const observaciones = observacionesTrasAnotar(leido.observacionesActuales, linea);
       const definitivo = await cliente.llamar(HERRAMIENTAS_FACTUSOL.borradorCliente, {
         cliente: codigo,
         observaciones,
       });
-      const borrador = leerBorrador(definitivo.estructurado);
-      await confirmador.alCrearBorrador({
+      const borrador = await leerOCancelar(definitivo.estructurado);
+      // Primero se comprueba contra lo aprobado y solo entonces se guarda y se confirma: lo
+      // guardado es siempre un borrador ya comprobado.
+      await confirmador.comprobar({
         draftId: borrador.draftId,
         clienteCodigo: codigo,
         facturaId: argumentos.factura_id,
         observaciones,
+        linea,
+        cambios: leerCambios(definitivo.estructurado),
       });
-      return SalidaCrearNotaSeguimiento.parse({
-        id: borrador.draftId,
-        factura_id: argumentos.factura_id,
-        tipo: argumentos.tipo,
-        creado_en: momento.toISOString(),
-      });
+      if (clave !== undefined) {
+        await borradores.guardar(clave, {
+          huella,
+          draftId: borrador.draftId,
+          clienteCodigo: codigo,
+          observaciones,
+          linea,
+          creadoEn: momento.toISOString(),
+        });
+      }
+      await confirmador.confirmar(borrador.draftId);
+      return salidaDe(argumentos, borrador.draftId, momento.toISOString());
     } catch (error) {
       throw traducirError(error, 'No se pudo crear la nota de seguimiento');
     }

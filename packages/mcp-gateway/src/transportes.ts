@@ -32,6 +32,11 @@ export interface OpcionesProcesoHijo {
   argumentos?: readonly string[] | undefined;
   /** Nombre de la variable de entorno en la que va la credencial. */
   variableDelSecreto: string;
+  /**
+   * Variable en la que va la credencial de confirmación, distinta de la anterior.
+   * Solo se rellena en la conexión efímera de una escritura aprobada (ADR-031).
+   */
+  variableDeConfirmacion?: string | undefined;
   /** Resto del entorno del hijo. Por defecto, ninguno: un hijo hereda lo mínimo. */
   entorno?: Record<string, string> | undefined;
   directorio?: string | undefined;
@@ -49,12 +54,26 @@ export async function conexionPorProcesoHijo(
   nombreConector: string,
   secreto: Secreto | null,
   opciones: OpcionesProcesoHijo,
+  confirmacion?: Secreto,
 ): Promise<ConexionMcp> {
+  if (confirmacion !== undefined) {
+    const variable = opciones.variableDeConfirmacion ?? '';
+    if (variable === '' || variable === opciones.variableDelSecreto) {
+      // Nunca se descarta en silencio ni se mezcla con la del agente: dos
+      // credenciales, dos nombres.
+      throw new Error(
+        `El conector «${nombreConector}» recibe una credencial de confirmación y no declara una variable propia para ella.`,
+      );
+    }
+  }
   const entorno: Record<string, string> = {
     // `PATH` sí hace falta: sin él no se encuentra el mandato.
     PATH: process.env['PATH'] ?? '',
     ...(opciones.entorno ?? {}),
     ...(secreto === null ? {} : { [opciones.variableDelSecreto]: secreto.revelar() }),
+    ...(confirmacion === undefined || !opciones.variableDeConfirmacion
+      ? {}
+      : { [opciones.variableDeConfirmacion]: confirmacion.revelar() }),
   };
 
   const transporte = new StdioClientTransport({

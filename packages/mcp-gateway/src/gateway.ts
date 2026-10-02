@@ -15,7 +15,9 @@
  *    cambia cada semana y esta capa es la que no puede equivocarse.
  * 3. **Credenciales.** Se resuelven por `conector.referencia_secreto`, se meten en
  *    el transporte y no vuelven a salir. No hay parámetro, retorno ni traza de este
- *    módulo por el que el valor de un secreto pueda llegar al modelo.
+ *    módulo por el que el valor de un secreto pueda llegar al modelo. Una segunda
+ *    credencial, la de confirmación (ADR-031), solo se entrega en una conexión
+ *    efímera que abre una escritura ya aprobada y se cierra al terminar.
  * 4. **Auditoría.** Cada llamada, cada rechazo y cada descubrimiento pasan por
  *    `anotar`, que encadena el hash y suma al contador en la misma transacción.
  */
@@ -39,9 +41,9 @@ import {
   nivelesEfectivos,
   type AutorizacionDePuesto,
 } from './autorizaciones.js';
-import type { ConexionMcp, HerramientaDescubierta } from './herramientas.js';
+import type { ConexionMcp, HerramientaDescubierta, ResultadoHerramienta } from './herramientas.js';
 import type { RegistroDeServidores } from './registro.js';
-import type { ResolvedorDeSecretos } from './secretos.js';
+import type { ResolvedorDeSecretos, Secreto } from './secretos.js';
 
 /**
  * Acciones del libro que escribe este módulo, en un solo sitio.
@@ -49,6 +51,12 @@ import type { ResolvedorDeSecretos } from './secretos.js';
  * Una entrada de auditoría se consulta filtrando por este texto dentro de seis
  * años: se añaden valores, no se renombran.
  */
+/**
+ * Código con el que el libro anota la falta de la credencial de confirmación de una
+ * escritura aprobada (junto al motivo `no_autorizado` del contrato de errores).
+ */
+export const MOTIVO_SIN_CONFIRMACION = 'confirmacion_sin_credencial';
+
 export const ACCIONES = {
   descubiertas: 'conector.herramientas_descubiertas',
   llamada: 'herramienta.llamada',
@@ -289,10 +297,31 @@ export class Gateway {
       throw new PasoNoPermitido(herramienta.nombre, veredicto);
     }
 
+    // ADR-031: la credencial de confirmación solo viaja con una escritura cuya
+    // aprobación ya está decidida, y nunca por la conexión que sirve las lecturas.
+    // Esto exige que la clase de acción de la escritura del conector esté en N1 (pide
+    // aprobación): si una política la subiera a N2 o N3 la escritura se ejecutaría por la
+    // conexión normal, sin esta credencial, y el conector la rechazaría con `no_autorizado`.
+    // Falla cerrado y es deliberado: una escritura autónoma no es una aprobación humana.
+    const conConfirmacion =
+      herramienta.tipo === 'escritura' &&
+      desbloqueada &&
+      this.#registro.referenciaConfirmacion(herramienta.conector) !== undefined;
+
     const comienzo = Date.now();
-    let resultado;
+    let resultado: ResultadoHerramienta;
+    /** Cierto solo si la credencial de confirmación llegó a entregarse a una conexión. */
+    const entrega = { hecha: false };
     try {
-      resultado = await abierta.conexion.llamar(herramienta.nombre, peticion.argumentos);
+      resultado = conConfirmacion
+        ? await this.#llamarConConfirmacion(
+            contexto,
+            herramienta,
+            abierta.autorizacion,
+            peticion,
+            entrega,
+          )
+        : await abierta.conexion.llamar(herramienta.nombre, peticion.argumentos);
     } catch (error) {
       const duracionMs = Date.now() - comienzo;
       await this.#anotarLlamada(contexto, herramienta, veredicto.nivelAplicado, {
@@ -300,6 +329,9 @@ export class Gateway {
         duracionMs,
         detalle: error instanceof Error ? error.message : String(error),
         ...(peticion.aprobacionId ? { aprobacionId: peticion.aprobacionId } : {}),
+        // El libro distingue una llamada que usó la credencial de confirmación de una que
+        // nunca la recibió, también cuando la conexión lanza en vez de devolver `isError`.
+        ...(entrega.hecha ? { confirmacion: true } : {}),
       });
       throw error;
     }
@@ -310,6 +342,8 @@ export class Gateway {
       duracionMs,
       ...(resultado.esError ? { detalle: resultado.texto } : {}),
       ...(peticion.aprobacionId ? { aprobacionId: peticion.aprobacionId } : {}),
+      ...(conConfirmacion ? { confirmacion: true } : {}),
+      ...(conConfirmacion && !resultado.esError ? idDelResultado(resultado) : {}),
     });
 
     // Un fallo del servidor viaja por MCP como resultado con `isError`. Si no se
@@ -328,6 +362,58 @@ export class Gateway {
       duracionMs,
       entrada,
     };
+  }
+
+  /**
+   * Ejecuta una escritura aprobada por una conexión efímera que lleva, además de la
+   * credencial del agente, la de confirmación.
+   *
+   * Sin la credencial de confirmación resoluble, la escritura no se ejecuta: falla
+   * como `no_autorizado` antes de abrir nada, y el conector no llega a crear un
+   * borrador. La conexión se cierra siempre, y el valor del secreto no se guarda ni
+   * se anota.
+   */
+  async #llamarConConfirmacion(
+    contexto: ContextoDeLlamada,
+    herramienta: HerramientaDescubierta,
+    autorizacion: AutorizacionDePuesto,
+    peticion: PeticionDeLlamada,
+    entrega: { hecha: boolean },
+  ): Promise<ResultadoHerramienta> {
+    const referencia = this.#registro.referenciaConfirmacion(herramienta.conector) ?? '';
+    let confirmacion: Secreto | undefined;
+    try {
+      const resuelto = await this.#secretos.resolver(referencia);
+      confirmacion = resuelto.vacio ? undefined : resuelto;
+    } catch {
+      confirmacion = undefined;
+    }
+    if (confirmacion === undefined) {
+      // Sin `#anotarRechazo`: el fallo sube al `catch` de `llamar`, que es el único punto que
+      // anota esta llamada. Anotar aquí también escribiría dos entradas (y sumaría dos veces
+      // al contador) por una sola llamada rechazada.
+      throw new HerramientaFallo(
+        herramienta.nombre,
+        JSON.stringify({
+          code: MOTIVO_SIN_CONFIRMACION,
+          message:
+            'Falta la credencial de confirmación del conector: la escritura aprobada no se ejecuta.',
+          datos: { motivo: 'no_autorizado' },
+        }),
+      );
+    }
+
+    const secreto =
+      autorizacion.referenciaSecreto === null
+        ? null
+        : await this.#secretos.resolver(autorizacion.referenciaSecreto);
+    const conexion = await this.#registro.abrir(autorizacion.conectorNombre, secreto, confirmacion);
+    entrega.hecha = true;
+    try {
+      return await conexion.llamar(herramienta.nombre, peticion.argumentos);
+    } finally {
+      await conexion.cerrar().catch(() => undefined);
+    }
   }
 
   /** Cierra todas las conexiones abiertas. Lo llama el trabajador al apagarse. */
@@ -455,6 +541,10 @@ export class Gateway {
       duracionMs: number;
       detalle?: string | undefined;
       aprobacionId?: string | undefined;
+      /** La escritura se ejecutó con la credencial de confirmación entregada. */
+      confirmacion?: boolean | undefined;
+      /** Identificador de lo creado, tal como lo devuelve el conector (p. ej. el borrador). */
+      resultadoId?: string | undefined;
     },
   ): Promise<EntradaAnotada> {
     const referencias = [
@@ -464,6 +554,9 @@ export class Gateway {
     if (detalles.aprobacionId) {
       referencias.push({ tipo: 'aprobacion', id: detalles.aprobacionId });
     }
+    // Ni el token ni su referencia: solo el hecho de la confirmación y lo que creó.
+    if (detalles.confirmacion) referencias.push({ tipo: 'confirmacion', id: 'gateway' });
+    if (detalles.resultadoId) referencias.push({ tipo: 'borrador', id: detalles.resultadoId });
     if (detalles.detalle) {
       const error = leerErrorDeHerramienta(detalles.detalle);
       if (error) {
@@ -494,6 +587,16 @@ export class Gateway {
       }),
     );
   }
+}
+
+/** `id` del resultado estructurado, si el conector lo devuelve como texto. */
+function idDelResultado(resultado: ResultadoHerramienta): { resultadoId?: string } {
+  const estructurado = resultado.estructurado;
+  if (typeof estructurado === 'object' && estructurado !== null) {
+    const id = (estructurado as { id?: unknown }).id;
+    if (typeof id === 'string' && id.trim() !== '') return { resultadoId: recortar(id, 100) };
+  }
+  return {};
 }
 
 /** El libro no es el sitio para volcar la respuesta entera de un servidor. */

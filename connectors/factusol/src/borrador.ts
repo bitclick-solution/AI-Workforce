@@ -87,3 +87,40 @@ export function leerBorrador(estructurado: unknown): BorradorLeido {
   if (observaciones === undefined) return fallo('el diff no trae el campo «Observaciones»');
   return { draftId, observacionesActuales: observaciones.actual };
 }
+
+export type EstadoDeBorrador = 'pendiente' | 'ejecutado' | 'cancelado' | 'caducado';
+
+export interface EstadoLeido {
+  readonly estado: EstadoDeBorrador;
+  readonly cambios: Map<string, CambioDeCampo>;
+}
+
+/**
+ * Respuesta de `get_estado_borrador` (y de `cancelar_borrador`), JSON estructurado:
+ * `{ texto, accion, documentos, resultado, estado, escrito }` con `estado` en `pendiente`,
+ * `cancelado`, `ya_ejecutado` (`escrito: "si"`, `resultado: "ok"`) y `bloqueado`. Un
+ * borrador pendiente no trae diff. El nombre del estado de un borrador caducado no consta
+ * en las muestras: se acepta `caducado` o `expirado`, y todo estado desconocido es `invalido`.
+ */
+export function leerEstado(estructurado: unknown): EstadoLeido {
+  if (!esObjeto(estructurado)) return fallo('el estado no es JSON estructurado');
+  const crudo = estructurado['estado'];
+  if (typeof crudo !== 'string') return fallo('el estado no trae «estado»');
+  const estado = crudo.trim().toLowerCase();
+  const cambios = new Map<string, CambioDeCampo>();
+  if (['pendiente', 'bloqueado'].includes(estado)) return { estado: 'pendiente', cambios };
+  if (['cancelado', 'cancelada'].includes(estado)) return { estado: 'cancelado', cambios };
+  if (['caducado', 'expirado'].includes(estado)) return { estado: 'caducado', cambios };
+  if (['ya_ejecutado', 'confirmado', 'ejecutado'].includes(estado)) {
+    const escrito = estructurado['escrito'];
+    const escritoSi =
+      escrito === true || (typeof escrito === 'string' && /^s[ií]$/i.test(escrito.trim()));
+    if (!escritoSi) return fallo('el borrador figura ejecutado pero no «escrito: si»');
+    const resultado = estructurado['resultado'];
+    if (typeof resultado !== 'string' || resultado.trim().toLowerCase() !== 'ok') {
+      return fallo('el borrador ejecutado no trae «resultado: ok»');
+    }
+    return { estado: 'ejecutado', cambios };
+  }
+  return fallo(`estado de borrador desconocido «${estado.slice(0, 40)}»`);
+}

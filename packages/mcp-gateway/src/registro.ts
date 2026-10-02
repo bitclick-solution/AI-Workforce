@@ -15,8 +15,26 @@
 import type { ConexionMcp } from './herramientas.js';
 import type { Secreto } from './secretos.js';
 
-/** Cómo se llega a un servidor MCP. El secreto es nulo si el conector no lleva. */
-export type FabricaDeServidor = (secreto: Secreto | null) => Promise<ConexionMcp>;
+/**
+ * Cómo se llega a un servidor MCP. El secreto es nulo si el conector no lleva.
+ *
+ * `confirmacion` solo llega en la conexión efímera de una escritura ya aprobada
+ * (ADR-031): es la credencial que permite confirmar la escritura en el sistema de
+ * destino, y ninguna otra conexión la recibe.
+ */
+export type FabricaDeServidor = (
+  secreto: Secreto | null,
+  confirmacion?: Secreto,
+) => Promise<ConexionMcp>;
+
+export interface OpcionesDeRegistro {
+  /**
+   * Referencia de secreto de la credencial de confirmación del conector, distinta
+   * de `conector.referencia_secreto`. Sin ella, el conector no tiene confirmación
+   * propia y sus escrituras aprobadas usan la conexión normal.
+   */
+  referenciaConfirmacion?: string | undefined;
+}
 
 export class ConectorNoRegistrado extends Error {
   constructor(nombre: string, registrados: readonly string[]) {
@@ -30,14 +48,27 @@ export class ConectorNoRegistrado extends Error {
 
 export class RegistroDeServidores {
   readonly #fabricas = new Map<string, FabricaDeServidor>();
+  readonly #referenciasDeConfirmacion = new Map<string, string>();
 
   /** Registra o sustituye la fábrica de un conector. Sustituir es lo normal al probar. */
-  registrar(nombreConector: string, fabrica: FabricaDeServidor): this {
+  registrar(
+    nombreConector: string,
+    fabrica: FabricaDeServidor,
+    opciones: OpcionesDeRegistro = {},
+  ): this {
     if (nombreConector.trim() === '') {
       throw new Error('Un conector sin nombre no se puede registrar.');
     }
     this.#fabricas.set(nombreConector, fabrica);
+    const referencia = opciones.referenciaConfirmacion?.trim() ?? '';
+    if (referencia === '') this.#referenciasDeConfirmacion.delete(nombreConector);
+    else this.#referenciasDeConfirmacion.set(nombreConector, referencia);
     return this;
+  }
+
+  /** Referencia de la credencial de confirmación del conector, si tiene. */
+  referenciaConfirmacion(nombreConector: string): string | undefined {
+    return this.#referenciasDeConfirmacion.get(nombreConector);
   }
 
   tiene(nombreConector: string): boolean {
@@ -49,9 +80,13 @@ export class RegistroDeServidores {
   }
 
   /** Abre una conexión nueva. El gateway decide si la reutiliza o la cierra. */
-  async abrir(nombreConector: string, secreto: Secreto | null): Promise<ConexionMcp> {
+  async abrir(
+    nombreConector: string,
+    secreto: Secreto | null,
+    confirmacion?: Secreto,
+  ): Promise<ConexionMcp> {
     const fabrica = this.#fabricas.get(nombreConector);
     if (!fabrica) throw new ConectorNoRegistrado(nombreConector, this.nombres);
-    return fabrica(secreto);
+    return confirmacion === undefined ? fabrica(secreto) : fabrica(secreto, confirmacion);
   }
 }

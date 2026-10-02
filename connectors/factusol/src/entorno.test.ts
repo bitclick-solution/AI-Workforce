@@ -72,6 +72,62 @@ describe('leerConfiguracion', () => {
   });
 });
 
+describe('token de confirmación (ADR-031)', () => {
+  const agente = jwt({ scope: 'lectura borrador' });
+  const confirmar = jwt({ scope: 'confirmar' });
+
+  it('es opcional: sin él la configuración no lo trae', () => {
+    expect(
+      leerConfiguracion({ ...BASE, FACTUSOL_MCP_TOKEN: agente }).tokenConfirmar,
+    ).toBeUndefined();
+  });
+
+  it('se lee de una variable distinta de la del agente', () => {
+    const configuracion = leerConfiguracion({
+      ...BASE,
+      FACTUSOL_MCP_TOKEN: agente,
+      FACTUSOL_MCP_TOKEN_CONFIRMAR: confirmar,
+    });
+    expect(configuracion.token).toBe(agente);
+    expect(configuracion.tokenConfirmar).toBe(confirmar);
+  });
+
+  it.each([
+    ['es el mismo que el del agente', agente, agente, /no puede ser el token del agente/],
+    ['no lleva el scope confirmar', agente, jwt({ scope: 'lectura' }), /no lleva el scope/],
+    ['es demasiado corto', agente, 'x1y2z3', /demasiado corto/],
+    [
+      'no es un JWT',
+      agente,
+      'no-es-un-jwt-pero-es-largo',
+      /FACTUSOL_MCP_TOKEN_CONFIRMAR no es un JWT/,
+    ],
+  ])('se rechaza si %s, sin nombrar ningún valor', (_caso, token, confirmacion, patron) => {
+    try {
+      leerConfiguracion({
+        ...BASE,
+        FACTUSOL_MCP_TOKEN: token,
+        FACTUSOL_MCP_TOKEN_CONFIRMAR: confirmacion,
+      });
+      expect.unreachable('debía rechazarse');
+    } catch (error) {
+      const mensaje = (error as Error).message;
+      expect(mensaje).toMatch(patron);
+      expect(mensaje).not.toContain(confirmacion);
+    }
+  });
+
+  it('el del agente sigue sin poder llevar el scope confirmar aunque exista el de confirmación', () => {
+    expect(() =>
+      leerConfiguracion({
+        ...BASE,
+        FACTUSOL_MCP_TOKEN: jwt({ scope: 'confirmar' }),
+        FACTUSOL_MCP_TOKEN_CONFIRMAR: jwt({ scope: 'confirmar', otro: 1 }),
+      }),
+    ).toThrowError(/ese token no va nunca con las herramientas del agente/);
+  });
+});
+
 describe('scopesDelToken', () => {
   it('un token sin scopes devuelve lista vacía', () => {
     expect(scopesDelToken(jwt({ sub: 'x' }))).toEqual([]);

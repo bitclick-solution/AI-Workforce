@@ -21,7 +21,16 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { clienteSse, type ClienteFactusol } from './cliente.js';
-import { elegirConfirmador, type ConfirmadorDeBorrador } from './confirmacion.js';
+import {
+  almacenDeBorradoresEnFichero,
+  almacenDeBorradoresEnMemoria,
+} from './almacen-borradores.js';
+import {
+  confirmacionPorGateway,
+  confirmacionPorPersona,
+  leerOpcionDeConfirmacion,
+  type OpcionDeConfirmacion,
+} from './confirmacion.js';
 import { leerConfiguracion, redactar, registrar, type ConfiguracionFactusol } from './entorno.js';
 import { ErrorConector, traducirError } from './errores.js';
 import { ESQUEMA_ENTRADA_LISTAR, ESQUEMA_ENTRADA_NOTA } from './esquema-json.js';
@@ -35,7 +44,7 @@ export const DESCRIPCIONES = {
   [NOMBRES.listar]:
     'Devuelve las facturas de cliente vencidas y sin cobrar de Factusol, de más a menos días vencida. Solo lectura.',
   [NOMBRES.nota]:
-    'Anota una nota de seguimiento en el cliente de una factura de Factusol, como borrador pendiente de confirmación. Escritura.',
+    'Anota una nota de seguimiento en las observaciones del cliente de una factura de Factusol. Escritura: requiere aprobación.',
 } as const;
 
 export const CATALOGO = [
@@ -94,22 +103,37 @@ export function crearServidor(opciones: OpcionesServidor): Server {
   return servidor;
 }
 
-/** Monta el conector completo: configuración, cliente de Factusol MCP y servidor. */
+/**
+ * Monta el conector completo: configuración, clientes de Factusol MCP y servidor.
+ *
+ * Hay dos clientes y no comparten token: el del agente lee, crea borradores y consulta su
+ * estado; el de confirmación solo existe si el gateway entregó el token `confirmar`, y
+ * solo llama a `confirmar_operacion`.
+ */
 export function montarConector(
   configuracion: ConfiguracionFactusol,
-  confirmador: ConfirmadorDeBorrador = elegirConfirmador('A'),
+  opcion: OpcionDeConfirmacion = 'B',
 ): {
   servidor: Server;
   cliente: ClienteFactusol;
 } {
-  const cliente = clienteSse({
-    extremo: configuracion.extremoMcp,
-    token: configuracion.token,
-    tenantId: configuracion.tenantId,
-  });
+  const base = { extremo: configuracion.extremoMcp, tenantId: configuracion.tenantId };
+  const cliente = clienteSse({ ...base, token: configuracion.token });
+  const clienteConfirmar =
+    configuracion.tokenConfirmar === undefined
+      ? undefined
+      : clienteSse({ ...base, token: configuracion.tokenConfirmar });
+  const confirmador =
+    opcion === 'A'
+      ? confirmacionPorPersona(cliente)
+      : confirmacionPorGateway({ cliente, clienteConfirmar });
+  const borradores =
+    configuracion.directorioDeEstado === undefined
+      ? almacenDeBorradoresEnMemoria()
+      : almacenDeBorradoresEnFichero(configuracion.directorioDeEstado);
   const servidor = crearServidor({
-    herramientas: crearHerramientas({ cliente, confirmador }),
-    secretos: [configuracion.token],
+    herramientas: crearHerramientas({ cliente, confirmador, borradores }),
+    secretos: [configuracion.token, configuracion.tokenConfirmar],
   });
   return { servidor, cliente };
 }
@@ -144,7 +168,7 @@ export async function principal(entorno = process.env): Promise<void> {
   const configuracion = leerConfiguracion(entorno);
   const { servidor } = montarConector(
     configuracion,
-    elegirConfirmador(entorno['FACTUSOL_CONFIRMACION']),
+    leerOpcionDeConfirmacion(entorno['FACTUSOL_CONFIRMACION']),
   );
   if (entorno['FACTUSOL_CONECTOR_HTTP'] === '1') {
     await servirPorHttp(
@@ -160,7 +184,10 @@ export async function principal(entorno = process.env): Promise<void> {
 if (esProcesoPrincipal(import.meta.url)) {
   principal().catch((error: unknown) => {
     const fallo = traducirError(error, 'El conector de Factusol no arrancó');
-    registrar(fallo.message, [process.env['FACTUSOL_MCP_TOKEN']]);
+    registrar(fallo.message, [
+      process.env['FACTUSOL_MCP_TOKEN'],
+      process.env['FACTUSOL_MCP_TOKEN_CONFIRMAR'],
+    ]);
     process.exitCode = 1;
   });
 }

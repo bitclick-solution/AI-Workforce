@@ -14,6 +14,9 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { clienteGrabado } from './cliente.js';
+import { confirmacionPorGateway } from './confirmacion.js';
+import { ESQUEMA_ENTRADA_LISTAR, ESQUEMA_ENTRADA_NOTA } from './esquema-json.js';
+import { simularFactusol } from './simulador.js';
 import {
   LONGITUD_MINIMA_SECRETO,
   MARCA_OCULTA,
@@ -107,6 +110,69 @@ describe('sin secretos en @aiw/connector-factusol', () => {
   it('la redacción tapa el secreto y deja en paz el texto corto', () => {
     expect(redactar(`token=${CLAVE_SEMBRADA}`, [CLAVE_SEMBRADA])).toBe(`token=${MARCA_OCULTA}`);
     expect(redactar('el usuario es agente', ['agente'])).toBe('el usuario es agente');
+  });
+});
+
+describe('el token de confirmación tampoco sale del proceso', () => {
+  const CONFIRMAR = `${Buffer.from('{"alg":"HS256"}').toString('base64url')}.${Buffer.from('{"scope":"confirmar"}').toString('base64url')}.firma-de-confirmar-9f8e7d6c`;
+  const salida: string[] = [];
+
+  beforeEach(() => {
+    salida.length = 0;
+    vi.spyOn(console, 'error').mockImplementation((...partes: unknown[]) => {
+      salida.push(partes.map(String).join(' '));
+    });
+    for (const flujo of [process.stdout, process.stderr]) {
+      vi.spyOn(flujo, 'write').mockImplementation((trozo: unknown) => {
+        salida.push(String(trozo));
+        return true;
+      });
+    }
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('ni en respuestas ni en errores ni en el registro, aunque Factusol lo repita', async () => {
+    const sim = simularFactusol({
+      confirmarFalla: () => `401 Unauthorized: token=${CONFIRMAR} rechazado`,
+    });
+    const servidor = crearServidor({
+      herramientas: crearHerramientas({
+        cliente: sim.agente,
+        confirmador: confirmacionPorGateway({
+          cliente: sim.agente,
+          clienteConfirmar: sim.confirmar,
+        }),
+        ahora: () => DIA_DE_LA_GRABACION,
+      }),
+      secretos: [CLAVE_SEMBRADA, CONFIRMAR],
+    });
+    const cliente = new Client({ name: 'prueba', version: '0.0.0' });
+    const [delCliente, delServidor] = InMemoryTransport.createLinkedPair();
+    await Promise.all([servidor.connect(delServidor), cliente.connect(delCliente)]);
+
+    const registrado = [
+      JSON.stringify(await cliente.listTools()),
+      JSON.stringify(await cliente.callTool({ name: NOMBRES.listar, arguments: {} })),
+      JSON.stringify(
+        await cliente
+          .callTool({ name: NOMBRES.nota, arguments: { factura_id: '1-000101', texto: 'Aviso.' } })
+          .catch((error: unknown) => ({ error: String(error), datos: error })),
+      ),
+    ];
+    await cliente.close();
+
+    const todo = [...registrado, ...salida].join('\n');
+    expect(todo).toContain(MARCA_OCULTA);
+    expect(todo).not.toContain(CONFIRMAR);
+    expect(todo).not.toContain('firma-de-confirmar-9f8e7d6c');
+  });
+
+  it('el esquema de entrada de las dos herramientas no tiene un solo campo de credencial', () => {
+    const campos = JSON.stringify([ESQUEMA_ENTRADA_LISTAR, ESQUEMA_ENTRADA_NOTA]);
+    expect(campos).not.toMatch(/token|clave_?api|password|secret|confirmar/i);
   });
 });
 
