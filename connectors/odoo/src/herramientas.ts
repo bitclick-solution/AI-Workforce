@@ -174,7 +174,7 @@ export function crearHerramientas(opciones: OpcionesHerramientas): Herramientas 
   ): Promise<SalidaNota> {
     const carga = await cliente.llamar(HERRAMIENTAS_DINAMICAS.notaEnHistorial, {
       model: 'account.move',
-      res_id: argumentos.factura_id,
+      record_id: argumentos.factura_id,
       body: argumentos.texto,
       message_type: 'comment',
       subtype_xmlid: 'mail.mt_note',

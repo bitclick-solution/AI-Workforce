@@ -144,7 +144,7 @@ describe('la clave no sale del proceso', () => {
       ],
       chatter_post: [
         {
-          argumentos: { res_id: 55 },
+          argumentos: { record_id: 55 },
           error: `Authentication failed for api_key=${CLAVE_SEMBRADA} on database pruebas`,
         },
         ...(cargarGrabaciones()['chatter_post'] ?? []),
