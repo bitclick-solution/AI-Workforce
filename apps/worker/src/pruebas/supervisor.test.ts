@@ -190,6 +190,20 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
     expect(resultado).toMatchObject({ publicado: true, motivo: 'resultado_escala' });
   });
 
+  it('con la bandera apagada no publica nada y no deja entrada en el libro', async () => {
+    const { montaje, tenantId, delegacionId, politica } = await prepararDelegacion();
+    (montaje.contexto as { supervisorDeDepartamento: boolean }).supervisorDeDepartamento = false;
+    const resultado = await montaje.actividades.supervisarDelegacion({
+      tenantId,
+      delegacionId,
+      tipo: 'delegacion.vencida',
+      politicaRespaldo: politica,
+    });
+    expect(resultado).toEqual({ publicado: false, razon: 'apagado' });
+    expect(await mensajesDeFinanzas(montaje)).toHaveLength(0);
+    expect(await accionesDelLibro(montaje, ACCIONES_SUPERVISOR.avisoPublicado)).toHaveLength(0);
+  });
+
   it('una delegación que no existe no publica nada', async () => {
     const { montaje, tenantId } = await prepararDelegacion();
     const resultado = await montaje.actividades.supervisarDelegacion({

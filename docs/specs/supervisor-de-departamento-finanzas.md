@@ -37,7 +37,7 @@ La ficha de Finanzas habla de un supervisor de departamento y de memoria que com
 
 ## Endpoints, flujos y datos
 
-Sin endpoints. Una tabla nueva, `promocion_version` (decisión 7). El supervisor publica en la sala del departamento con las funciones de sala ya existentes, como actor de plataforma: mensaje sin puesto ni persona autora y con el adjunto `autor_plataforma` (`supervisor_departamento`), igual que el moderador. No hace falta fila en `sala_participante` ni valor nuevo en `rol_participante`: confirmado, el rol `moderador` es de quien modera y el supervisor no modera. Supervisa las delegaciones entre puestos del mismo departamento; una que cruza de departamento queda fuera de esta versión. El identificador del mensaje sale de la delegación, y por eso un segundo hecho de la misma (el plazo vence y se aplica el respaldo) no lo duplica.
+Sin endpoints. Una tabla nueva, `promocion_version` (decisión 7). El supervisor publica en la sala del departamento con las funciones de sala ya existentes, como actor de plataforma: mensaje sin puesto ni persona autora y con el adjunto `autor_plataforma` (`supervisor_departamento`), igual que el moderador. No hace falta fila en `sala_participante` ni valor nuevo en `rol_participante`: confirmado, el rol `moderador` es de quien modera y el supervisor no modera. Va detrás de la bandera `AIW_SUPERVISOR_DEPARTAMENTO` (apagada por defecto, como `AIW_SALA_MODELO`) hasta la demo. Supervisa las delegaciones entre puestos del mismo departamento; una que cruza de departamento queda fuera de esta versión. El identificador del mensaje sale de la delegación, y por eso un segundo hecho de la misma (el plazo vence y se aplica el respaldo) no lo duplica.
 
 ## Criterios de hecho
 

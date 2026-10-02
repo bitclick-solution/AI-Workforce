@@ -35,13 +35,18 @@ export interface PeticionSupervisarDelegacion {
 
 export type ResultadoDeSupervision =
   | { publicado: true; mensajeId: string; salaId: string; motivo: string; yaEstaba: boolean }
-  | { publicado: false; razon: 'sin_aviso' | 'otro_departamento' | 'delegacion_desconocida' };
+  | {
+      publicado: false;
+      razon: 'apagado' | 'sin_aviso' | 'otro_departamento' | 'delegacion_desconocida';
+    };
 
 export function crearActividadesDeSupervisor(contexto: ContextoDeActividades) {
   return {
     async supervisarDelegacion(
       peticion: PeticionSupervisarDelegacion,
     ): Promise<ResultadoDeSupervision> {
+      // Detrás de la bandera hasta la demo: apagado, ni lee ni escribe nada.
+      if (!contexto.supervisorDeDepartamento) return { publicado: false, razon: 'apagado' };
       return enTenant(contexto, peticion.tenantId, async (tx) => {
         const [fila] = await tx<
           {

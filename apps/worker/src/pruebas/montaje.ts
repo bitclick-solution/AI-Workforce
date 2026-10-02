@@ -77,6 +77,7 @@ function contextoDePrueba(
     trazas,
     // Las pruebas de la sala ejercitan el paso de modelo; la bandera apagada tiene las suyas.
     salaConModelo: true,
+    supervisorDeDepartamento: true,
   });
 }
 
