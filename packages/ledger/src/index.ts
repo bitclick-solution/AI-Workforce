@@ -30,3 +30,6 @@ export * from './contador-consultas.js';
 // Aprobación por correo v0
 export * from './aprobacion.js';
 export * from './exportar.js';
+
+// Correo automático al crearse la aprobación (seguimiento 2-10)
+export * from './salida.js';

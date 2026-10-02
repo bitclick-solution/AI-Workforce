@@ -44,6 +44,20 @@ export const ACCIONES = {
   senalEntregada: 'aprobacion.senal.entregada',
 } as const;
 
+/**
+ * Evento de la salida transaccional que avisa a `apps/channels` de una aprobación
+ * nueva, para que mande el correo sin que nadie la llame a mano (seguimiento 2-10
+ * de «Bitclick como primera organización»; ver la especificación).
+ */
+export const TIPO_EVENTO_APROBACION_CREADA = 'aprobacion.creada';
+export const DESTINO_EVENTO_APROBACION_CORREO = 'correo';
+
+/** Carga del evento. Sin datos personales: quien la consuma relee la aprobación. */
+export interface CargaEventoAprobacionCreada {
+  version: 1;
+  aprobacionId: string;
+}
+
 export type AccionAprobacion = (typeof ACCIONES)[keyof typeof ACCIONES];
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -153,6 +167,15 @@ export async function solicitarAprobacion(
     resultado: 'exito',
     nivelAplicado: solicitud.nivelExigido,
   });
+
+  const cargaEvento: CargaEventoAprobacionCreada = { version: 1, aprobacionId: fila.id };
+  await tx`
+    insert into evento_salida (tenant_id, tipo, destino, carga)
+    values (
+      ${tenantId}, ${TIPO_EVENTO_APROBACION_CREADA}, ${DESTINO_EVENTO_APROBACION_CORREO},
+      ${JSON.stringify(cargaEvento)}::text::jsonb
+    )
+  `;
 
   return { id: fila.id, creadoEn: fila.creado_en, venceEn: fila.vence_en, entrada };
 }
