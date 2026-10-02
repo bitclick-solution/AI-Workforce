@@ -1,0 +1,144 @@
+{
+  "_nota": "Respuestas grabadas de Factusol MCP 3.4.7 con la forma exacta de las muestras del Probador (1-10, instancia local, tras la actualización de la imagen) y valores inventados: ninguna persona, empresa, NIF o importe real. get_factura lleva Almacén, Forma de pago, Líneas, Cobros y Abonos; get_formas_de_pago, el diff del borrador (borrador.cuerpo.campos) y los estados del borrador siguen las muestras. cancelar_borrador devuelve un texto que el adaptador no lee. El estado de un borrador caducado no consta en las muestras. Fecha de referencia de las pruebas: 2026-09-21.",
+  "list_facturas_emitidas": [
+    {
+      "argumentos": {
+        "estado": "pendiente"
+      },
+      "texto": "**Factura 1-000101**\n- Cliente: EJEMPLO UNO S.L. (B00000001)\n- Fecha: 2026-07-01\n- Estado: pendiente\n- Total: 121.00 €\n\n**Factura 1-000102**\n- Cliente: EJEMPLO UNO S.L. (B00000001)\n- Fecha: 2026-08-10\n- Estado: pendiente\n- Total: 60.50 €\n\n**Factura 1-000103**\n- Cliente: PRUEBA TRES (Q00000003)\n- Fecha: 2026-09-15\n- Estado: pendiente\n- Total: 30.25 €\n\n**Factura 1-000105**\n- Cliente: EJEMPLO UNO S.L. (B00000001)\n- Fecha: 2026-06-01\n- Estado: pendiente\n- Total: 24.20 €\n\n**Factura 1-000106**\n- Cliente: PRUEBA TRES (Q00000003)\n- Fecha: 2026-09-10\n- Estado: pendiente\n- Total: 36.30 €\n\n**Factura 1-000107**\n- Cliente: EJEMPLO UNO S.L. (B00000001)\n- Fecha: 2026-06-10\n- Estado: pendiente\n- Total: 48.40 €"
+    },
+    {
+      "argumentos": {
+        "estado": "parcial"
+      },
+      "texto": "**Factura 1-000104**\n- Cliente: EJEMPLO DOS (00000000-X)\n- Fecha: 2026-06-20\n- Estado: pendiente parcial\n- Total: 12.10 €"
+    }
+  ],
+  "get_factura": [
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 101
+      },
+      "texto": "**Factura 1-000101**\n- Cliente: EJEMPLO UNO S.L. (B00000001)\n- Fecha: 2026-07-01\n- Estado: pendiente\n- Total: 121.00 €\n- Almacén: GEN\n- Forma de pago: 001 · RECIBO A 30 DIAS\n- Base imponible: 100.00 € · IVA: 21.00 €\n\n**Líneas:**\n- Artículo de ejemplo (ART001) — 1.0 x 100.00 € = 100.00 € · sin origen registrado\n\n**Cobros:**\n- ninguno registrado\n\n**Abonos:**\n- ninguno enlazado a esta factura y ninguno sin enlazar que la cite en su referencia"
+    },
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 102
+      },
+      "texto": "**Factura 1-000102**\n- Cliente: EJEMPLO UNO S.L. (B00000001)\n- Fecha: 2026-08-10\n- Estado: pendiente\n- Total: 60.50 €\n- Almacén: GEN\n- Forma de pago: 005 · 120 DIAS\n- Base imponible: 50.00 € · IVA: 10.50 €\n\n**Líneas:**\n- Artículo de ejemplo (ART001) — 1.0 x 50.00 € = 50.00 € · sin origen registrado\n\n**Cobros:**\n- ninguno registrado\n\n**Abonos:**\n- ninguno enlazado a esta factura y ninguno sin enlazar que la cite en su referencia"
+    },
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 103
+      },
+      "texto": "**Factura 1-000103**\n- Cliente: PRUEBA TRES (Q00000003)\n- Fecha: 2026-09-15\n- Estado: pendiente\n- Total: 30.25 €\n- Almacén: GEN\n- Forma de pago: 001 · RECIBO A 30 DIAS\n- Base imponible: 25.00 € · IVA: 5.25 €\n\n**Líneas:**\n- Artículo de ejemplo (ART001) — 1.0 x 25.00 € = 25.00 € · sin origen registrado\n\n**Cobros:**\n- ninguno registrado\n\n**Abonos:**\n- ninguno enlazado a esta factura y ninguno sin enlazar que la cite en su referencia"
+    },
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 105
+      },
+      "texto": "**Factura 1-000105**\n- Cliente: EJEMPLO UNO S.L. (B00000001)\n- Fecha: 2026-06-01\n- Estado: pendiente\n- Total: 24.20 €\n- Almacén: GEN\n- Forma de pago: 001 · RECIBO A 30 DIAS\n- Base imponible: 20.00 € · IVA: 4.20 €\n\n**Líneas:**\n- Artículo de ejemplo (ART001) — 1.0 x 20.00 € = 20.00 € · sin origen registrado\n\n**Cobros:**\n- ninguno registrado\n\n**Abonos:**\n- Posible abono sin enlazar: 1-000045 · 2026-06-02 · 24.20 € · devuelta · en su referencia dice «Factura 105»\n- Los importes de arriba (total y cobros) no restan abonos."
+    },
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 106
+      },
+      "texto": "**Factura 1-000106**\n- Cliente: PRUEBA TRES (Q00000003)\n- Fecha: 2026-09-10\n- Estado: pendiente\n- Total: 36.30 €\n- Almacén: GEN\n- Forma de pago: 000 · CONTADO\n- Base imponible: 30.00 € · IVA: 6.30 €\n\n**Líneas:**\n- Artículo de ejemplo (ART001) — 1.0 x 30.00 € = 30.00 € · sin origen registrado\n\n**Cobros:**\n- ninguno registrado\n\n**Abonos:**\n- ninguno enlazado a esta factura y ninguno sin enlazar que la cite en su referencia"
+    },
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 107
+      },
+      "texto": "**Factura 1-000107**\n- Cliente: EJEMPLO UNO S.L. (B00000001)\n- Fecha: 2026-06-10\n- Estado: pendiente\n- Total: 48.40 €\n- Almacén: GEN\n- Forma de pago: 369 · 30.60.90\n- Base imponible: 40.00 € · IVA: 8.40 €\n\n**Líneas:**\n- Artículo de ejemplo (ART001) — 1.0 x 40.00 € = 40.00 € · sin origen registrado\n\n**Cobros:**\n- ninguno registrado\n\n**Abonos:**\n- ninguno enlazado a esta factura y ninguno sin enlazar que la cite en su referencia"
+    },
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 104
+      },
+      "texto": "**Factura 1-000104**\n- Cliente: EJEMPLO DOS (00000000-X)\n- Fecha: 2026-06-20\n- Estado: pendiente parcial\n- Total: 12.10 €\n- Almacén: GEN\n- Forma de pago: 001 · RECIBO A 30 DIAS\n- Base imponible: 10.00 € · IVA: 2.10 €\n\n**Líneas:**\n- Artículo de ejemplo (ART001) — 1.0 x 10.00 € = 10.00 € · sin origen registrado\n\n**Cobros:**\n- 2026-07-01: 5.00 € (cobro) — Cobro factura nº:1-000104, remesa:1\n\n**Abonos:**\n- ninguno enlazado a esta factura y ninguno sin enlazar que la cite en su referencia"
+    },
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 999999
+      },
+      "texto": "No se ha encontrado la factura 1-999999."
+    },
+    {
+      "argumentos": {
+        "serie": "1",
+        "numero": 777777
+      },
+      "error": "fetch failed: ECONNREFUSED factusol-mcp:8000"
+    }
+  ],
+  "get_formas_de_pago": [
+    {
+      "texto": "- **CONTADO** (`000`) · 1 vencimiento(s)\n- **RECIBO A 30 DIAS** (`001`) · 1 vencimiento(s)\n- **TARJETA CREDITO** (`003`) · 1 vencimiento(s)\n- **120 DIAS** (`005`) · 1 vencimiento(s)\n- **30.60.90** (`369`) · 3 vencimiento(s)\n- **RECIBO DOMICILIADO** (`REC`) · 1 vencimiento(s)"
+    }
+  ],
+  "get_cliente": [
+    {
+      "argumentos": {
+        "termino_busqueda": "B00000001"
+      },
+      "texto": "**EJEMPLO UNO S.L.** (B00000001 · NIE)\n- Código: 12\n- Nombre comercial: Ejemplo Uno S.L.\n- Domicilio: Calle de Prueba, 1 (00000, PROVINCIA)\n- Teléfono: 000000000"
+    },
+    {
+      "argumentos": {
+        "termino_busqueda": "00000000-X"
+      },
+      "texto": "**EJEMPLO DOS** (00000000-X · NIE)\n- Código: 17\n- Nombre comercial: Ejemplo Dos\n- Domicilio: Calle de Prueba, 1 (00000, PROVINCIA)\n- Teléfono: 000000000"
+    },
+    {
+      "argumentos": {
+        "termino_busqueda": "Q00000003"
+      },
+      "texto": "**PRUEBA TRES** (Q00000003 · NIE)\n- Código: 23\n- Nombre comercial: Prueba Tres\n- Domicilio: Calle de Prueba, 1 (00000, PROVINCIA)\n- Teléfono: 000000000"
+    }
+  ],
+  "draft_modificar_cliente": [
+    {
+      "estructurado": {
+        "texto": "📋 **BORRADOR · Modificar cliente**  `[draft_id: dft_20260921_090000_a1b2c3]`\n\n- Cliente: EJEMPLO UNO S.L. (código 12)\n- Observaciones: Cliente de prueba. → Cliente de prueba.\n[2026-09-21] Nota de prueba.\n\n⏳ Este borrador expira en 30 minutos",
+        "borrador": {
+          "draft_id": "dft_20260921_090000_a1b2c3",
+          "tipo": "modificar_cliente",
+          "forma": "maestro",
+          "titulo": "Modificar cliente EJEMPLO UNO S.L.",
+          "caduca_en": "2026-09-21T09:30:00+00:00",
+          "aviso": null,
+          "cuerpo": {
+            "entidad": "cliente",
+            "operacion": "modificacion",
+            "identificador": "12",
+            "campos": [
+              {
+                "nombre": "Observaciones",
+                "valor_actual": "Cliente de prueba.",
+                "valor_nuevo": "Cliente de prueba.\n[2026-09-21] Nota de prueba.",
+                "cambia": true
+              }
+            ]
+          }
+        }
+      },
+      "texto": "📋 BORRADOR · Modificar cliente"
+    }
+  ],
+  "cancelar_borrador": [
+    {
+      "argumentos": {
+        "draft_id": "dft_20260921_090000_a1b2c3"
+      },
+      "texto": "✅ Borrador dft_20260921_090000_a1b2c3 cancelado."
+    }
+  ]
+}
