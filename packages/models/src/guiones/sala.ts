@@ -48,12 +48,19 @@ function lista(valor: unknown): Elemento[] {
 }
 
 /** Petición de dar de alta un puesto con otras palabras que las fijas del moderador. */
-const PIDE_ALTA = /necesitamos que alguien|nos hace falta alguien|hace falta alguien|queremos que alguien|incorporar un|sumar un agente/;
+const PIDE_ALTA =
+  /necesitamos que alguien|nos hace falta alguien|hace falta alguien|queremos que alguien|incorporar un|sumar un agente/;
 
 /** Paráfrasis conocidas: patrón del mensaje → trozo del nombre o de los temas del puesto. */
 const PISTAS_DE_PUESTO: readonly { patron: RegExp; puesto: RegExp }[] = [
-  { patron: /nos deb(e|en)|no (nos )?(han|ha) pagado|sin pagar|impagad|quien no ha pagado/, puesto: /cobr|moros|vencid/ },
-  { patron: /movimientos? del banco|cuadrar|casar (los )?pagos|pase de banco/, puesto: /concili|banc|extracto/ },
+  {
+    patron: /nos deb(e|en)|no (nos )?(han|ha) pagado|sin pagar|impagad|quien no ha pagado/,
+    puesto: /cobr|moros|vencid/,
+  },
+  {
+    patron: /movimientos? del banco|cuadrar|casar (los )?pagos|pase de banco/,
+    puesto: /concili|banc|extracto/,
+  },
 ];
 
 /** Moderador: elige entre los `puestoId` recibidos o marca que es una petición de organización. */
@@ -68,7 +75,11 @@ export const guionModerador: Guion = ({ prompt }) => {
   });
 
   if (PIDE_ALTA.test(mensaje)) {
-    return respuesta([], true, 'La persona pide incorporar un puesto: es una operación de organización.');
+    return respuesta(
+      [],
+      true,
+      'La persona pide incorporar un puesto: es una operación de organización.',
+    );
   }
   for (const { patron, puesto } of PISTAS_DE_PUESTO) {
     if (!patron.test(mensaje)) continue;
@@ -76,7 +87,11 @@ export const guionModerador: Guion = ({ prompt }) => {
       puesto.test(normalizar(`${String(p.nombre)} ${JSON.stringify(p.temas)}`)),
     );
     if (elegido !== undefined && typeof elegido.puestoId === 'string') {
-      return respuesta([elegido.puestoId], false, `El mensaje toca el trabajo de ${String(elegido.nombre)}.`);
+      return respuesta(
+        [elegido.puestoId],
+        false,
+        `El mensaje toca el trabajo de ${String(elegido.nombre)}.`,
+      );
     }
   }
   return respuesta([], false, 'Ningún puesto de la sala cubre lo que pide el mensaje.');

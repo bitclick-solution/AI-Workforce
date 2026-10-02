@@ -12,7 +12,9 @@ import {
 /** Caso dorado del moderador con paso de modelo, con sus contraejemplos: el evaluador sabe fallar. */
 describe('evals de humo · moderador de sala con paso de modelo', () => {
   it('las paráfrasis que las reglas dejarían en silencio dan la palabra a quien puede responder', async () => {
-    for (const e of EXPECTATIVAS_CON_MODELO.filter((x) => x.ambito === 'departamento' && x.usaModelo)) {
+    for (const e of EXPECTATIVAS_CON_MODELO.filter(
+      (x) => x.ambito === 'departamento' && x.usaModelo,
+    )) {
       expect(reglasDejanEnSilencio(e.mensaje)).toBe(true);
     }
     const resultado = await ejecutarCasoModeradorConModelo(clasificadorDelCaso());
@@ -49,7 +51,11 @@ describe('evals de humo · moderador de sala con paso de modelo', () => {
       {
         expectativa: primera,
         usoModelo: true,
-        decision: { tipo: 'intervenir', motivo: 'm', turnos: [turno('cobros'), turno('conciliacion')] },
+        decision: {
+          tipo: 'intervenir',
+          motivo: 'm',
+          turnos: [turno('cobros'), turno('conciliacion')],
+        },
       },
     ]);
     expect(dos.diagnostico).toContain('2 turnos');

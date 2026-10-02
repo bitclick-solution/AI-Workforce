@@ -136,7 +136,9 @@ export function crearClasificadorDeSala(
       cacheSistema: true,
     });
     if (resultado.tipo === 'rechazo') {
-      throw new Error(`El clasificador del proveedor rechazó la petición (${String(resultado.categoria)}).`);
+      throw new Error(
+        `El clasificador del proveedor rechazó la petición (${String(resultado.categoria)}).`,
+      );
     }
     if (!(PLATAFORMAS_MODELO as readonly string[]).includes(sirvio.plataforma)) {
       throw new Error(`Plataforma de modelo desconocida: ${sirvio.plataforma}.`);

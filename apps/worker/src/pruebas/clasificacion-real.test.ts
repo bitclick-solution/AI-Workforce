@@ -25,9 +25,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { crearClasificadorDeSala } from '../actividades/clasificacion.js';
 import { montarParaPruebas, type MontajeDePruebas } from './montaje.js';
 
-const SALA = [
-  { puestoId: 'p-cobros', nombre: 'Cobros', estado: 'activo', temas: ['cobro'] },
-];
+const SALA = [{ puestoId: 'p-cobros', nombre: 'Cobros', estado: 'activo', temas: ['cobro'] }];
 const MENSAJE = 'quién nos debe dinero desde hace más de dos meses';
 
 describe.skipIf(!HAY_BASE_DE_DATOS)('clasificación de la sala · proveedor real', () => {
@@ -58,7 +56,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('clasificación de la sala · proveedor real
     const { tenantId } = montaje.semilla;
     if (conTarifas) {
       const catalogo: unknown = JSON.parse(readFileSync(RUTA_CATALOGO_EJEMPLO, 'utf8'));
-      for (const tarifa of tarifasDelCatalogo(catalogo).filter((t) => t.proveedor === 'anthropic')) {
+      for (const tarifa of tarifasDelCatalogo(catalogo).filter(
+        (t) => t.proveedor === 'anthropic',
+      )) {
         await conTenant(montaje.cliente, tenantId, (tx) => registrarTarifa(tx, tenantId, tarifa));
       }
     }

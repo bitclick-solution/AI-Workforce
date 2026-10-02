@@ -10,11 +10,7 @@
  * Contra el proveedor de prueba, con sus guiones fijos: reproducible y sin coste. No
  * sustituye a `sala-moderador-001` (reglas), que sigue como estaba.
  */
-import {
-  MODELO_PRUEBA_MODERADOR,
-  clasificadorDePrueba,
-  guionModerador,
-} from '@aiw/models';
+import { MODELO_PRUEBA_MODERADOR, clasificadorDePrueba, guionModerador } from '@aiw/models';
 import {
   moderar,
   moderarConModelo,
@@ -64,7 +60,13 @@ export const EXPECTATIVAS_CON_MODELO: ExpectativaConModelo[] = [
     tipo: 'silencio',
     usaModelo: false,
   },
-  { mensaje: '¿cómo vamos de cobros este mes?', ambito: 'departamento', tipo: 'intervenir', hablan: ['cobros'], usaModelo: false },
+  {
+    mensaje: '¿cómo vamos de cobros este mes?',
+    ambito: 'departamento',
+    tipo: 'intervenir',
+    hablan: ['cobros'],
+    usaModelo: false,
+  },
 ];
 
 export interface ObtenidoConModelo {
@@ -76,7 +78,9 @@ export interface ObtenidoConModelo {
 export function evaluarConModelo(obtenidos: ObtenidoConModelo[]): ResultadoEval {
   const fallos: string[] = [];
   const enLaSala = new Set(SALA_DE_FINANZAS.map((p) => p.puestoId));
-  const pausados = new Set(SALA_DE_FINANZAS.filter((p) => p.estado === 'pausado').map((p) => p.puestoId));
+  const pausados = new Set(
+    SALA_DE_FINANZAS.filter((p) => p.estado === 'pausado').map((p) => p.puestoId),
+  );
   for (const { expectativa, decision, usoModelo } of obtenidos) {
     const donde = `«${expectativa.mensaje}» (${expectativa.ambito})`;
     if (decision.tipo !== expectativa.tipo) {
@@ -88,10 +92,14 @@ export function evaluarConModelo(obtenidos: ObtenidoConModelo[]): ResultadoEval 
     }
     if (decision.tipo !== 'intervenir') continue;
     const hablan = decision.turnos.map((t) => t.puestoId);
-    if (hablan.some((id) => !enLaSala.has(id))) fallos.push(`${donde}: habla un puesto que no está en la sala`);
+    if (hablan.some((id) => !enLaSala.has(id)))
+      fallos.push(`${donde}: habla un puesto que no está en la sala`);
     if (hablan.some((id) => pausados.has(id))) fallos.push(`${donde}: habla un puesto pausado`);
-    if (hablan.length > 1) fallos.push(`${donde}: ${hablan.length} turnos con el límite por defecto`);
-    if (JSON.stringify([...hablan].sort()) !== JSON.stringify([...(expectativa.hablan ?? [])].sort())) {
+    if (hablan.length > 1)
+      fallos.push(`${donde}: ${hablan.length} turnos con el límite por defecto`);
+    if (
+      JSON.stringify([...hablan].sort()) !== JSON.stringify([...(expectativa.hablan ?? [])].sort())
+    ) {
       fallos.push(`${donde}: hablan ${hablan.join(', ') || 'nadie'}`);
     }
   }

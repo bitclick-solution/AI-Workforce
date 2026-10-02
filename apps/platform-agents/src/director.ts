@@ -13,12 +13,7 @@
  * no existe, un departamento que la organización no tiene o un puesto que ya está.
  */
 import { decidirPaso, type Nivel, type PapelModelo } from '@aiw/domain';
-import {
-  AMBITO_CON_MODELO,
-  aparece,
-  clasificar,
-  type PuertoDeClasificacion,
-} from '@aiw/rooms';
+import { AMBITO_CON_MODELO, aparece, clasificar, type PuertoDeClasificacion } from '@aiw/rooms';
 import { z } from 'zod';
 
 import catalogoDePlantillas from './catalogo/plantillas.json' with { type: 'json' };
@@ -335,7 +330,8 @@ export interface OpcionesDelDirectorConModelo {
 
 function esquemaDelDirector(plantillaIds: readonly string[], departamentoIds: readonly string[]) {
   const plantillas = ['ninguno', ...plantillaIds] as [string, ...string[]];
-  const departamentos = departamentoIds.length > 0 ? (departamentoIds as [string, ...string[]]) : undefined;
+  const departamentos =
+    departamentoIds.length > 0 ? (departamentoIds as [string, ...string[]]) : undefined;
   return z.object({
     plantillaId: z.enum(plantillas),
     departamentoId: departamentos === undefined ? z.null() : z.enum(departamentos).nullable(),

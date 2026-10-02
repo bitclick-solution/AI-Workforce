@@ -32,9 +32,8 @@ const SALA = [COBROS, CONCILIACION, PREVISION];
 const PARAFRASIS = 'quién nos debe dinero desde hace más de dos meses';
 
 function puertoQueResponde(salida: unknown, costeEuros = 0.0012) {
-  return vi.fn(
-    (_peticion: PeticionDeClasificacion<unknown>): Promise<RespuestaDeClasificacion> =>
-      Promise.resolve({ salida, costeEuros, modelo: 'prueba' }),
+  return vi.fn((_peticion: PeticionDeClasificacion<unknown>): Promise<RespuestaDeClasificacion> =>
+    Promise.resolve({ salida, costeEuros, modelo: 'prueba' }),
   ) as unknown as PuertoDeClasificacion & ReturnType<typeof vi.fn>;
 }
 
@@ -67,7 +66,10 @@ describe('moderarConModelo · sala de un departamento', () => {
     await moderarConModelo(PARAFRASIS, SALA, { ambito: 'departamento', clasificador: puerto });
     const peticion = puerto.mock.calls[0]?.[0] as PeticionDeClasificacion<unknown>;
     expect(peticion.sistema).toBe(PROMPT_DEL_MODERADOR.sistema);
-    const enviado = JSON.parse(peticion.usuario) as { mensaje: string; puestos: { puestoId: string }[] };
+    const enviado = JSON.parse(peticion.usuario) as {
+      mensaje: string;
+      puestos: { puestoId: string }[];
+    };
     expect(enviado.mensaje).toBe(PARAFRASIS);
     expect(enviado.puestos.map((p) => p.puestoId)).toEqual(['p-cobros', 'p-conciliacion']);
   });
@@ -87,7 +89,11 @@ describe('moderarConModelo · sala de un departamento', () => {
   });
 
   it('una petición de organización con otras palabras pasa al Director', async () => {
-    const puerto = puertoQueResponde({ puestoIds: [], pideOperacion: true, motivo: 'Pide un puesto.' });
+    const puerto = puertoQueResponde({
+      puestoIds: [],
+      pideOperacion: true,
+      motivo: 'Pide un puesto.',
+    });
     const { decision, pasoDeModelo } = await moderarConModelo(
       'necesitamos que alguien concilie los bancos',
       [COBROS],
@@ -152,22 +158,30 @@ describe('moderarConModelo · el modelo solo elige de la lista', () => {
 
 describe('moderarConModelo · resiliencia y alcance', () => {
   it('un fallo del modelo deja el silencio de las reglas y dice que el paso no estuvo disponible', async () => {
-    const puerto = vi.fn(() => Promise.reject(new Error('tiempo agotado'))) as unknown as PuertoDeClasificacion;
+    const puerto = vi.fn(() =>
+      Promise.reject(new Error('tiempo agotado')),
+    ) as unknown as PuertoDeClasificacion;
     const { decision, pasoDeModelo } = await moderarConModelo(PARAFRASIS, SALA, {
       ambito: 'departamento',
       clasificador: puerto,
     });
     expect(decision.tipo).toBe('silencio');
     expect(decision.motivo).toContain('no estuvo disponible');
-    expect(pasoDeModelo).toMatchObject({ usado: true, resultado: 'no_disponible', costeEuros: 0, llamadas: 0 });
+    expect(pasoDeModelo).toMatchObject({
+      usado: true,
+      resultado: 'no_disponible',
+      costeEuros: 0,
+      llamadas: 0,
+    });
   });
 
   it('un reintento tras un fallo puede acertar', async () => {
     const buena = { puestoIds: ['p-cobros'], pideOperacion: false, motivo: 'Impagados.' };
-    const puerto = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('503'))
-      .mockResolvedValueOnce({ salida: buena, costeEuros: 0.001, modelo: 'prueba' }) as unknown as PuertoDeClasificacion;
+    const puerto = vi.fn().mockRejectedValueOnce(new Error('503')).mockResolvedValueOnce({
+      salida: buena,
+      costeEuros: 0.001,
+      modelo: 'prueba',
+    }) as unknown as PuertoDeClasificacion;
     const { decision } = await moderarConModelo(PARAFRASIS, SALA, {
       ambito: 'departamento',
       clasificador: puerto,
@@ -176,7 +190,11 @@ describe('moderarConModelo · resiliencia y alcance', () => {
   });
 
   it('la sala general nunca llama al modelo: silencio y coste cero como en v0', async () => {
-    const puerto = puertoQueResponde({ puestoIds: ['p-cobros'], pideOperacion: false, motivo: 'x' });
+    const puerto = puertoQueResponde({
+      puestoIds: ['p-cobros'],
+      pideOperacion: false,
+      motivo: 'x',
+    });
     const { decision, pasoDeModelo } = await moderarConModelo(PARAFRASIS, SALA, {
       ambito: 'organizacion',
       clasificador: puerto,

@@ -329,7 +329,10 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
           const guardada = (previa.adjuntos as { tipo: string; decisionCompleta?: unknown }[]).find(
             (a) => a.tipo === 'moderacion',
           );
-          return { yaEstaba: true as const, decision: guardada?.decisionCompleta as DecisionDelModerador };
+          return {
+            yaEstaba: true as const,
+            decision: guardada?.decisionCompleta as DecisionDelModerador,
+          };
         }
 
         const [sala] = await tx<{ ambito: string }[]>`
@@ -356,16 +359,20 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
       // El paso de modelo corre fuera de la transacción: no se retiene una conexión
       // mientras se espera al proveedor. Un reintento tras esta llamada la repite, pero
       // solo cobra la que queda anotada en el libro (la de la escritura de abajo).
-      const { decision, pasoDeModelo } = await moderarConModelo(peticion.texto, lectura.participantes, {
-        ambito: lectura.ambito,
-        clasificador: crearClasificadorDeSala(contexto, {
-          tenantId: peticion.tenantId,
-          mensajeId: peticion.mensajeId,
-          papel: 'haiku45',
-          clasePaso: 'moderador_sala',
-          modeloDePrueba: MODELO_PRUEBA_MODERADOR,
-        }),
-      });
+      const { decision, pasoDeModelo } = await moderarConModelo(
+        peticion.texto,
+        lectura.participantes,
+        {
+          ambito: lectura.ambito,
+          clasificador: crearClasificadorDeSala(contexto, {
+            tenantId: peticion.tenantId,
+            mensajeId: peticion.mensajeId,
+            papel: 'haiku45',
+            clasePaso: 'moderador_sala',
+            modeloDePrueba: MODELO_PRUEBA_MODERADOR,
+          }),
+        },
+      );
       const puestos = decision.tipo === 'intervenir' ? decision.turnos.map((t) => t.puestoId) : [];
       // Coste de sala visible aparte (ADR-004): lo que costó el paso de modelo, o cero
       // cuando decidieron las reglas, que no gastan modelo.

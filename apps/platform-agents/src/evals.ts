@@ -10,11 +10,7 @@
  */
 import type { ResultadoEval } from '@aiw/evals';
 
-import {
-  MODELO_PRUEBA_DIRECTOR,
-  clasificadorDePrueba,
-  guionDirector,
-} from '@aiw/models';
+import { MODELO_PRUEBA_DIRECTOR, clasificadorDePrueba, guionDirector } from '@aiw/models';
 import type { PuertoDeClasificacion } from '@aiw/rooms';
 
 import {
@@ -115,19 +111,29 @@ export async function ejecutarCasoDirectorConModelo(
   const resultado = evaluarPropuesta(respuesta, ORGANIZACION_DEL_CASO, CASO_DIRECTOR_MODELO);
   const fallos: string[] = resultado.superado ? [] : [resultado.diagnostico];
   if (!pasoDeModelo.usado) fallos.push('no se dio el paso de modelo');
-  if (respuesta.tipo === 'propuesta' && respuesta.propuesta.plantilla.id !== 'finanzas.conciliacion-bancaria') {
+  if (
+    respuesta.tipo === 'propuesta' &&
+    respuesta.propuesta.plantilla.id !== 'finanzas.conciliacion-bancaria'
+  ) {
     fallos.push(`plantilla ${respuesta.propuesta.plantilla.id}`);
   }
-  const soporte = await proponerContratacionConModelo('¿cómo cambio de plan?', ORGANIZACION_DEL_CASO, {
-    ambito: 'departamento',
-    clasificador,
-  });
-  if (soporte.respuesta.tipo !== 'aclaracion') fallos.push('una pregunta de producto no es una aclaración');
+  const soporte = await proponerContratacionConModelo(
+    '¿cómo cambio de plan?',
+    ORGANIZACION_DEL_CASO,
+    {
+      ambito: 'departamento',
+      clasificador,
+    },
+  );
+  if (soporte.respuesta.tipo !== 'aclaracion')
+    fallos.push('una pregunta de producto no es una aclaración');
   return {
     id: CASO_DIRECTOR_MODELO,
     superado: fallos.length === 0,
     puntuacion: fallos.length === 0 ? 1 : 0,
     diagnostico:
-      fallos.length === 0 ? `${CASO_DIRECTOR_MODELO}: superado` : `${CASO_DIRECTOR_MODELO}: ${fallos.join('; ')}`,
+      fallos.length === 0
+        ? `${CASO_DIRECTOR_MODELO}: superado`
+        : `${CASO_DIRECTOR_MODELO}: ${fallos.join('; ')}`,
   };
 }

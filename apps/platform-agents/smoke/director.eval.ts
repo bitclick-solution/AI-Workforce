@@ -67,7 +67,9 @@ describe('evals de humo · Director de IA', () => {
 /** Caso dorado del paso de modelo del Director, con sus contraejemplos. */
 describe('evals de humo · Director de IA con paso de modelo', () => {
   it('la frase parafraseada produce la misma propuesta gobernada y lo que no encaja se aclara', async () => {
-    expect(proponerContratacion(FRASE_PARAFRASEADA_DEL_CASO, ORGANIZACION_DEL_CASO).tipo).toBe('aclaracion');
+    expect(proponerContratacion(FRASE_PARAFRASEADA_DEL_CASO, ORGANIZACION_DEL_CASO).tipo).toBe(
+      'aclaracion',
+    );
     const resultado = await ejecutarCasoDirectorConModelo();
     expect(resultado.diagnostico).toBe(`${CASO_DIRECTOR_MODELO}: superado`);
   });

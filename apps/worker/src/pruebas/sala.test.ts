@@ -40,7 +40,8 @@ const PREGUNTA = '¿cómo vamos de cobros este mes?';
 const FRASE = 'contrata un agente de conciliación en Finanzas';
 // Sin ningún tema de la ficha de Cobros ni expresión de contratar: solo el modelo la entiende.
 const PARAFRASIS_DE_COBROS = 'quién nos debe dinero desde hace más de dos meses';
-const PARAFRASIS_DE_CONTRATAR = 'queremos que alguien pase los movimientos del banco contra las facturas en Finanzas';
+const PARAFRASIS_DE_CONTRATAR =
+  'queremos que alguien pase los movimientos del banco contra las facturas en Finanzas';
 
 async function mensajesDeLaSala(montaje: MontajeDeSala) {
   return conTenant(montaje.cliente, montaje.semilla.tenantId, async (tx) => [
@@ -505,8 +506,11 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
   }
 
   async function entradasDe(montaje: MontajeDeSala, accion: string) {
-    return conTenant(montaje.cliente, montaje.semilla.tenantId, (tx) =>
-      tx<{ coste_euros: string; puesto_id: string | null }[]>`
+    return conTenant(
+      montaje.cliente,
+      montaje.semilla.tenantId,
+      (tx) =>
+        tx<{ coste_euros: string; puesto_id: string | null }[]>`
         select coste_euros, puesto_id from entrada_auditoria
         where tenant_id = ${montaje.semilla.tenantId} and accion = ${accion}
         order by numero_orden
@@ -527,7 +531,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
   }
 
   async function moderarEn(montaje: MontajeDeSala, salaId: string, texto: string) {
-    const [mensajeId = '', notaId = ''] = await montaje.actividades.nuevosIdentificadores({ cantidad: 2 });
+    const [mensajeId = '', notaId = ''] = await montaje.actividades.nuevosIdentificadores({
+      cantidad: 2,
+    });
     const base = { tenantId: montaje.semilla.tenantId, salaId };
     await montaje.actividades.publicarMensajeHumano({
       ...base,
@@ -535,14 +541,23 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
       personaId: montaje.semilla.personaId,
       texto,
     });
-    const { decision } = await montaje.actividades.moderarMensaje({ ...base, mensajeId, texto, notaId });
+    const { decision } = await montaje.actividades.moderarMensaje({
+      ...base,
+      mensajeId,
+      texto,
+      notaId,
+    });
     return { decision, mensajeId, notaId, base };
   }
 
   it('la sala general sigue sin modelo y con coste cero: el mensaje sin tema queda en silencio', async () => {
     const montaje = await preparar('Sala general sin modelo');
     await conTarifaDeSala(montaje);
-    const { decision, notaId, base } = await moderarEn(montaje, montaje.semilla.salaId, PARAFRASIS_DE_COBROS);
+    const { decision, notaId, base } = await moderarEn(
+      montaje,
+      montaje.semilla.salaId,
+      PARAFRASIS_DE_COBROS,
+    );
     expect(decision.tipo).toBe('silencio');
     expect((await notaDelModerador(montaje, base.salaId, notaId))?.pasoDeModelo).toEqual({
       usado: false,
@@ -579,19 +594,29 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
     expect(entrada?.puesto_id).toBeNull();
     // Fuera del cupo del cliente: ni una tarea contada ni un uso de modelo de un puesto.
     expect(
-      await contarEnElLibro(montaje.cliente, montaje.semilla.tenantId, { accion: ACCION_TAREA_CONTADA }),
+      await contarEnElLibro(montaje.cliente, montaje.semilla.tenantId, {
+        accion: ACCION_TAREA_CONTADA,
+      }),
     ).toBe(tareasAntes);
     expect(
-      await contarEnElLibro(montaje.cliente, montaje.semilla.tenantId, { accion: ACCION_USO_MODELO }),
+      await contarEnElLibro(montaje.cliente, montaje.semilla.tenantId, {
+        accion: ACCION_USO_MODELO,
+      }),
     ).toBe(0);
-    expect((await verificarCadenaEnBase(montaje.cliente, montaje.semilla.tenantId)).valida).toBe(true);
+    expect((await verificarCadenaEnBase(montaje.cliente, montaje.semilla.tenantId)).valida).toBe(
+      true,
+    );
   });
 
   it('un reintento de la actividad devuelve la misma decisión sin volver a anotar el coste', async () => {
     const montaje = await preparar('Sala departamento reintento');
     await conTarifaDeSala(montaje);
     const salaId = await salaDeDepartamento(montaje);
-    const { decision, mensajeId, notaId, base } = await moderarEn(montaje, salaId, PARAFRASIS_DE_COBROS);
+    const { decision, mensajeId, notaId, base } = await moderarEn(
+      montaje,
+      salaId,
+      PARAFRASIS_DE_COBROS,
+    );
     const otra = await montaje.actividades.moderarMensaje({
       ...base,
       mensajeId,
@@ -615,7 +640,11 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
   it('un modelo sin proveedor elegido no bloquea la sala: silencio con el motivo', async () => {
     const montaje = await preparar('Sala departamento sin proveedor');
     const salaId = await salaDeDepartamento(montaje);
-    const enrutadorRoto = { resolverPaso: () => { throw new Error('sin proveedor de modelos'); } };
+    const enrutadorRoto = {
+      resolverPaso: () => {
+        throw new Error('sin proveedor de modelos');
+      },
+    };
     (montaje.contexto as { enrutador: unknown }).enrutador = enrutadorRoto;
     const { decision } = await moderarEn(montaje, salaId, PARAFRASIS_DE_COBROS);
     expect(decision.tipo).toBe('silencio');
@@ -630,7 +659,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
     // El moderador de reglas no ve contratación; el paso de modelo la pasa al Director.
     expect(moderado.decision).toMatchObject({ tipo: 'operacion', operacion: 'contratar' });
 
-    const [propuestaId = '', respuestaId = ''] = await montaje.actividades.nuevosIdentificadores({ cantidad: 2 });
+    const [propuestaId = '', respuestaId = ''] = await montaje.actividades.nuevosIdentificadores({
+      cantidad: 2,
+    });
     const resultado = await montaje.actividades.proponerOperacion({
       ...moderado.base,
       mensajeId: moderado.mensajeId,
@@ -647,7 +678,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
     // 2000 tokens de entrada y 100 de salida: 0,0075 €, fuera de cualquier tarea de puesto.
     expect(Number(creadas[0]?.coste_euros)).toBeCloseTo(0.0075, 4);
     expect(
-      await contarEnElLibro(montaje.cliente, montaje.semilla.tenantId, { accion: ACCION_USO_MODELO }),
+      await contarEnElLibro(montaje.cliente, montaje.semilla.tenantId, {
+        accion: ACCION_USO_MODELO,
+      }),
     ).toBe(0);
   });
 
@@ -655,7 +688,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
     const montaje = await preparar('Sala general director sin modelo');
     await conTarifaDeSala(montaje);
     const { mensajeId, base } = await publicarYModerar(montaje, PARAFRASIS_DE_CONTRATAR);
-    const [propuestaId = '', respuestaId = ''] = await montaje.actividades.nuevosIdentificadores({ cantidad: 2 });
+    const [propuestaId = '', respuestaId = ''] = await montaje.actividades.nuevosIdentificadores({
+      cantidad: 2,
+    });
     const resultado = await montaje.actividades.proponerOperacion({
       ...base,
       mensajeId,

@@ -138,9 +138,8 @@ describe('Director de IA · paso de modelo en la sala de un departamento', () =>
   const PARAFRASIS = 'queremos que alguien pase los movimientos del banco contra las facturas';
 
   function puerto(salida: unknown, costeEuros = 0.004) {
-    return vi.fn(
-      (_peticion: PeticionDeClasificacion<unknown>): Promise<RespuestaDeClasificacion> =>
-        Promise.resolve({ salida, costeEuros, modelo: 'prueba' }),
+    return vi.fn((_peticion: PeticionDeClasificacion<unknown>): Promise<RespuestaDeClasificacion> =>
+      Promise.resolve({ salida, costeEuros, modelo: 'prueba' }),
     ) as unknown as PuertoDeClasificacion & ReturnType<typeof vi.fn>;
   }
 
@@ -172,18 +171,14 @@ describe('Director de IA · paso de modelo en la sala de un departamento', () =>
   });
 
   it('el departamento que elige el modelo manda sobre el habitual de la plantilla', async () => {
-    const { respuesta } = await proponerContratacionConModelo(
-      PARAFRASIS,
-      CONTEXTO,
-      {
-        ambito: 'departamento',
-        clasificador: puerto({
-          plantillaId: 'finanzas.conciliacion-bancaria',
-          departamentoId: 'd-ven',
-          motivo: 'Lo pide para Ventas.',
-        }),
-      },
-    );
+    const { respuesta } = await proponerContratacionConModelo(PARAFRASIS, CONTEXTO, {
+      ambito: 'departamento',
+      clasificador: puerto({
+        plantillaId: 'finanzas.conciliacion-bancaria',
+        departamentoId: 'd-ven',
+        motivo: 'Lo pide para Ventas.',
+      }),
+    });
     expect(respuesta.tipo === 'propuesta' && respuesta.propuesta.departamento.id).toBe('d-ven');
   });
 
@@ -193,7 +188,11 @@ describe('Director de IA · paso de modelo en la sala de un departamento', () =>
       CONTEXTO,
       {
         ambito: 'departamento',
-        clasificador: puerto({ plantillaId: 'ninguno', departamentoId: null, motivo: 'Es soporte.' }),
+        clasificador: puerto({
+          plantillaId: 'ninguno',
+          departamentoId: null,
+          motivo: 'Es soporte.',
+        }),
       },
     );
     expect(respuesta.tipo).toBe('aclaracion');
@@ -207,16 +206,23 @@ describe('Director de IA · paso de modelo en la sala de un departamento', () =>
       'un departamento inventado',
       { plantillaId: 'finanzas.conciliacion-bancaria', departamentoId: 'd-inventado' },
     ],
-  ])('%s es un fallo de esquema: ni propuesta ni aclaración con datos inventados', async (_n, parte) => {
-    const clasificador = puerto({ ...parte, motivo: 'Eso.' });
-    const { respuesta, pasoDeModelo } = await proponerContratacionConModelo(PARAFRASIS, CONTEXTO, {
-      ambito: 'departamento',
-      clasificador,
-    });
-    expect(respuesta.tipo).toBe('aclaracion');
-    expect(pasoDeModelo).toMatchObject({ usado: true, resultado: 'no_disponible' });
-    expect(clasificador).toHaveBeenCalledTimes(INTENTOS_DE_CLASIFICACION);
-  });
+  ])(
+    '%s es un fallo de esquema: ni propuesta ni aclaración con datos inventados',
+    async (_n, parte) => {
+      const clasificador = puerto({ ...parte, motivo: 'Eso.' });
+      const { respuesta, pasoDeModelo } = await proponerContratacionConModelo(
+        PARAFRASIS,
+        CONTEXTO,
+        {
+          ambito: 'departamento',
+          clasificador,
+        },
+      );
+      expect(respuesta.tipo).toBe('aclaracion');
+      expect(pasoDeModelo).toMatchObject({ usado: true, resultado: 'no_disponible' });
+      expect(clasificador).toHaveBeenCalledTimes(INTENTOS_DE_CLASIFICACION);
+    },
+  );
 
   it('un fallo del modelo deja la misma aclaración que sin modelo', async () => {
     const sinModelo = proponerContratacion(PARAFRASIS, CONTEXTO);
