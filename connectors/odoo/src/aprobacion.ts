@@ -6,19 +6,25 @@ import { ErrorConector } from './errores.js';
  * tipo de vuelta como `Dict[str, Any]` genérico, no un modelo con campos propios
  * como `search_records`: FastMCP envuelve esa salida entera bajo `result`, igual
  * que hace con las de escritura. Sin probar también esa envolvente, `validate_write`
- * nunca encuentra la aprobación anidada en `result.approval.token` — el gemelo en
+ * nunca encuentra la aprobación anidada en `result.approval` — el gemelo en
  * escrituras del bug que el PR #62 arregló en lecturas (`leerRegistros`).
+ *
+ * El esquema vivo de `execute_approved_write` (v1.3.1) exige el campo
+ * `approval` obligatorio con el objeto entero que devolvió `validate_write`
+ * (con su `token` dentro, entre otros campos) — no un `approval_id` ni un
+ * token suelto, que era la forma supuesta de la grabación antigua y Pydantic
+ * rechazaría con «field required: approval». Mismo criterio que el PR #81,
+ * contrastado por el Probador con el `tools/list` de la imagen viva (2-10).
  */
 export function extraerAprobacion(carga: unknown): Record<string, unknown> {
   if (typeof carga === 'object' && carga !== null) {
     const objeto = carga as Record<string, unknown>;
-    for (const clave of ['approval_id', 'approval_token', 'token', 'id'] as const) {
-      const valor = objeto[clave];
-      if (typeof valor === 'string' || typeof valor === 'number') return { approval_id: valor };
+    const aprobacion = objeto['approval'];
+    if (typeof aprobacion === 'object' && aprobacion !== null && !Array.isArray(aprobacion)) {
+      return { approval: aprobacion };
     }
-    const anidada =
-      objeto['approval'] ?? objeto['approval_status'] ?? objeto['data'] ?? objeto['result'];
-    if (anidada !== undefined && anidada !== objeto) return extraerAprobacion(anidada);
+    if ('result' in objeto && objeto['result'] !== objeto)
+      return extraerAprobacion(objeto['result']);
   }
   throw new ErrorConector(
     'invalido',

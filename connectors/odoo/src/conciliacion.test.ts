@@ -243,7 +243,7 @@ describe('proponer_asiento_diferencia', () => {
     );
     expect(ejecuciones.length).toBeGreaterThan(0);
     for (const ejecucion of ejecuciones) {
-      expect(Object.keys(ejecucion.argumentos).sort()).toEqual(['approval_id', 'confirm']);
+      expect(Object.keys(ejecucion.argumentos).sort()).toEqual(['approval', 'confirm']);
     }
   });
 

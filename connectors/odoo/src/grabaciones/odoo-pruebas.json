@@ -524,7 +524,7 @@
   "execute_approved_write": [
     {
       "argumentos": {
-        "approval_id": "odoo-write:prueba00000000000000000000000002"
+        "approval": { "token": "odoo-write:prueba00000000000000000000000002" }
       },
       "carga": {
         "result": {

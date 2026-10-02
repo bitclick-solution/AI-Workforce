@@ -113,10 +113,12 @@ describe('crear_nota_seguimiento', () => {
       'validate_write',
       'execute_approved_write',
     ]);
-    expect(cliente.llamadas[2]?.argumentos).toEqual({
-      approval_id: 'odoo-write:prueba00000000000000000000000001',
-      confirm: true,
-    });
+    const argumentosEjecucion = cliente.llamadas[2]?.argumentos ?? {};
+    expect(Object.keys(argumentosEjecucion).sort()).toEqual(['approval', 'confirm']);
+    expect(argumentosEjecucion['confirm']).toBe(true);
+    expect((argumentosEjecucion['approval'] as Record<string, unknown>)['token']).toBe(
+      'odoo-write:prueba00000000000000000000000001',
+    );
   });
 
   it('con la misma clave de idempotencia devuelve la misma nota y no escribe dos veces', async () => {
