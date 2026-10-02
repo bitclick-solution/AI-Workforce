@@ -114,7 +114,21 @@ describe('crear_nota_seguimiento', () => {
       'execute_approved_write',
     ]);
     expect(cliente.llamadas[2]?.argumentos).toEqual({
-      approval_id: 'odoo-write:prueba00000000000000000000000001',
+      approval: {
+        model: 'mail.activity',
+        operation: 'create',
+        record_ids: [],
+        values: {
+          res_model: 'account.move',
+          res_id: 42,
+          summary: 'Nota de contrato.',
+          note: 'Nota de contrato.',
+        },
+        context: {},
+        instance: 'default',
+        values_list: null,
+        token: 'odoo-write:prueba00000000000000000000000001',
+      },
       confirm: true,
     });
   });

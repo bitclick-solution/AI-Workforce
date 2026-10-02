@@ -135,7 +135,7 @@ describe('la clave no sale del proceso', () => {
       // El MCP dinámico devuelve un fallo que repite la clave: el peor caso.
       chatter_post: [
         {
-          argumentos: { res_id: 55 },
+          argumentos: { record_id: 55 },
           error: `Authentication failed for api_key=${CLAVE_SEMBRADA} on database pruebas`,
         },
         ...(cargarGrabaciones()['chatter_post'] ?? []),

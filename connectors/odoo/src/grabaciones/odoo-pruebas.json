@@ -73,9 +73,12 @@
     }
   ],
   "chatter_post": [
-    { "argumentos": { "res_id": 999999 }, "error": "Record does not exist: account.move(999999,)" },
-    { "argumentos": { "res_id": 888888 }, "error": "Access denied for model account.move" },
-    { "argumentos": { "res_id": 777777 }, "error": "Read timed out after 60s talking to Odoo" },
+    {
+      "argumentos": { "record_id": 999999 },
+      "error": "Record does not exist: account.move(999999,)"
+    },
+    { "argumentos": { "record_id": 888888 }, "error": "Access denied for model account.move" },
+    { "argumentos": { "record_id": 777777 }, "error": "Read timed out after 60s talking to Odoo" },
     {
       "carga": {
         "result": {
