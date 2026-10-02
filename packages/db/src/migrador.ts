@@ -82,6 +82,13 @@ export const MIGRACIONES: readonly Migracion[] = [
       new URL('../drizzle/reverso/0008_disposicion_panel_inicio.sql', import.meta.url),
     ),
   },
+  {
+    nombre: '0009_habilidad_herramientas',
+    ruta: fileURLToPath(new URL('../drizzle/0009_habilidad_herramientas.sql', import.meta.url)),
+    rutaReverso: fileURLToPath(
+      new URL('../drizzle/reverso/0009_habilidad_herramientas.sql', import.meta.url),
+    ),
+  },
 ];
 
 export function huellaDe(contenido: string): string {

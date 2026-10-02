@@ -86,11 +86,12 @@ export async function sembrarHabilidad(
 
     const [insertada] = await tx<{ id: string }[]>`
       insert into habilidad (
-        tenant_id, nombre, version, pasos, comprobaciones, casos_que_aplican, activa
+        tenant_id, nombre, version, pasos, comprobaciones, casos_que_aplican, herramientas, activa
       ) values (
         ${tenantId}, ${definicion.nombre}, ${definicion.version},
         ${json(definicion.pasos)}::text::jsonb, ${json(definicion.comprobaciones)}::text::jsonb,
-        ${json(definicion.casosQueAplican)}::text::jsonb, true
+        ${json(definicion.casosQueAplican)}::text::jsonb, ${json(definicion.herramientas ?? [])}::text::jsonb,
+        true
       )
       returning id
     `;
@@ -141,9 +142,10 @@ export async function proponerActivacionDeHabilidad(
         pasos: string[];
         comprobaciones: string[];
         casos_que_aplican: string[];
+        herramientas: string[];
       }[]
     >`
-      select id, nombre, version, pasos, comprobaciones, casos_que_aplican
+      select id, nombre, version, pasos, comprobaciones, casos_que_aplican, herramientas
       from habilidad where tenant_id = ${tenantId} and id = ${peticion.habilidadId}
     `;
     if (!habilidad) {
@@ -189,7 +191,7 @@ export async function proponerActivacionDeHabilidad(
       casosQueAplican: habilidad.casos_que_aplican ?? [],
       pasos: habilidad.pasos ?? [],
       comprobaciones: habilidad.comprobaciones ?? [],
-      herramientas: [],
+      herramientas: habilidad.herramientas ?? [],
     };
     const parametros: esquemas.ParametrosLeccion = {
       clase: 'habilidad',

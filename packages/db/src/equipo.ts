@@ -125,6 +125,8 @@ export const habilidad = pgTable(
     pasos: jsonb('pasos').notNull().default([]),
     comprobaciones: jsonb('comprobaciones').notNull().default([]),
     casosQueAplican: jsonb('casos_que_aplican').notNull().default([]),
+    /** Nombres de herramienta que `pasos` nombra; la puerta del Evaluador los compara con la lista blanca del puesto. */
+    herramientas: jsonb('herramientas').notNull().default([]),
     activa: boolean('activa').notNull().default(false),
     ...columnasInmutables(),
   },
