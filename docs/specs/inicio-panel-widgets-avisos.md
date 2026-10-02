@@ -65,3 +65,19 @@ Presupuesto: 50 €. Referencia: «Sala v1 · interfaz estilo Discord» costó 3
 ¿La disposición del panel por persona se guarda en una columna nueva de la tabla `usuario` que ya trajo Acceso al panel, o necesita una tabla propia? Una columna no cambia la zona crítica de esta rebanada; una tabla nueva la convierte en zona crítica por migración. Lo decide el Constructor al ver el tamaño real del dato, salvo que Jesús prefiera fijarlo antes.
 
 **Resuelta (PR #53):** columna. `persona.disposicion_panel` (jsonb), migración `0008_disposicion_panel_inicio.sql` con su reverso, mismo patrón que `mostrar_presencia` (0007). El dato es pequeño (entradas `{id, tamano, oculto}` del catálogo cerrado v1), así que no hizo falta tabla propia. La migración sigue siendo zona crítica por tocar `packages/db` (CODEOWNERS), con revisión humana obligatoria de Jesús, independientemente de columna-vs-tabla.
+
+## Seguimiento: el encargo llega a la API
+
+- Rebanada: [Notion](https://app.notion.com/p/3ed53066189881f7bb94e2d3283a68e7) · Tipo Producto · Paquetes `web`, `api` · P1 · Rama `rebanada/inicio-encargo-llega-a-la-api` · Zona crítica: no (no toca `apps/api/src/identidad`).
+- **Fallo.** El Probador (ensayo del 1-10) vio que «Encargar» devuelve siempre 400 «Falta el encargo», también con un POST JSON bien formado a `/api/inicio/encargar`.
+- **Causa confirmada.** En `apps/api/src/servidor.ts`, los manejadores de sala, inicio y perfil leían el flujo de la petición con `leerJson(peticion)` cada uno. El flujo solo se consume una vez: la sala, que va antes que el inicio en la cadena, lo vaciaba en cualquier POST aunque la ruta no fuera suya, y el inicio recibía `undefined`. La ruta del panel y `reenviarInicio` reenviaban bien el cuerpo. Afectaba también a decidir en línea desde los avisos.
+- **Arreglo.** El servidor lee el cuerpo una sola vez por petición (POST, PATCH, PUT) y lo pasa a cada manejador. El acceso de Better Auth conserva su propia lectura, porque responde antes de la cadena.
+- **Criterios de hecho.**
+  1. Una prueba que pasa por `arrancarApi` entero, con la sala montada delante, sale en rojo antes del arreglo y en verde después.
+  2. La misma prueba cubre encargar, decidir desde los avisos, mensaje de sala, decisión de propuesta de sala y los dos PATCH del perfil (presencia y disposición).
+  3. Siguen en 400 el encargo realmente vacío y el cuerpo que no es JSON.
+  4. `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm evals:smoke` y `pnpm build` en verde.
+  5. El Probador lo verifica tras la fusión en la máquina de Jesús con una frase real.
+- **Casos de prueba.** `apps/api/src/pruebas/cuerpo-http.test.ts`, sin PostgreSQL ni Temporal: puertos dobles y sesión inyectada (`resolverSesion`, `puertoPerfil` son opciones solo para pruebas, como `puertoSala` y `puertoInicio`).
+- **Sin cambios** en esquema, libro de auditoría, contador ni evals: no hay comportamiento de agente nuevo y las acciones ya emiten su entrada.
+- **Presupuesto:** 5 €.
