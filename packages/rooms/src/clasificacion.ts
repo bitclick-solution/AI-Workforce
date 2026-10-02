@@ -26,12 +26,25 @@ export interface PeticionDeClasificacion<T> {
   esquema: z.ZodType<T>;
 }
 
+/** Lo que hace falta para registrar una llamada en `uso_modelo`: quién la sirvió y cuántos tokens. */
+export interface UsoDeClasificacion {
+  proveedor: string;
+  modelo: string;
+  plataforma?: string | undefined;
+  tokens: { entrada: number; salida: number; entradaCache: number };
+}
+
 export interface RespuestaDeClasificacion {
   /** Salida sin validar: la valida `clasificar` contra el esquema de la petición. */
   salida: unknown;
   /** Coste real de la llamada con la tarifa vigente del tenant. 0 en el proveedor de prueba. */
   costeEuros: number;
   modelo: string;
+  /**
+   * Uso a registrar. Ausente cuando la llamada no tiene precio (proveedor de prueba
+   * sin tarifa): cuesta 0 y no deja fila.
+   */
+  uso?: UsoDeClasificacion | undefined;
 }
 
 /**
@@ -43,8 +56,21 @@ export type PuertoDeClasificacion = <T>(
 ) => Promise<RespuestaDeClasificacion>;
 
 export type ResultadoDeClasificacion<T> =
-  | { tipo: 'ok'; salida: T; costeEuros: number; llamadas: number; modelo: string }
-  | { tipo: 'no_disponible'; motivo: string; costeEuros: number; llamadas: number };
+  | {
+      tipo: 'ok';
+      salida: T;
+      costeEuros: number;
+      llamadas: number;
+      modelo: string;
+      usos: UsoDeClasificacion[];
+    }
+  | {
+      tipo: 'no_disponible';
+      motivo: string;
+      costeEuros: number;
+      llamadas: number;
+      usos: UsoDeClasificacion[];
+    };
 
 function descripcion(error: unknown): string {
   return error instanceof Error ? error.message : 'error desconocido';
@@ -62,6 +88,7 @@ export async function clasificar<T>(
 ): Promise<ResultadoDeClasificacion<T>> {
   let costeEuros = 0;
   let llamadas = 0;
+  const usos: UsoDeClasificacion[] = [];
   let ultimo = 'sin intentos';
 
   for (let intento = 1; intento <= INTENTOS_DE_CLASIFICACION; intento += 1) {
@@ -74,10 +101,18 @@ export async function clasificar<T>(
     }
     llamadas += 1;
     costeEuros += respuesta.costeEuros;
+    if (respuesta.uso !== undefined) usos.push(respuesta.uso);
 
     const validada = peticion.esquema.safeParse(respuesta.salida);
     if (validada.success) {
-      return { tipo: 'ok', salida: validada.data, costeEuros, llamadas, modelo: respuesta.modelo };
+      return {
+        tipo: 'ok',
+        salida: validada.data,
+        costeEuros,
+        llamadas,
+        modelo: respuesta.modelo,
+        usos,
+      };
     }
     ultimo = `la salida del modelo no cumple el esquema (${validada.error.issues
       .map((i) => i.message)
@@ -89,5 +124,6 @@ export async function clasificar<T>(
     motivo: `el paso de modelo no estuvo disponible (${ultimo})`,
     costeEuros,
     llamadas,
+    usos,
   };
 }

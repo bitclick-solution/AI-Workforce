@@ -13,7 +13,13 @@
  * no existe, un departamento que la organización no tiene o un puesto que ya está.
  */
 import { decidirPaso, type Nivel, type PapelModelo } from '@aiw/domain';
-import { AMBITO_CON_MODELO, aparece, clasificar, type PuertoDeClasificacion } from '@aiw/rooms';
+import {
+  AMBITO_CON_MODELO,
+  aparece,
+  clasificar,
+  type PuertoDeClasificacion,
+  type UsoDeClasificacion,
+} from '@aiw/rooms';
 import { z } from 'zod';
 
 import catalogoDePlantillas from './catalogo/plantillas.json' with { type: 'json' };
@@ -317,6 +323,8 @@ export type PasoDeModeloDelDirector =
       resultado: 'plantilla' | 'ninguna' | 'no_disponible';
       costeEuros: number;
       llamadas: number;
+      /** Un uso por llamada con precio, para registrarlo en `uso_modelo`. */
+      usos: UsoDeClasificacion[];
       version: number;
       motivo: string;
     };
@@ -409,6 +417,7 @@ export async function proponerContratacionConModelo(
         resultado: 'no_disponible',
         costeEuros: resultado.costeEuros,
         llamadas: resultado.llamadas,
+        usos: resultado.usos,
         version,
         motivo: resultado.motivo,
       },
@@ -416,7 +425,13 @@ export async function proponerContratacionConModelo(
   }
 
   const { plantillaId, departamentoId, motivo } = resultado.salida;
-  const base = { costeEuros: resultado.costeEuros, llamadas: resultado.llamadas, version, motivo };
+  const base = {
+    costeEuros: resultado.costeEuros,
+    llamadas: resultado.llamadas,
+    usos: resultado.usos,
+    version,
+    motivo,
+  };
   const plantilla = catalogo.plantillas.find((p) => p.id === plantillaId);
   if (plantilla === undefined) {
     return { respuesta: sinModelo, pasoDeModelo: { usado: true, resultado: 'ninguna', ...base } };

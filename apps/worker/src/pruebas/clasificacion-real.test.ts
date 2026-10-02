@@ -87,6 +87,10 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('clasificación de la sala · proveedor real
     });
     expect(decision.tipo).toBe('intervenir');
     expect(pasoDeModelo.usado && pasoDeModelo.costeEuros).toBeGreaterThan(0);
+    // El uso que se registrará en `uso_modelo`: quién sirvió la llamada y cuántos tokens.
+    expect(pasoDeModelo.usado && pasoDeModelo.usos).toEqual([
+      expect.objectContaining({ proveedor: 'anthropic', plataforma: 'bedrock-eu' }),
+    ]);
 
     const cuerpo = JSON.stringify(bedrock.peticiones[0]?.cuerpo);
     expect(cuerpo).toContain('p-cobros');

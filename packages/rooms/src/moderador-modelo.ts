@@ -10,7 +10,11 @@
  */
 import { z } from 'zod';
 
-import { clasificar, type PuertoDeClasificacion } from './clasificacion.js';
+import {
+  clasificar,
+  type PuertoDeClasificacion,
+  type UsoDeClasificacion,
+} from './clasificacion.js';
 import {
   ESTADOS_QUE_INTERVIENEN,
   LIMITE_MAXIMO,
@@ -35,6 +39,8 @@ export type PasoDeModeloDeSala =
       resultado: 'intervenir' | 'operacion' | 'silencio' | 'no_disponible';
       costeEuros: number;
       llamadas: number;
+      /** Un uso por llamada con precio, para registrarlo en `uso_modelo`. */
+      usos: UsoDeClasificacion[];
       version: number;
       motivo: string;
     };
@@ -108,6 +114,7 @@ export async function moderarConModelo(
         resultado: 'no_disponible',
         costeEuros: resultado.costeEuros,
         llamadas: resultado.llamadas,
+        usos: resultado.usos,
         version,
         motivo: resultado.motivo,
       },
@@ -115,7 +122,13 @@ export async function moderarConModelo(
   }
 
   const { puestoIds, pideOperacion, motivo } = resultado.salida;
-  const base = { costeEuros: resultado.costeEuros, llamadas: resultado.llamadas, version, motivo };
+  const base = {
+    costeEuros: resultado.costeEuros,
+    llamadas: resultado.llamadas,
+    usos: resultado.usos,
+    version,
+    motivo,
+  };
   const limite = Math.min(
     Math.max(Math.trunc(opciones.limite ?? LIMITE_POR_DEFECTO), LIMITE_POR_DEFECTO),
     LIMITE_MAXIMO,

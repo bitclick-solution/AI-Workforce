@@ -89,6 +89,13 @@ export const MIGRACIONES: readonly Migracion[] = [
       new URL('../drizzle/reverso/0009_habilidad_herramientas.sql', import.meta.url),
     ),
   },
+  {
+    nombre: '0010_uso_modelo_de_plataforma',
+    ruta: fileURLToPath(new URL('../drizzle/0010_uso_modelo_de_plataforma.sql', import.meta.url)),
+    rutaReverso: fileURLToPath(
+      new URL('../drizzle/reverso/0010_uso_modelo_de_plataforma.sql', import.meta.url),
+    ),
+  },
 ];
 
 export function huellaDe(contenido: string): string {

@@ -518,6 +518,44 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
     );
   }
 
+  async function usosDePlataforma(montaje: MontajeDeSala) {
+    return conTenant(
+      montaje.cliente,
+      montaje.semilla.tenantId,
+      (tx) => tx<
+        {
+          id: string;
+          sala_id: string;
+          actor_plataforma: string;
+          tarea_id: string | null;
+          puesto_id: string | null;
+          coste_euros: string;
+          tokens_entrada: string;
+          tokens_salida: string;
+        }[]
+      >`
+        select id, sala_id, actor_plataforma, tarea_id, puesto_id, coste_euros,
+               tokens_entrada, tokens_salida
+        from uso_modelo
+        where tenant_id = ${montaje.semilla.tenantId} and sala_id is not null
+        order by creado_en
+      `,
+    );
+  }
+
+  async function referenciasDeLaEntrada(montaje: MontajeDeSala, accion: string) {
+    const [fila] = await conTenant(
+      montaje.cliente,
+      montaje.semilla.tenantId,
+      (tx) => tx<{ datos_referenciados: { tipo: string; id: string }[] }[]>`
+        select datos_referenciados from entrada_auditoria
+        where tenant_id = ${montaje.semilla.tenantId} and accion = ${accion}
+        order by numero_orden desc limit 1
+      `,
+    );
+    return fila?.datos_referenciados ?? [];
+  }
+
   async function notaDelModerador(montaje: MontajeDeSala, salaId: string, notaId: string) {
     const [fila] = await conTenant(
       montaje.cliente,
@@ -565,6 +603,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
     });
     const [entrada] = await entradasDe(montaje, ACCIONES_SALA.moderacionDecidida);
     expect(Number(entrada?.coste_euros)).toBe(0);
+    expect(await usosDePlataforma(montaje)).toHaveLength(0);
   });
 
   it('en la sala de un departamento una paráfrasis da la palabra a Cobros y el coste va al libro', async () => {
@@ -592,6 +631,23 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
     const [entrada] = await entradasDe(montaje, ACCIONES_SALA.moderacionDecidida);
     expect(Number(entrada?.coste_euros)).toBeCloseTo(0.0045, 4);
     expect(entrada?.puesto_id).toBeNull();
+    // La llamada queda en `uso_modelo` como uso de plataforma: sin tarea ni puesto, con la
+    // sala y el actor, y la entrada del libro la referencia.
+    const usos = await usosDePlataforma(montaje);
+    expect(usos).toHaveLength(1);
+    expect(usos[0]).toMatchObject({
+      sala_id: salaId,
+      actor_plataforma: 'moderador',
+      tarea_id: null,
+      puesto_id: null,
+      tokens_entrada: '1000',
+      tokens_salida: '100',
+    });
+    expect(Number(usos[0]?.coste_euros)).toBeCloseTo(0.0045, 4);
+    expect(await referenciasDeLaEntrada(montaje, ACCIONES_SALA.moderacionDecidida)).toContainEqual({
+      tipo: 'uso_modelo',
+      id: usos[0]?.id,
+    });
     // Fuera del cupo del cliente: ni una tarea contada ni un uso de modelo de un puesto.
     expect(
       await contarEnElLibro(montaje.cliente, montaje.semilla.tenantId, {
@@ -626,6 +682,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
     expect(otra.yaEstaba).toBe(true);
     expect(otra.decision).toEqual(decision);
     expect((await entradasDe(montaje, ACCIONES_SALA.moderacionDecidida)).length).toBe(1);
+    expect(await usosDePlataforma(montaje)).toHaveLength(1);
   });
 
   it('sin tarifa, el proveedor de prueba no cobra: la demo local sigue siendo gratis', async () => {
@@ -635,6 +692,8 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
     expect(decision.tipo).toBe('intervenir');
     const [entrada] = await entradasDe(montaje, ACCIONES_SALA.moderacionDecidida);
     expect(Number(entrada?.coste_euros)).toBe(0);
+    // Sin precio no hay fila: cuesta 0 y no se inventa un uso.
+    expect(await usosDePlataforma(montaje)).toHaveLength(0);
   });
 
   it('un modelo sin proveedor elegido no bloquea la sala: silencio con el motivo', async () => {
@@ -677,6 +736,16 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
     const creadas = await entradasDe(montaje, ACCIONES_SALA.propuestaCreada);
     // 2000 tokens de entrada y 100 de salida: 0,0075 €, fuera de cualquier tarea de puesto.
     expect(Number(creadas[0]?.coste_euros)).toBeCloseTo(0.0075, 4);
+    const usos = (await usosDePlataforma(montaje)).filter(
+      (u) => u.actor_plataforma === 'director_ia',
+    );
+    expect(usos).toHaveLength(1);
+    expect(usos[0]).toMatchObject({ sala_id: salaId, tarea_id: null, puesto_id: null });
+    expect(Number(usos[0]?.coste_euros)).toBeCloseTo(0.0075, 4);
+    expect(await referenciasDeLaEntrada(montaje, ACCIONES_SALA.propuestaCreada)).toContainEqual({
+      tipo: 'uso_modelo',
+      id: usos[0]?.id,
+    });
     expect(
       await contarEnElLibro(montaje.cliente, montaje.semilla.tenantId, {
         accion: ACCION_USO_MODELO,

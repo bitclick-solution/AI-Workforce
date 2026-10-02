@@ -33,6 +33,7 @@ import {
   registrarTarifa,
   registrarTareaRaiz,
   registrarUsoDeModelo,
+  registrarUsoDeModeloDePlataforma,
   tarifaVigente,
 } from '../contador.js';
 import {
@@ -494,6 +495,253 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       const resultado = await verificarCadenaEnBase(cliente, org.tenantId);
       expect(resultado.valida).toBe(true);
       expect(resultado.entradas).toBeGreaterThan(4);
+    });
+  });
+
+  describe('uso de modelo de plataforma: moderador y Director, sin tarea ni puesto', () => {
+    let salaId: string;
+
+    beforeAll(async () => {
+      salaId = await conTenant(cliente, org.tenantId, async (tx) => {
+        const [sala] = await tx<{ id: string }[]>`
+          insert into sala (tenant_id, ambito, nombre)
+          values (${org.tenantId}, 'organizacion', 'general-plataforma')
+          returning id
+        `;
+        if (!sala) throw new Error('La sala no se insertó.');
+        return sala.id;
+      });
+    });
+
+    /** Lo que cuesta el uso de las pruebas con la tarifa vigente ahora (otras pruebas la han subido). */
+    async function costeEsperado(): Promise<number> {
+      const tarifa = await conTenant(cliente, org.tenantId, (tx) =>
+        tarifaVigente(tx, org.tenantId, PROVEEDOR, MODELO, new Date()),
+      );
+      if (!tarifa) throw new Error('Sin tarifa vigente para la prueba.');
+      return calcularCosteEuros(tarifa, { entrada: 1000, salida: 100, entradaCache: 0 });
+    }
+
+    function usoDePlataforma(clave: string, extra: Record<string, unknown> = {}) {
+      return {
+        salaId,
+        actor: 'moderador' as const,
+        proveedor: PROVEEDOR,
+        modelo: MODELO,
+        tokens: { entrada: 1000, salida: 100, entradaCache: 0 },
+        claveIdempotencia: clave,
+        ...extra,
+      };
+    }
+
+    it('se registra con el precio de la tarifa vigente, sin tarea ni puesto', async () => {
+      const registrado = await conTenant(cliente, org.tenantId, (tx) =>
+        registrarUsoDeModeloDePlataforma(tx, org.tenantId, usoDePlataforma('plataforma-1')),
+      );
+      const esperado = await costeEsperado();
+      expect(esperado).toBeGreaterThan(0);
+      expect(registrado.costeEuros).toBeCloseTo(esperado, 6);
+      expect(registrado.yaEstaba).toBe(false);
+      const vigente = await conTenant(cliente, org.tenantId, (tx) =>
+        tarifaVigente(tx, org.tenantId, PROVEEDOR, MODELO, new Date()),
+      );
+      expect(registrado.tarifaId).toBe(vigente?.id);
+
+      const [fila] = await conTenant(
+        cliente,
+        org.tenantId,
+        (tx) => tx<
+          {
+            tarea_id: string | null;
+            puesto_id: string | null;
+            version_puesto_id: string | null;
+            sala_id: string;
+            actor_plataforma: string;
+            coste_euros: string;
+          }[]
+        >`
+          select tarea_id, puesto_id, version_puesto_id, sala_id, actor_plataforma, coste_euros
+          from uso_modelo where id = ${registrado.id}
+        `,
+      );
+      expect(fila).toMatchObject({
+        tarea_id: null,
+        puesto_id: null,
+        version_puesto_id: null,
+        sala_id: salaId,
+        actor_plataforma: 'moderador',
+      });
+      expect(Number(fila?.coste_euros)).toBeCloseTo(esperado, 4);
+    });
+
+    it('la misma clave no vuelve a cobrar', async () => {
+      const repetido = await conTenant(cliente, org.tenantId, (tx) =>
+        registrarUsoDeModeloDePlataforma(tx, org.tenantId, usoDePlataforma('plataforma-1')),
+      );
+      expect(repetido.yaEstaba).toBe(true);
+      const [{ total } = { total: '0' }] = await conTenant(
+        cliente,
+        org.tenantId,
+        (tx) => tx<{ total: string }[]>`
+          select count(*) as total from uso_modelo
+          where tenant_id = ${org.tenantId} and clave_idempotencia = 'plataforma-1'
+        `,
+      );
+      expect(Number(total)).toBe(1);
+    });
+
+    it('no anota en el libro ni suma al contador de tareas: lo hace la acción de sala que lo referencia', async () => {
+      const antes = await contador(org.tenantId);
+      const entradasAntes = await cuantasEntradas(org.tenantId, ACCION_USO_MODELO);
+      await conTenant(cliente, org.tenantId, (tx) =>
+        registrarUsoDeModeloDePlataforma(tx, org.tenantId, usoDePlataforma('plataforma-2')),
+      );
+      expect(await contador(org.tenantId)).toEqual(antes);
+      expect(await cuantasEntradas(org.tenantId, ACCION_USO_MODELO)).toBe(entradasAntes);
+    });
+
+    it('no entra en las consultas por tarea ni por puesto, y sí en el total de euros de modelos', async () => {
+      const tareasAntes = await conTenant(cliente, org.tenantId, (tx) =>
+        tareasDelPeriodo(tx, org.tenantId, 200),
+      );
+      const porPuestoAntes = await conTenant(cliente, org.tenantId, (tx) =>
+        costePorPuesto(tx, org.tenantId),
+      );
+      const consumoAntes = await conTenant(cliente, org.tenantId, (tx) =>
+        consumoDelPeriodo(tx, org.tenantId),
+      );
+      await conTenant(cliente, org.tenantId, (tx) =>
+        registrarUsoDeModeloDePlataforma(tx, org.tenantId, usoDePlataforma('plataforma-3')),
+      );
+      const consumo = await conTenant(cliente, org.tenantId, (tx) =>
+        consumoDelPeriodo(tx, org.tenantId),
+      );
+      expect(consumo.costeModelosEuros).toBeCloseTo(
+        consumoAntes.costeModelosEuros + (await costeEsperado()),
+        4,
+      );
+      expect(
+        await conTenant(cliente, org.tenantId, (tx) => tareasDelPeriodo(tx, org.tenantId, 200)),
+      ).toEqual(tareasAntes);
+      expect(
+        await conTenant(cliente, org.tenantId, (tx) => costePorPuesto(tx, org.tenantId)),
+      ).toEqual(porPuestoAntes);
+      const raiz = await conTenant(cliente, org.tenantId, (tx) =>
+        costeDeTareaRaiz(tx, org.tenantId, org.tareaId),
+      );
+      expect(raiz.usos).toBeGreaterThan(0);
+    });
+
+    it('sin tarifa vigente falla y no deja fila', async () => {
+      await expect(
+        conTenant(cliente, org.tenantId, (tx) =>
+          registrarUsoDeModeloDePlataforma(
+            tx,
+            org.tenantId,
+            usoDePlataforma('plataforma-sin-tarifa', { modelo: 'modelo-sin-tarifa' }),
+          ),
+        ),
+      ).rejects.toThrow(/Sin tarifa vigente/);
+      const [{ total } = { total: '0' }] = await conTenant(
+        cliente,
+        org.tenantId,
+        (tx) => tx<{ total: string }[]>`
+          select count(*) as total from uso_modelo
+          where tenant_id = ${org.tenantId} and clave_idempotencia = 'plataforma-sin-tarifa'
+        `,
+      );
+      expect(Number(total)).toBe(0);
+    });
+
+    it('rechaza una sala que no es de la organización, un actor desconocido y tokens inválidos', async () => {
+      await expect(
+        conTenant(cliente, org.tenantId, (tx) =>
+          registrarUsoDeModeloDePlataforma(
+            tx,
+            org.tenantId,
+            usoDePlataforma('plataforma-sala-ajena', { salaId: uuidV7() }),
+          ),
+        ),
+      ).rejects.toThrow(/no existe en este tenant/);
+      await expect(
+        conTenant(cliente, org.tenantId, (tx) =>
+          registrarUsoDeModeloDePlataforma(
+            tx,
+            org.tenantId,
+            usoDePlataforma('plataforma-actor', { actor: 'otro' as never }),
+          ),
+        ),
+      ).rejects.toThrow(/actor de plataforma desconocido/);
+      await expect(
+        conTenant(cliente, org.tenantId, (tx) =>
+          registrarUsoDeModeloDePlataforma(
+            tx,
+            org.tenantId,
+            usoDePlataforma('plataforma-tokens', { tokens: { entrada: -1, salida: 0 } }),
+          ),
+        ),
+      ).rejects.toThrow();
+    });
+
+    it('la base rechaza una fila a medias entre puesto y plataforma', async () => {
+      const insertar = (columnas: string, valores: unknown[]) =>
+        conTenant(cliente, org.tenantId, (tx) =>
+          tx.unsafe(
+            `insert into uso_modelo (tenant_id, proveedor, modelo, tarifa_modelo_id, clave_idempotencia, ${columnas})
+             values ($1, $2, $3, $4, $5, ${valores.map((_, i) => `$${String(i + 6)}`).join(', ')})`,
+            [
+              org.tenantId,
+              PROVEEDOR,
+              MODELO,
+              tarifaId,
+              `mixta-${uuidV7()}`,
+              ...(valores as never[]),
+            ],
+          ),
+        );
+      // Tarea y sala a la vez.
+      await expect(
+        insertar(
+          'tarea_id, tarea_raiz_id, puesto_id, version_puesto_id, sala_id, actor_plataforma',
+          [org.tareaId, org.tareaId, org.puestoId, org.versionPuestoId, salaId, 'moderador'],
+        ),
+      ).rejects.toThrow(/uso_modelo_origen_coherente/);
+      // Sin tarea y sin sala.
+      await expect(insertar('actor_plataforma', ['moderador'])).rejects.toThrow(
+        /uso_modelo_origen_coherente/,
+      );
+      // Plataforma con un actor que no existe.
+      await expect(insertar('sala_id, actor_plataforma', [salaId, 'intruso'])).rejects.toThrow(
+        /uso_modelo_origen_coherente/,
+      );
+      // Puesto sin versión.
+      await expect(
+        insertar('tarea_id, tarea_raiz_id, puesto_id', [org.tareaId, org.tareaId, org.puestoId]),
+      ).rejects.toThrow(/uso_modelo_origen_coherente/);
+    });
+
+    it('el rol de aplicación no la escribe con el tenant de otro y no puede borrarla', async () => {
+      await expect(
+        conTenantYRol(
+          cliente,
+          vecina.tenantId,
+          ROL_APLICACION,
+          (tx) => tx`
+            insert into uso_modelo (
+              tenant_id, sala_id, actor_plataforma, proveedor, modelo, tarifa_modelo_id, clave_idempotencia
+            ) values (
+              ${org.tenantId}, ${salaId}, 'moderador', ${PROVEEDOR}, ${MODELO}, ${tarifaId}, 'colada-plataforma'
+            )
+          `,
+        ),
+      ).rejects.toThrow(/row-level security|violates row-level/i);
+      await expect(
+        conTenantYRol(cliente, org.tenantId, ROL_APLICACION, (tx) =>
+          tx.unsafe('delete from uso_modelo where sala_id is not null and tenant_id = $1', [
+            org.tenantId,
+          ]),
+        ),
+      ).rejects.toThrow(/permission denied|permiso denegado/i);
     });
   });
 

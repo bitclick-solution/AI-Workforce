@@ -499,6 +499,128 @@ export async function registrarUsoDeModelo(
   };
 }
 
+/** Agentes de plataforma que llaman a un modelo desde una sala. */
+export const ACTORES_DE_PLATAFORMA = ['moderador', 'director_ia'] as const;
+export type ActorDePlataforma = (typeof ACTORES_DE_PLATAFORMA)[number];
+
+export interface UsoDeModeloDePlataformaNuevo {
+  /** Sala desde la que llama el moderador o el Director. */
+  salaId: string;
+  actor: ActorDePlataforma;
+  proveedor: string;
+  modelo: string;
+  /** Plataforma real que sirvió la llamada (ADR-017). Por defecto, `primera-parte`. */
+  plataforma?: string | undefined;
+  tokens: TokensUsados;
+  llamadas?: number | undefined;
+  /** Hace idempotente el registro: un reintento de la actividad no vuelve a cobrar. */
+  claveIdempotencia: string;
+  momento?: Date | undefined;
+}
+
+export interface UsoDePlataformaRegistrado {
+  id: string;
+  tarifaId: string;
+  costeEuros: number;
+  /** `true` cuando la clave ya estaba registrada: el reintento no vuelve a cobrar. */
+  yaEstaba: boolean;
+}
+
+/**
+ * Registra el uso real de modelo de un agente de plataforma (moderador, Director).
+ *
+ * Igual que `registrarUsoDeModelo` en lo que importa: la tarifa vigente le pone
+ * precio, el coste se congela en la fila, sin tarifa falla y no deja rastro, y la
+ * clave de idempotencia impide cobrar dos veces. Se diferencia en que no cuelga de
+ * ninguna tarea ni de ningún puesto: la fila lleva la sala y el actor
+ * (`0010_uso_modelo_de_plataforma.sql`), así que no suma al contador de tareas de
+ * ningún puesto.
+ *
+ * No anota en el libro: la anotación es la de la acción de sala que provocó la
+ * llamada (`sala.moderacion_decidida`, `propuesta.creada`), que referencia esta fila
+ * y lleva su coste en `coste_euros`. Anotar aquí también contaría el mismo euro dos
+ * veces en `contador_consumo`.
+ */
+export async function registrarUsoDeModeloDePlataforma(
+  tx: postgres.TransactionSql,
+  tenantId: string,
+  uso: UsoDeModeloDePlataformaNuevo,
+): Promise<UsoDePlataformaRegistrado> {
+  exigirUuid(tenantId, 'tenantId');
+  exigirUuid(uso.salaId, 'salaId');
+  if (!(ACTORES_DE_PLATAFORMA as readonly string[]).includes(uso.actor)) {
+    throw new Error(`actor de plataforma desconocido: ${uso.actor}`);
+  }
+  const proveedor = exigirTexto(uso.proveedor, 'proveedor');
+  const modelo = exigirTexto(uso.modelo, 'modelo');
+  const plataforma = exigirTexto(uso.plataforma ?? PLATAFORMA_POR_DEFECTO, 'plataforma');
+  const clave = exigirTexto(uso.claveIdempotencia, 'claveIdempotencia');
+  const llamadas = uso.llamadas ?? 1;
+  if (!Number.isInteger(llamadas) || llamadas < 1) {
+    throw new Error(`llamadas tiene que ser un entero positivo: ${llamadas}`);
+  }
+  const tokens: TokensUsados = {
+    entrada: exigirEnteroNoNegativo(uso.tokens.entrada, 'tokens.entrada'),
+    salida: exigirEnteroNoNegativo(uso.tokens.salida, 'tokens.salida'),
+    entradaCache: exigirEnteroNoNegativo(uso.tokens.entradaCache ?? 0, 'tokens.entradaCache'),
+  };
+
+  const [sala] = await tx<{ id: string }[]>`
+    select id from sala where tenant_id = ${tenantId} and id = ${uso.salaId}
+  `;
+  if (!sala) {
+    throw new Error(`La sala ${uso.salaId} no existe en este tenant: el uso no tiene dónde sumar.`);
+  }
+
+  await serializarTenant(tx, tenantId);
+
+  const [repetido] = await tx<{ id: string; tarifa_modelo_id: string; coste_euros: string }[]>`
+    select id, tarifa_modelo_id, coste_euros
+    from uso_modelo
+    where tenant_id = ${tenantId} and clave_idempotencia = ${clave}
+  `;
+  if (repetido) {
+    return {
+      id: repetido.id,
+      tarifaId: repetido.tarifa_modelo_id,
+      costeEuros: Number(repetido.coste_euros),
+      yaEstaba: true,
+    };
+  }
+
+  const [reloj] = await tx<{ ahora: string }[]>`
+    select to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as ahora
+  `;
+  if (!reloj) throw new Error('La base no devolvió la hora del uso.');
+  const momento = uso.momento ?? new Date(reloj.ahora);
+
+  const tarifa = await tarifaVigente(tx, tenantId, proveedor, modelo, momento, plataforma);
+  if (!tarifa) {
+    throw new Error(
+      `Sin tarifa vigente para ${proveedor}/${modelo} en ${plataforma} en ${momento.toISOString()}: ` +
+        'regístrala con registrarTarifa antes de cobrar el uso.',
+    );
+  }
+  const costeEuros = calcularCosteEuros(tarifa, tokens);
+
+  const [insertado] = await tx<{ id: string }[]>`
+    insert into uso_modelo (
+      tenant_id, sala_id, actor_plataforma,
+      proveedor, modelo, plataforma, tokens_entrada, tokens_salida, tokens_entrada_cache,
+      llamadas, tarifa_modelo_id, coste_euros, clave_idempotencia, creado_en
+    ) values (
+      ${tenantId}, ${uso.salaId}, ${uso.actor},
+      ${proveedor}, ${modelo}, ${plataforma},
+      ${tokens.entrada}, ${tokens.salida}, ${tokens.entradaCache ?? 0},
+      ${llamadas}, ${tarifa.id}, ${normalizarImporte(costeEuros)}, ${clave}, ${comoIso(momento, 'momento')}::timestamptz
+    )
+    returning id
+  `;
+  if (!insertado) throw new Error('El uso de modelo de plataforma no se insertó.');
+
+  return { id: insertado.id, tarifaId: tarifa.id, costeEuros, yaEstaba: false };
+}
+
 /**
  * Tarifa que se aplica a un uso: la de mayor `vigente_desde` que no sea posterior
  * al momento del uso. Sin columna de cierre de vigencia, la última gana.

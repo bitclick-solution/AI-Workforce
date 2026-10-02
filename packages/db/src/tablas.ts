@@ -209,6 +209,8 @@ export const ORDEN_PURGA: readonly string[] = [
   'autorizacion_herramientas',
   'conector',
   'propuesta_operacion',
+  // El uso de modelo referencia la sala (uso de plataforma), y tarea, paso y tarifa (uso de puesto): se vacía antes que todas.
+  'uso_modelo',
   'intervencion',
   'mensaje',
   'sala_participante',
@@ -221,8 +223,6 @@ export const ORDEN_PURGA: readonly string[] = [
   'decision_aprobacion',
   'aprobacion',
   'delegacion',
-  // El uso de modelo referencia tarea, paso y su tarifa: se vacía antes que ellas.
-  'uso_modelo',
   'tarifa_modelo',
   'paso',
   'tarea',

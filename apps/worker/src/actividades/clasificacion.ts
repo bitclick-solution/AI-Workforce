@@ -12,8 +12,10 @@
  * - Sin tarifa para un proveedor real no se llama: una llamada que no se puede
  *   cobrar no se hace. El proveedor de prueba sin tarifa cuesta 0 a propósito (demo
  *   local y CI gratis); con tarifa registrada, la usa y el coste sale en el libro.
- * - No cuelga de ningún puesto ni tarea de negocio: el coste va al libro de la sala
- *   (`entrada_auditoria.coste_euros`) y no entra en el contador de tareas.
+ * - No cuelga de ningún puesto ni tarea de negocio: devuelve el uso para que quien
+ *   llama lo registre en `uso_modelo` como uso de plataforma
+ *   (`registrarUsoDeModeloDePlataforma`), y el coste va al libro de la sala sin entrar
+ *   en el contador de tareas.
  */
 import type { PapelModelo } from '@aiw/domain';
 import { calcularCosteEuros, tarifaVigente } from '@aiw/ledger';
@@ -27,6 +29,7 @@ import type {
   PeticionDeClasificacion,
   PuertoDeClasificacion,
   RespuestaDeClasificacion,
+  UsoDeClasificacion,
 } from '@aiw/rooms';
 import { PLATAFORMAS_MODELO, type ClasePaso, type PlataformaModelo } from '@aiw/domain';
 
@@ -61,15 +64,18 @@ async function costeDeLaLlamada(
   plataforma: string | undefined,
   tokens: TokensParaElContador,
   exigirTarifa: boolean,
-): Promise<number> {
+): Promise<{ costeEuros: number; uso: UsoDeClasificacion | undefined }> {
   const tarifa = await enTenant(contexto, tenantId, (tx) =>
     tarifaVigente(tx, tenantId, proveedor, modelo, new Date(), plataforma),
   );
   if (!tarifa) {
     if (exigirTarifa) throw new Error(`Sin tarifa vigente para ${proveedor}/${modelo}.`);
-    return 0;
+    return { costeEuros: 0, uso: undefined };
   }
-  return calcularCosteEuros(tarifa, tokens);
+  return {
+    costeEuros: calcularCosteEuros(tarifa, tokens),
+    uso: { proveedor, modelo, plataforma, tokens: { ...tokens } },
+  };
 }
 
 export function crearClasificadorDeSala(
@@ -100,18 +106,22 @@ export function crearClasificadorDeSala(
         nombreTraza: 'sala.clasificacion',
         maxTokensSalida: MAX_TOKENS_DE_SALIDA,
       });
+      // La plataforma por defecto, como en `pasoModelo`: la tarifa de un proveedor de
+      // prueba se registra sin plataforma y `registrarUsoDeModeloDePlataforma` la usa.
+      const precio = await costeDeLaLlamada(
+        contexto,
+        opciones.tenantId,
+        resuelto.proveedor,
+        resuelto.modeloId,
+        'primera-parte',
+        dado.tokens,
+        false,
+      );
       return {
         salida: comoJson(dado.texto),
         modelo: resuelto.modeloId,
-        costeEuros: await costeDeLaLlamada(
-          contexto,
-          opciones.tenantId,
-          resuelto.proveedor,
-          resuelto.modeloId,
-          undefined,
-          dado.tokens,
-          false,
-        ),
+        costeEuros: precio.costeEuros,
+        uso: precio.uso,
       };
     }
 
@@ -148,18 +158,20 @@ export function crearClasificadorDeSala(
       salida: resultado.tokens.salida,
       entradaCache: resultado.tokens.entradaCache ?? 0,
     };
+    const precio = await costeDeLaLlamada(
+      contexto,
+      opciones.tenantId,
+      PROVEEDOR_DE_TARIFA,
+      modeloDeTarifa(sirvio.papel, sirvio.plataforma as PlataformaModelo),
+      sirvio.plataforma,
+      tokens,
+      true,
+    );
     return {
       salida: resultado.salida ?? comoJson(resultado.texto),
       modelo: sirvio.modeloId,
-      costeEuros: await costeDeLaLlamada(
-        contexto,
-        opciones.tenantId,
-        PROVEEDOR_DE_TARIFA,
-        modeloDeTarifa(sirvio.papel, sirvio.plataforma as PlataformaModelo),
-        sirvio.plataforma,
-        tokens,
-        true,
-      ),
+      costeEuros: precio.costeEuros,
+      uso: precio.uso,
     };
   };
 }

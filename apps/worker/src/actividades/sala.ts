@@ -10,7 +10,7 @@
  * duplicarlo; es la misma disciplina que `arrancarTarea` con el contador.
  */
 import { uuidV7 } from '@aiw/db';
-import { anotar } from '@aiw/ledger';
+import { anotar, registrarUsoDeModeloDePlataforma, type ActorDePlataforma } from '@aiw/ledger';
 import { proponerContratacionConModelo, type PropuestaDeContratacion } from '@aiw/platform-agents';
 import {
   moderarConModelo,
@@ -22,6 +22,7 @@ import { ApplicationFailure } from '@temporalio/activity';
 import type postgres from 'postgres';
 
 import { MODELO_PRUEBA_DIRECTOR, MODELO_PRUEBA_MODERADOR } from '@aiw/models';
+import type { UsoDeClasificacion } from '@aiw/rooms';
 import { crearClasificadorDeSala } from './clasificacion.js';
 import { enTenant, type ContextoDeActividades } from './contexto.js';
 
@@ -259,6 +260,40 @@ async function sincronizarParticipantesDeEquipo(
   return { anadidos, quitados };
 }
 
+/**
+ * Registra en `uso_modelo` las llamadas del paso de modelo de un agente de plataforma
+ * y devuelve su coste (el que congela la tarifa vigente) y las referencias para el
+ * libro. Una fila por llamada con precio; sin ninguna (reglas, proveedor de prueba sin
+ * tarifa) el coste es cero. La clave es la de la acción de sala, así que el reintento
+ * de la actividad no cobra otra vez. Una detrás de otra: comparten transacción.
+ */
+async function registrarUsoDeSala(
+  tx: postgres.TransactionSql,
+  tenantId: string,
+  salaId: string,
+  actor: ActorDePlataforma,
+  paso: { usado: false } | { usado: true; usos: readonly UsoDeClasificacion[] },
+  claveBase: string,
+): Promise<{ costeEuros: number; referencias: { tipo: string; id: string }[] }> {
+  let costeEuros = 0;
+  const referencias: { tipo: string; id: string }[] = [];
+  if (!paso.usado) return { costeEuros, referencias };
+  for (const [indice, uso] of paso.usos.entries()) {
+    const registrado = await registrarUsoDeModeloDePlataforma(tx, tenantId, {
+      salaId,
+      actor,
+      proveedor: uso.proveedor,
+      modelo: uso.modelo,
+      ...(uso.plataforma === undefined ? {} : { plataforma: uso.plataforma }),
+      tokens: uso.tokens,
+      claveIdempotencia: `${claveBase}:clasificacion-${String(indice)}`,
+    });
+    costeEuros += registrado.costeEuros;
+    referencias.push({ tipo: 'uso_modelo', id: registrado.id });
+  }
+  return { costeEuros, referencias };
+}
+
 export function crearActividadesDeSala(contexto: ContextoDeActividades) {
   return {
     /**
@@ -374,11 +409,19 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
         },
       );
       const puestos = decision.tipo === 'intervenir' ? decision.turnos.map((t) => t.puestoId) : [];
-      // Coste de sala visible aparte (ADR-004): lo que costó el paso de modelo, o cero
-      // cuando decidieron las reglas, que no gastan modelo.
-      const costeEuros = pasoDeModelo.usado ? pasoDeModelo.costeEuros : 0;
 
       return enTenant(contexto, peticion.tenantId, async (tx) => {
+        // Coste de sala visible aparte (ADR-004): lo que costó el paso de modelo, o cero
+        // cuando decidieron las reglas. Va a `uso_modelo` como uso de plataforma, sin
+        // tarea ni puesto, y la entrada del libro lo referencia y lo suma.
+        const consumo = await registrarUsoDeSala(
+          tx,
+          peticion.tenantId,
+          peticion.salaId,
+          'moderador',
+          pasoDeModelo,
+          peticion.notaId,
+        );
         await insertarMensaje(contexto, tx, peticion.tenantId, {
           id: peticion.notaId,
           salaId: peticion.salaId,
@@ -403,9 +446,10 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
             { tipo: 'sala', id: peticion.salaId },
             { tipo: 'mensaje', id: peticion.mensajeId },
             ...puestos.map((id) => ({ tipo: 'puesto', id })),
+            ...consumo.referencias,
           ],
           resultado: 'exito',
-          costeEuros,
+          costeEuros: consumo.costeEuros,
         });
         return { decision, yaEstaba: false };
       });
@@ -628,9 +672,16 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
           }),
         },
       );
-      const costeEuros = pasoDeModelo.usado ? pasoDeModelo.costeEuros : 0;
 
       return enTenant(contexto, peticion.tenantId, async (tx) => {
+        const consumo = await registrarUsoDeSala(
+          tx,
+          peticion.tenantId,
+          peticion.salaId,
+          'director_ia',
+          pasoDeModelo,
+          peticion.propuestaId,
+        );
         const autor: AdjuntoDeSala = { tipo: 'autor_plataforma', agente: 'director_ia' };
         if (respuesta.tipo === 'aclaracion') {
           const insertado = await insertarMensaje(contexto, tx, peticion.tenantId, {
@@ -646,10 +697,11 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
               datosReferenciados: [
                 { tipo: 'sala', id: peticion.salaId },
                 { tipo: 'mensaje', id: peticion.respuestaId },
+                ...consumo.referencias,
               ],
               resultado: 'exito',
               // El coste del paso de modelo no se pierde si acaba en aclaración.
-              costeEuros,
+              costeEuros: consumo.costeEuros,
             });
           }
           return { propuestaId: null, caducidadSegundos: 0 };
@@ -678,10 +730,11 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
             { tipo: 'propuesta_operacion', id: peticion.propuestaId },
             { tipo: 'mensaje', id: peticion.mensajeId },
             ...propuesta.entidadesTocadas,
+            ...consumo.referencias,
           ],
           resultado: 'exito',
           nivelAplicado: propuesta.nivelExigido,
-          costeEuros,
+          costeEuros: consumo.costeEuros,
         });
         await insertarMensaje(contexto, tx, peticion.tenantId, {
           id: peticion.respuestaId,
