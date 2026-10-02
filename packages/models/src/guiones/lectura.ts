@@ -73,3 +73,62 @@ export function facturasDelResultado(texto: string): FacturaParaNota[] {
     return [];
   }
 }
+
+/** Apunte del extracto bancario tal como lo devuelve `leer_extracto_bancario`. */
+export interface ApunteDeExtracto {
+  id: string;
+  cuenta_id: string;
+  fecha: string;
+  concepto: string;
+  importe: number;
+  moneda: string;
+  casado: boolean;
+  documento_id: string | null;
+}
+
+/**
+ * Lee los apuntes del resultado de `leer_extracto_bancario`.
+ *
+ * Igual que con las facturas: lo que no es la carga del contrato, errores incluidos,
+ * no es un extracto, y el agente no concilia contra algo que no ha entendido. Un
+ * apunte con la forma rota se descarta en vez de completarse con valores
+ * inventados.
+ */
+export function apuntesDelResultado(texto: string): ApunteDeExtracto[] {
+  try {
+    const analizado: unknown = JSON.parse(texto);
+    const apuntes = (analizado as { apuntes?: unknown }).apuntes;
+    if (!Array.isArray(apuntes)) return [];
+    const validos: ApunteDeExtracto[] = [];
+    for (const apunte of apuntes as unknown[]) {
+      if (typeof apunte !== 'object' || apunte === null) continue;
+      const campos = apunte as Record<string, unknown>;
+      const documento = campos['documento_id'];
+      if (
+        typeof campos['id'] !== 'string' ||
+        typeof campos['cuenta_id'] !== 'string' ||
+        typeof campos['fecha'] !== 'string' ||
+        typeof campos['concepto'] !== 'string' ||
+        typeof campos['importe'] !== 'number' ||
+        typeof campos['moneda'] !== 'string' ||
+        typeof campos['casado'] !== 'boolean' ||
+        !(documento === null || typeof documento === 'string')
+      ) {
+        continue;
+      }
+      validos.push({
+        id: campos['id'],
+        cuenta_id: campos['cuenta_id'],
+        fecha: campos['fecha'],
+        concepto: campos['concepto'],
+        importe: campos['importe'],
+        moneda: campos['moneda'],
+        casado: campos['casado'],
+        documento_id: documento,
+      });
+    }
+    return validos;
+  } catch {
+    return [];
+  }
+}
