@@ -35,6 +35,7 @@ import {
   suscribirseAAgentesEnVivo,
   type DetalleDeTarea,
 } from '../../../../../lib/inicio';
+import { rutaDelExpediente } from '../../../../../lib/expediente';
 import { crearFuente } from '../../../../../lib/sala-fuente';
 import { AgenteAvatar, haceCuanto } from '../../widgets';
 import { estadoDeLaTarea, etiquetaDeNivel, tituloDelPaso } from './presentacion';
@@ -220,7 +221,14 @@ function Detalle({
           </span>
         </div>
         <p className={cn(TEMA.texto.apagado, 'text-xs')}>
-          Encargada {haceCuanto(detalle.desde)} · Esta página se actualiza sola.
+          Encargada {haceCuanto(detalle.desde)} · Esta página se actualiza sola ·{' '}
+          <a
+            className={cn('underline', TEMA.foco)}
+            href={rutaDelExpediente(detalle.puestoId)}
+            data-testid="detalle-expediente"
+          >
+            Expediente de {detalle.agente}
+          </a>
         </p>
       </header>
 

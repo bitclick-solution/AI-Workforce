@@ -74,7 +74,11 @@ export type ClaveDeTexto =
   | 'ui.paso.resultado.exito'
   | 'ui.paso.resultado.error'
   | 'ui.paso.resultado.rechazado'
-  | 'ui.paso.resultado.parcial';
+  | 'ui.paso.resultado.parcial'
+  | 'ui.medidor.cumplido'
+  | 'ui.medidor.pendiente'
+  | 'ui.medidor.sinDatos'
+  | 'ui.linea.lista';
 
 export type Diccionario = Partial<Record<ClaveDeTexto, string>>;
 
@@ -145,6 +149,10 @@ const CASTELLANO: Record<ClaveDeTexto, string> = {
   'ui.paso.resultado.error': 'Con error',
   'ui.paso.resultado.rechazado': 'No se hizo',
   'ui.paso.resultado.parcial': 'A medias',
+  'ui.medidor.cumplido': 'Cumplido',
+  'ui.medidor.pendiente': 'Pendiente',
+  'ui.medidor.sinDatos': 'Sin datos todavía',
+  'ui.linea.lista': 'Historial de niveles',
 };
 
 const INGLES: Diccionario = {
@@ -211,6 +219,10 @@ const INGLES: Diccionario = {
   'ui.panelDeWidgets.achicar': 'Shrink "{titulo}"',
   'ui.panelDeWidgets.ocultos': 'Hidden:',
   'ui.panelDeWidgets.mostrar': 'Show "{titulo}"',
+  'ui.medidor.cumplido': 'Met',
+  'ui.medidor.pendiente': 'Pending',
+  'ui.medidor.sinDatos': 'No data yet',
+  'ui.linea.lista': 'Level history',
 };
 
 const DICCIONARIOS: Record<Idioma, Diccionario> = { es: CASTELLANO, en: INGLES };

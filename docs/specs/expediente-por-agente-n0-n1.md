@@ -60,6 +60,13 @@ Un endpoint de lectura. Sin flujos nuevos, sin tablas y sin migración. Se respe
 
 Presupuesto: 35 €. Consumo real: se registra en la rebanada al abrir el PR. Superar el presupuesto en un 50 % pasa la rebanada a Bloqueada con diagnóstico.
 
-## Pregunta abierta
+## Decisiones de la construcción (2-10-2026)
 
-¿Las acciones rechazadas por política deben ser visibles para cualquier persona que vea el puesto, o solo para quien supervisa el departamento?
+- **Acciones rechazadas por política.** Hoy no hay roles y toda persona de la organización es propietaria, así que las ve cualquiera de la organización. Cuando lleguen los roles («Personas, roles y permisos por equipo» y «Ámbitos de datos por rol», previstas para el 7-12, ADR-033), se limitarán a quien supervisa el departamento o a un administrador, igual que la aprobación de la memoria del departamento que decidió Jesús el 2-10. Si Jesús dice otra cosa en el PR, manda lo suyo.
+- **Criterio 2, «prohibido».** No hay permisos por puesto y esta rebanada no los inventa ni toca `apps/api/src/identidad`. Se cubre el aislamiento entre organizaciones (404, con prueba de dos organizaciones). El caso «sin permiso sobre el puesto» llega con los roles.
+- **Clases «fijo».** La ficha del puesto declara `clasesFijas` (lista de clases de acción). Sin esa lista, ninguna clase es fija. Sembrarla en las fichas de Cobros y Conciliación es una propuesta de rebanada aparte.
+- **Ascenso.** Solo las clases en N1, no fijas ni prohibidas, enseñan avance: el ADR-005 define únicamente el ascenso a N2. «Acciones» cuenta las llamadas de herramienta con éxito de la clase; «aprobadas sin cambios», las decisiones `aprobada` frente a `aprobada`, `editada` y `rechazada`; «días sin incidentes», los días desde la última bajada de nivel de la clase en el libro o, si no la hay, desde su primera acción. La confirmación del supervisor no tiene origen de datos todavía: se muestra como no confirmada.
+- **Historial de niveles.** Es la diferencia entre versiones consecutivas; el nivel de la primera versión es el inicial, no un cambio.
+- **Enlace al libro.** Cada acción rechazada enlaza al paso de su tarea en el detalle de la tarea (`/panel/inicio/tarea/:id#paso-N`), cuyo acceso ya está controlado.
+- **Consulta sin registro.** La lectura no emite entrada en el libro ni suma al contador.
+- **Acceso.** Detrás de la bandera del Inicio (`AIW_INICIO_PANEL`), desde la tarjeta del agente en el Inicio y desde el detalle de la tarea.

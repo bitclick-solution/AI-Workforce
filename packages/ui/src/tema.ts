@@ -47,6 +47,17 @@ export const TEMA = {
     aviso: 'border-alerta bg-alerta-suave text-texto-alerta',
     peligro: 'border-peligro bg-peligro-suave text-peligro',
   },
+  /** Medidor de un criterio: la pista y el relleno son gráficos y piden 3:1 (contraste.test.ts). */
+  medidor: {
+    pista: 'h-2 w-full overflow-hidden rounded-full border border-linea bg-superficie-2',
+    relleno: 'block h-full rounded-full bg-acento',
+  },
+  /** Línea de niveles: el punto de cada cambio es un gráfico y pide 3:1. */
+  linea: {
+    lista: 'flex flex-col border-l-2 border-linea pl-4',
+    punto:
+      'absolute -left-[1.4rem] top-1.5 h-3 w-3 rounded-full border-2 border-superficie bg-acento',
+  },
   campo: {
     etiqueta: 'font-texto text-sm font-medium text-texto',
     control:

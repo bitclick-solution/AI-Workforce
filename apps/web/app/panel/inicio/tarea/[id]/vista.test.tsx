@@ -138,6 +138,9 @@ describe('VistaDelDetalle', () => {
     expect(screen.getAllByText('Cobros').length).toBeGreaterThan(0);
     expect(screen.getByTestId('detalle-estado').textContent).toContain('Esperando tu aprobación');
     expect(screen.getByTestId('detalle-coste').textContent).toContain('0,0123');
+    expect(screen.getByTestId('detalle-expediente').getAttribute('href')).toBe(
+      '/panel/inicio/agente/p-cobros/expediente',
+    );
 
     const pasos = screen.getAllByRole('listitem').map((li) => li.textContent ?? '');
     expect(pasos).toHaveLength(3);

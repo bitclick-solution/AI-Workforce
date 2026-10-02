@@ -148,6 +148,19 @@ describe.each([
  */
 const MINIMO_GRAFICO = 3;
 
+/** Medidor de criterios y puntos de la línea de niveles: gráficos con 3:1 contra su pista y la superficie. */
+describe.each([
+  ['claro', PALETA_CLARA],
+  ['oscuro', PALETA_OSCURA],
+] as const)('contraste del medidor y la línea de niveles (3:1) · modo %s', (_modo, paleta) => {
+  it.each([
+    ['relleno sobre la pista', 'acento', 'superficie2'],
+    ['relleno sobre la superficie', 'acento', 'superficie'],
+  ] as const)('%s', (_etiqueta, marca, fondo) => {
+    expect(ratioDeContraste(paleta[marca], paleta[fondo])).toBeGreaterThanOrEqual(3);
+  });
+});
+
 const MARCAS_DE_PRESENCIA: [string, keyof PaletaDeModo][] = [
   ['en la sala y trabajando', 'presenciaActiva'],
   ['escribiendo', 'acento'],
