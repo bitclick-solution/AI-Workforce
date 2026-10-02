@@ -23,7 +23,18 @@
  */
 import type { ContextoDeGuion, Guion, RespuestaDeGuion } from '../proveedor-prueba.js';
 import { HERRAMIENTA_LISTAR, HERRAMIENTA_NOTA, type FacturaParaNota } from './cobros.js';
-import { encargoDe, facturasDelResultado, resultadosDe } from './lectura.js';
+import {
+  apuntesDelResultado,
+  encargoDe,
+  facturasDelResultado,
+  resultadosDe,
+  type ApunteDeExtracto,
+} from './lectura.js';
+
+export type { ApunteDeExtracto } from './lectura.js';
+
+export const HERRAMIENTA_EXTRACTO = 'leer_extracto_bancario';
+export const HERRAMIENTA_ASIENTO = 'proponer_asiento_diferencia';
 
 /** Modelo del proveedor de prueba que contesta con este guion. */
 export const MODELO_PRUEBA_CONCILIACION = 'deterministico-conciliacion';
@@ -126,6 +137,142 @@ export function conciliar(
   return { resumen, propuestas, no_encontradas: noEncontradas };
 }
 
+/** Por qué un apunte se escala a una persona en vez de proponer nada sobre él. */
+export type CausaDeEscalada =
+  'devolucion_recibo' | 'sin_documento' | 'asiento_no_creado' | 'sin_autorizacion';
+
+export interface AsientoDeDiferencia {
+  apunte_id: string;
+  documento_id: string;
+  importe_diferencia: number;
+  cuenta_contrapartida: string;
+  motivo: string;
+  estado: 'borrador';
+  /** Identificador del borrador que devolvió la herramienta; nulo hasta crearlo. */
+  asiento_id: string | null;
+}
+
+export interface Escalada {
+  apunte_id: string;
+  causa: CausaDeEscalada;
+  motivo: string;
+}
+
+/** Informe cuando el conector sirve el extracto: casa, propone la diferencia y escala el resto. */
+export interface InformeConExtracto {
+  resumen: string;
+  casados: { apunte_id: string; documento_id: string }[];
+  asientos: AsientoDeDiferencia[];
+  escaladas: Escalada[];
+}
+
+/** Cuentas de contrapartida de la diferencia: gasto si el banco recibió menos, ingreso si más. */
+const CONTRAPARTIDA_FALTA = '629000';
+const CONTRAPARTIDA_SOBRA = '759000';
+
+/** Diferencia máxima que cuenta como importe exacto: medio céntimo. */
+const TOLERANCIA = 0.005;
+
+const DEVOLUCION_DE_RECIBO = /devoluci[oó]n|recibo devuelto|impagad/i;
+
+/** Un apunte sin casar con el documento que se le ha encontrado, si hay uno. */
+function documentoDelApunte(
+  apunte: ApunteDeExtracto,
+  facturas: readonly FacturaParaNota[],
+): FacturaParaNota | undefined {
+  const porNumero = facturas.find((factura) => apunte.concepto.includes(factura.numero));
+  if (porNumero) return porNumero;
+  const exactas = facturas.filter(
+    (factura) => Math.abs(factura.importe_pendiente - apunte.importe) < TOLERANCIA,
+  );
+  // Dos facturas del mismo importe no se desempatan adivinando.
+  return exactas.length === 1 ? exactas[0] : undefined;
+}
+
+/**
+ * Concilia el extracto con las facturas.
+ *
+ * Cada apunte acaba en una sola de tres cosas: casado con su documento, con un
+ * asiento de diferencia en borrador, o escalado una vez con el motivo. Un apunte
+ * sin documento, o una devolución de recibo, nunca lleva asiento: sin documento no
+ * hay contra qué cuadrarlo, y la devolución la decide una persona. Los apuntes del
+ * informe son siempre los del extracto recibido; no se cita ninguno más.
+ */
+export function conciliarExtracto(
+  apuntes: readonly ApunteDeExtracto[],
+  facturas: readonly FacturaParaNota[],
+): InformeConExtracto {
+  const casados: InformeConExtracto['casados'] = [];
+  const asientos: AsientoDeDiferencia[] = [];
+  const escaladas: Escalada[] = [];
+
+  for (const apunte of apuntes) {
+    if (apunte.casado && apunte.documento_id !== null) {
+      casados.push({ apunte_id: apunte.id, documento_id: apunte.documento_id });
+      continue;
+    }
+    if (DEVOLUCION_DE_RECIBO.test(apunte.concepto)) {
+      escaladas.push({
+        apunte_id: apunte.id,
+        causa: 'devolucion_recibo',
+        motivo: `Devolución de recibo de ${importeLegible(apunte.importe, apunte.moneda)}: la decide una persona.`,
+      });
+      continue;
+    }
+    const factura = documentoDelApunte(apunte, facturas);
+    if (!factura) {
+      escaladas.push({
+        apunte_id: apunte.id,
+        causa: 'sin_documento',
+        motivo: `No encuentro el documento del apunte de ${importeLegible(apunte.importe, apunte.moneda)}: no propongo asiento.`,
+      });
+      continue;
+    }
+    const diferencia = redondear(apunte.importe - factura.importe_pendiente);
+    if (Math.abs(diferencia) < TOLERANCIA) {
+      casados.push({ apunte_id: apunte.id, documento_id: factura.id });
+      continue;
+    }
+    asientos.push({
+      apunte_id: apunte.id,
+      documento_id: factura.id,
+      importe_diferencia: diferencia,
+      cuenta_contrapartida: diferencia < 0 ? CONTRAPARTIDA_FALTA : CONTRAPARTIDA_SOBRA,
+      motivo:
+        `Diferencia de ${importeLegible(diferencia, apunte.moneda)} entre el apunte ${apunte.id} ` +
+        `y la factura ${factura.numero}.`,
+      estado: 'borrador',
+      asiento_id: null,
+    });
+  }
+
+  return { resumen: resumenDeExtracto(casados, asientos, escaladas), casados, asientos, escaladas };
+}
+
+function resumenDeExtracto(
+  casados: readonly unknown[],
+  asientos: readonly unknown[],
+  escaladas: readonly unknown[],
+): string {
+  return (
+    `${casados.length} apuntes casados, ${asientos.length} asientos de diferencia en borrador ` +
+    `y ${escaladas.length} escalados a una persona. Los asientos los contabiliza una persona en el ERP.`
+  );
+}
+
+/**
+ * Concilia con el extracto si lo hay y, si no, como antes: propone el asiento del cobro
+ * y lo deja pendiente. Un extracto vacío es una situación real y el agente sigue
+ * diciendo que le falta.
+ */
+export function conciliarConExtracto(
+  encargo: string,
+  facturas: readonly FacturaParaNota[],
+  apuntes: readonly ApunteDeExtracto[],
+): InformeDeConciliacion | InformeConExtracto {
+  return apuntes.length === 0 ? conciliar(encargo, facturas) : conciliarExtracto(apuntes, facturas);
+}
+
 /** Texto de la nota que deja la propuesta anotada en la factura. */
 export function notaDeConciliacion(propuesta: PropuestaDeConciliacion): string {
   return (
@@ -158,10 +305,28 @@ export const guionConciliacion: Guion = (contexto: ContextoDeGuion): RespuestaDe
     };
   }
 
-  const informe = conciliar(
-    encargoDe(contexto.prompt),
-    facturasDelResultado(listados[listados.length - 1] ?? ''),
-  );
+  const facturas = facturasDelResultado(listados[listados.length - 1] ?? '');
+
+  if (contexto.herramientas.includes(HERRAMIENTA_EXTRACTO)) {
+    const extractos = resultadosDe(contexto.prompt, HERRAMIENTA_EXTRACTO);
+    if (extractos.length === 0) {
+      return {
+        texto: 'Leo el extracto bancario.',
+        llamadas: [
+          {
+            herramienta: HERRAMIENTA_EXTRACTO,
+            argumentos: { solo_sin_casar: false, limite: 200 },
+          },
+        ],
+        tokens: { entrada: 900, salida: 60 },
+      };
+    }
+    const apuntes = apuntesDelResultado(extractos[extractos.length - 1] ?? '');
+    if (apuntes.length > 0) return respuestaConExtracto(contexto, apuntes, facturas);
+    // Extracto vacío o ilegible: se sigue como sin extracto y el informe lo dice.
+  }
+
+  const informe = conciliar(encargoDe(contexto.prompt), facturas);
 
   if (
     notasHechas.length === 0 &&
@@ -184,3 +349,72 @@ export const guionConciliacion: Guion = (contexto: ContextoDeGuion): RespuestaDe
 
   return { texto: JSON.stringify(informe), tokens: { entrada: 1500, salida: 180 } };
 };
+
+/**
+ * Turno del guion con el extracto ya leído: crea los borradores de diferencia, una
+ * sola vez, y entrega el informe. Un borrador que la herramienta no devuelve se
+ * escala una vez con su causa; no se reintenta.
+ */
+function respuestaConExtracto(
+  contexto: ContextoDeGuion,
+  apuntes: readonly ApunteDeExtracto[],
+  facturas: readonly FacturaParaNota[],
+): RespuestaDeGuion {
+  const informe = conciliarExtracto(apuntes, facturas);
+  const resultados = resultadosDe(contexto.prompt, HERRAMIENTA_ASIENTO);
+  const puedeEscribir = contexto.herramientas.includes(HERRAMIENTA_ASIENTO);
+
+  if (informe.asientos.length > 0 && puedeEscribir && resultados.length === 0) {
+    return {
+      texto: 'Dejo en borrador el asiento de las diferencias.',
+      llamadas: informe.asientos.map((asiento) => ({
+        herramienta: HERRAMIENTA_ASIENTO,
+        argumentos: {
+          apunte_id: asiento.apunte_id,
+          documento_id: asiento.documento_id,
+          importe_diferencia: asiento.importe_diferencia,
+          cuenta_contrapartida: asiento.cuenta_contrapartida,
+          motivo: asiento.motivo,
+          clave_idempotencia: `conciliacion-${asiento.apunte_id}-${asiento.documento_id}`,
+        },
+      })),
+      tokens: { entrada: 1300, salida: 200 },
+    };
+  }
+
+  const creados: AsientoDeDiferencia[] = [];
+  const escaladas = [...informe.escaladas];
+  informe.asientos.forEach((asiento, indice) => {
+    const id = borradorCreado(resultados[indice]);
+    if (id !== null) {
+      creados.push({ ...asiento, asiento_id: id });
+      return;
+    }
+    escaladas.push({
+      apunte_id: asiento.apunte_id,
+      causa: puedeEscribir ? 'asiento_no_creado' : 'sin_autorizacion',
+      motivo: puedeEscribir
+        ? `No he podido crear el borrador de ${importeLegible(asiento.importe_diferencia, 'EUR')}: lo revisa una persona.`
+        : 'No tengo autorizada la herramienta del asiento de diferencia: lo propone una persona.',
+    });
+  });
+
+  const final: InformeConExtracto = {
+    ...informe,
+    asientos: creados,
+    escaladas,
+    resumen: resumenDeExtracto(informe.casados, creados, escaladas),
+  };
+  return { texto: JSON.stringify(final), tokens: { entrada: 1600, salida: 260 } };
+}
+
+/** Identificador del borrador si el resultado es el del contrato; nulo en cualquier otro caso. */
+function borradorCreado(texto: string | undefined): string | null {
+  if (texto === undefined) return null;
+  try {
+    const salida = JSON.parse(texto) as { id?: unknown; estado?: unknown };
+    return salida.estado === 'borrador' && typeof salida.id === 'string' ? salida.id : null;
+  } catch {
+    return null;
+  }
+}

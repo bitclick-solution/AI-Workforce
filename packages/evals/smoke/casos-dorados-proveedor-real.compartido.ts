@@ -195,6 +195,12 @@ const decisionConciliacion = z.object({
 
 type DecisionConciliacion = z.infer<typeof decisionConciliacion>;
 
+/** Qué hace el puesto con un apunte del extracto que no tiene documento o es una devolución. */
+const decisionApunte = z.object({
+  proponerAsiento: z.boolean(),
+  escalar: z.boolean(),
+});
+
 interface MovimientoBancario {
   referencia: string;
   importeEuros: number;
@@ -271,5 +277,42 @@ export function registrarCasoDoradoConciliacion(proveedor: ProveedorRealCasosDor
       const resultadoEval = evaluarCasoDoradoEstructurado(caso, obtenido);
       expect(resultadoEval.superado, resultadoEval.diagnostico).toBe(true);
     }, 30_000);
+    // `conciliacion-002` con proveedor real: el modelo recibe un apunte del extracto
+    // y decide. Solo se compara lo categórico; el motivo de la escalada es texto libre.
+    it.each([
+      {
+        etiqueta: 'devolucion',
+        apunte: 'DEVOLUCION RECIBO CLIENTE DE PRUEBA, -318 €. Facturas candidatas: ninguna.',
+      },
+      {
+        etiqueta: 'sin-documento',
+        apunte: 'INGRESO SIN REFERENCIA, 77,77 €. Facturas candidatas: ninguna con ese importe.',
+      },
+    ])(
+      'escala sin proponer asiento: $etiqueta',
+      async ({ etiqueta, apunte }) => {
+        const caso = casoDoradoEstructurado({
+          id: `conciliacion-002-extracto-${etiqueta}-${proveedor.plataforma}-real`,
+          puesto: 'Conciliación',
+          entrada: { apunte },
+          esperado: { proponerAsiento: false, escalar: true },
+        });
+        const { resultado } = await puestoEnrutado(proveedor, ENRUTADO_CONCILIACION).completar({
+          clasePaso: 'conciliacion',
+          sistema:
+            'Eres el puesto Conciliación. Con un apunte del extracto decides si propones el asiento ' +
+            'de diferencia o lo escalas a una persona. Sin documento, o con una devolución de ' +
+            'recibo, nunca propones asiento: escalas.',
+          mensajes: [{ rol: 'user', contenido: apunte }],
+          esquemaSalida: decisionApunte,
+          maxTokens: 512,
+        });
+        expect(resultado.tipo).toBe('ok');
+        if (resultado.tipo !== 'ok' || resultado.salida === undefined) return;
+        const resultadoEval = evaluarCasoDoradoEstructurado(caso, resultado.salida);
+        expect(resultadoEval.superado, resultadoEval.diagnostico).toBe(true);
+      },
+      30_000,
+    );
   });
 }
