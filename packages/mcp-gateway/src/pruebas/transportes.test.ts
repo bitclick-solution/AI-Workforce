@@ -45,8 +45,14 @@ describe('transporte en memoria', () => {
     const conexion = await conectarPorMcp(transporte, NOMBRE_CONECTOR_DEMO);
 
     const herramientas = await conexion.listar();
+    // Las dos de cobros y las dos de conciliación bancaria.
     expect(herramientas.map((herramienta) => herramienta.nombre).sort()).toEqual(
-      [HERRAMIENTA_NOTA, HERRAMIENTA_LISTAR].sort(),
+      [
+        HERRAMIENTA_NOTA,
+        HERRAMIENTA_LISTAR,
+        'leer_extracto_bancario',
+        'proponer_asiento_diferencia',
+      ].sort(),
     );
     await conexion.cerrar();
   });
@@ -106,7 +112,7 @@ describe('transporte por HTTP transmisible', () => {
       );
 
       const herramientas = await conexion.listar();
-      expect(herramientas).toHaveLength(2);
+      expect(herramientas).toHaveLength(4);
 
       const resultado = await conexion.llamar(HERRAMIENTA_NOTA, {
         factura_id: 'inv-0002',

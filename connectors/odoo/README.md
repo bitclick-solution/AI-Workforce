@@ -45,7 +45,7 @@ Cuatro consecuencias en el adaptador, las cuatro cubiertas por prueba:
 
 `src/grabaciones/odoo-pruebas.json` usa la forma real de las cinco herramientas, con la envolvente `result` donde corresponde y datos inventados: `search_records` lleva además la forma con `records` para no romper la prueba que ya la cubría. `listar_facturas_vencidas` declara `annotations: { readOnlyHint: true }` en el catálogo del servidor (`src/servidor.ts`): sin ella, el gateway MCP tipa cualquier herramienta como escritura —lo más restrictivo por defecto— y pediría aprobación N1 hasta para leer las facturas vencidas.
 
-## Las dos herramientas
+## Las dos herramientas de cobros
 
 Mismo contrato que sirve `connectors/demo` en la prueba técnica del stack: el gateway cambia de servidor MCP sin tocar el agente ni el caso dorado.
 
@@ -57,6 +57,28 @@ Todo fallo sale como error MCP con `code`, `message` en español y `datos.motivo
 ### Idempotencia
 
 `clave_idempotencia` guarda junto a la nota la huella de los datos que la crearon. La misma clave con los mismos datos devuelve la misma nota; con datos distintos sale como `invalido`, en vez de devolver la nota vieja en silencio. Dos llamadas simultáneas con la misma clave esperan a la misma escritura y el ERP se escribe una vez. El almacén vive en el proceso y guarda 1000 claves, olvidando la más antigua al pasarlas; la garantía duradera entre reinicios es del flujo de Temporal y del gateway, que ya llevan clave por paso.
+
+## Conciliación bancaria
+
+Dos herramientas más, con el contrato de [`docs/specs/conector-conciliacion-herramientas-v0.md`](../../docs/specs/conector-conciliacion-herramientas-v0.md) (rebanada «Herramientas de conciliación bancaria en los conectores»). Los identificadores son **cadenas con el identificador nativo** (`"301"`), como en `connectors/factusol`; en Odoo son enteros positivos escritos como cadena y cualquier otra cosa sale `invalido` sin llegar al ERP.
+
+- `leer_extracto_bancario` (lectura). Entrada `{ cuenta_id?, desde?, hasta?, solo_sin_casar? (true), limite? (1–200, 50) }`; salida `{ apuntes: [{ id, cuenta_id, fecha, concepto, importe, moneda, casado, documento_id }], total }`, del más antiguo al más reciente. `hasta` anterior a `desde` sale `invalido`.
+- `proponer_asiento_diferencia` (escritura, **siempre borrador**). Entrada `{ apunte_id, documento_id, importe_diferencia, cuenta_contrapartida, motivo, clave_idempotencia? }`; salida `{ id, apunte_id, estado: 'borrador', creado_en }`. Nunca contabiliza: una persona publica el asiento en Odoo.
+
+### Mapeo con el MCP dinámico (v1.3.1)
+
+| Contrato                      | MCP dinámico / Odoo                                                                                                                                                                                                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `leer_extracto_bancario`      | `search_records { model: 'account.bank.statement.line', domain, fields, limit, order: 'date asc, id asc' }`. `cuenta_id` es el diario de banco (`journal_id`); `solo_sin_casar` es `is_reconciled = false`.                                                              |
+| `apunte.concepto`             | `payment_ref` (`false` en Odoo es cadena vacía). `importe` es `amount` con signo; `moneda`, el nombre de `currency_id`.                                                                                                                                                  |
+| `apunte.documento_id`         | `null` si no está casado. **Casado:** el asiento propio del apunte (`move_id`): Odoo no cuelga del apunte la factura casada. Pendiente de confirmar con el Probador sobre un extracto real.                                                                              |
+| `proponer_asiento_diferencia` | Lee el apunte, el documento (`account.move`), el diario (`default_account_id`) y la cuenta por su **código** (`account.account.code`); después `preview_write` → `validate_write` → `execute_approved_write` de un `account.move` (`move_type: 'entry'`) con dos líneas. |
+
+El asiento lleva el banco y la contrapartida: una diferencia positiva (el banco recibió más que el documento) va al debe del banco y al haber de la contrapartida; una negativa, al revés. No lleva `state` ni se llama a `action_post`: un `create` de Odoo deja el asiento en borrador. Una prueba comprueba que las únicas llamadas son `search_records`, `preview_write`, `validate_write` y `execute_approved_write`. Un apunte, documento o cuenta que no existen salen `no_encontrada` antes de escribir.
+
+La idempotencia, los cuatro motivos de error y el recorte del detalle nativo son los de las herramientas de cobros (`src/conciliacion.ts` repite el mecanismo de `src/herramientas.ts` sin tocarlo).
+
+Las grabaciones de `src/grabaciones/odoo-pruebas.json` llevan la forma real (envolvente `result`) con datos inventados, pero **no se han contrastado con un extracto real**: la empresa de pruebas de Odoo no tenía extractos importados al construir esta rebanada. La verificación real de `leer_extracto_bancario` y de la escritura la hará el Probador cuando Jesús importe un extracto ficticio (ver «Pruebas»).
 
 ## Cómo se lanza
 
@@ -91,5 +113,5 @@ CI=1 pnpm --filter @aiw/connector-odoo test
 ```
 
 - Unitarias de esquemas, mapeo de campos de Odoo, motivos de error e idempotencia: corren siempre.
-- De contrato: contra la instancia de pruebas de Odoo cuando están las cuatro variables de entorno, y contra las respuestas grabadas de `src/grabaciones/` cuando no, que es lo que pasa en la CI. Sin entorno se saltan con un mensaje que dice qué falta, igual que las pruebas de base de datos sin `DATABASE_URL`. Para probar también la escritura contra el ERP real, añade `ODOO_FACTURA_PRUEBA` con el identificador de una factura de pruebas.
+- De contrato: contra la instancia de pruebas de Odoo cuando están las cuatro variables de entorno, y contra las respuestas grabadas de `src/grabaciones/` cuando no, que es lo que pasa en la CI. Sin entorno se saltan con un mensaje que dice qué falta, igual que las pruebas de base de datos sin `DATABASE_URL`. Para probar también la escritura contra el ERP real, añade `ODOO_FACTURA_PRUEBA` con el identificador de una factura de pruebas. Las de conciliación se saltan sin un extracto importado: `leer_extracto_bancario` solo necesita las cuatro variables y apuntes sin casar; el borrador de asiento necesita además `ODOO_APUNTE_PRUEBA`, `ODOO_DOCUMENTO_PRUEBA` y `ODOO_CONTRAPARTIDA_PRUEBA` (código de cuenta). `src/contrato-comun.test.ts` compara la forma del contrato con `connectors/demo`.
 - Las grabaciones llevan datos inventados; una prueba comprueba que no hay correos, teléfonos ni documentos de identidad dentro.

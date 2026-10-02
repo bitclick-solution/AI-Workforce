@@ -31,7 +31,20 @@ export type { ConfiguracionOdoo } from './entorno.js';
 export { CODIGO_POR_MOTIVO, ErrorConector, MOTIVOS, motivoDeMensaje } from './errores.js';
 export type { Motivo } from './errores.js';
 export * from './esquemas.js';
-export { ESQUEMA_ENTRADA_LISTAR, ESQUEMA_ENTRADA_NOTA } from './esquema-json.js';
+export * from './esquemas-conciliacion.js';
+export {
+  ESQUEMA_ENTRADA_ASIENTO,
+  ESQUEMA_ENTRADA_EXTRACTO,
+  ESQUEMA_ENTRADA_LISTAR,
+  ESQUEMA_ENTRADA_NOTA,
+} from './esquema-json.js';
+export {
+  NOMBRES_CONCILIACION,
+  almacenAsientosEnMemoria,
+  crearHerramientasConciliacion,
+  huellaDeAsiento,
+} from './conciliacion.js';
+export type { HerramientasConciliacion } from './conciliacion.js';
 export { NOMBRES, almacenEnMemoria, crearHerramientas, fechaDeCorte } from './herramientas.js';
 export { esProcesoPrincipal } from './proceso.js';
 export type { Herramientas } from './herramientas.js';

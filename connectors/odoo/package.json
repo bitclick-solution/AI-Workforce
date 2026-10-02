@@ -28,6 +28,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@aiw/connector-demo": "workspace:*",
     "@types/node": "catalog:",
     "tsup": "catalog:",
     "tsx": "catalog:",
