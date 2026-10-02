@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { proponerContratacion } from '../src/director.js';
 import {
   CASO_DIRECTOR,
+  CASO_DIRECTOR_MODELO,
   FRASE_DEL_CASO,
+  FRASE_PARAFRASEADA_DEL_CASO,
+  ejecutarCasoDirectorConModelo,
   ORGANIZACION_DEL_CASO,
   ejecutarCasoDirector,
   evaluarPropuesta,
@@ -58,5 +61,21 @@ describe('evals de humo · Director de IA', () => {
     const resultado = evaluarPropuesta(sinPrueba);
     expect(resultado.diagnostico).toContain('no arranca en prueba');
     expect(resultado.diagnostico).toContain('nivel n3');
+  });
+});
+
+/** Caso dorado del paso de modelo del Director, con sus contraejemplos. */
+describe('evals de humo · Director de IA con paso de modelo', () => {
+  it('la frase parafraseada produce la misma propuesta gobernada y lo que no encaja se aclara', async () => {
+    expect(proponerContratacion(FRASE_PARAFRASEADA_DEL_CASO, ORGANIZACION_DEL_CASO).tipo).toBe('aclaracion');
+    const resultado = await ejecutarCasoDirectorConModelo();
+    expect(resultado.diagnostico).toBe(`${CASO_DIRECTOR_MODELO}: superado`);
+  });
+
+  it('falla si el modelo no está disponible y la frase no se entiende', async () => {
+    const resultado = await ejecutarCasoDirectorConModelo((() =>
+      Promise.reject(new Error('proveedor caído'))) as never);
+    expect(resultado.superado).toBe(false);
+    expect(resultado.diagnostico).toContain('no hay propuesta');
   });
 });

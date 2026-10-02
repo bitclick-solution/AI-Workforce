@@ -15,15 +15,24 @@ import {
   type Guion,
 } from '../proveedor-prueba.js';
 import { guionCobros } from './cobros.js';
+import {
+  MODELO_PRUEBA_DIRECTOR,
+  MODELO_PRUEBA_MODERADOR,
+  guionDirector,
+  guionModerador,
+} from './sala.js';
 import { MODELO_PRUEBA_CONCILIACION, guionConciliacion } from './conciliacion.js';
 
 export * from './cobros.js';
 export * from './conciliacion.js';
+export * from './sala.js';
 
 /** Guion de cada modelo del proveedor de prueba. */
 export const GUIONES_DE_PRUEBA: Readonly<Record<string, Guion>> = {
   [MODELO_PRUEBA]: guionCobros,
   [MODELO_PRUEBA_CONCILIACION]: guionConciliacion,
+  [MODELO_PRUEBA_MODERADOR]: guionModerador,
+  [MODELO_PRUEBA_DIRECTOR]: guionDirector,
 };
 
 export class GuionNoRegistrado extends Error {

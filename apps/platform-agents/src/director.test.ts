@@ -1,10 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import {
+  INTENTOS_DE_CLASIFICACION,
+  type PeticionDeClasificacion,
+  type PuertoDeClasificacion,
+  type RespuestaDeClasificacion,
+} from '@aiw/rooms';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   CATALOGO,
   POLITICA_OPERACIONES,
+  PROMPT_DEL_DIRECTOR,
   elegirPlantilla,
   proponerContratacion,
+  proponerContratacionConModelo,
   type ContextoDelDirector,
 } from './director';
 
@@ -123,5 +131,124 @@ describe('Director de IA v0 · contratar desde una frase', () => {
     const respuesta = proponerContratacion(FRASE, CONTEXTO, CATALOGO, prohibida);
     expect(respuesta.tipo).toBe('aclaracion');
     expect(respuesta.mensaje).toContain('política');
+  });
+});
+
+describe('Director de IA · paso de modelo en la sala de un departamento', () => {
+  const PARAFRASIS = 'queremos que alguien pase los movimientos del banco contra las facturas';
+
+  function puerto(salida: unknown, costeEuros = 0.004) {
+    return vi.fn(
+      (_peticion: PeticionDeClasificacion<unknown>): Promise<RespuestaDeClasificacion> =>
+        Promise.resolve({ salida, costeEuros, modelo: 'prueba' }),
+    ) as unknown as PuertoDeClasificacion & ReturnType<typeof vi.fn>;
+  }
+
+  it('la frase parafraseada produce la misma propuesta que la fija: misma plantilla y departamento', async () => {
+    const fija = proponerContratacion(FRASE, CONTEXTO);
+    const clasificador = puerto({
+      plantillaId: 'finanzas.conciliacion-bancaria',
+      departamentoId: null,
+      motivo: 'Pide conciliar.',
+    });
+    expect(elegirPlantilla(PARAFRASIS)).toBeUndefined();
+    const { respuesta, pasoDeModelo } = await proponerContratacionConModelo(PARAFRASIS, CONTEXTO, {
+      ambito: 'departamento',
+      clasificador,
+    });
+    expect(respuesta.tipo).toBe('propuesta');
+    if (respuesta.tipo !== 'propuesta' || fija.tipo !== 'propuesta') return;
+    expect(respuesta.propuesta.plantilla).toEqual(fija.propuesta.plantilla);
+    expect(respuesta.propuesta.departamento).toEqual(fija.propuesta.departamento);
+    // Pasa por el mismo `decidirPaso`: el mismo nivel y el mismo motivo.
+    expect(respuesta.propuesta.nivelExigido).toBe(fija.propuesta.nivelExigido);
+    expect(respuesta.propuesta.motivoNivel).toBe(fija.propuesta.motivoNivel);
+    expect(pasoDeModelo).toMatchObject({
+      usado: true,
+      resultado: 'plantilla',
+      costeEuros: 0.004,
+      version: PROMPT_DEL_DIRECTOR.version,
+    });
+  });
+
+  it('el departamento que elige el modelo manda sobre el habitual de la plantilla', async () => {
+    const { respuesta } = await proponerContratacionConModelo(
+      PARAFRASIS,
+      CONTEXTO,
+      {
+        ambito: 'departamento',
+        clasificador: puerto({
+          plantillaId: 'finanzas.conciliacion-bancaria',
+          departamentoId: 'd-ven',
+          motivo: 'Lo pide para Ventas.',
+        }),
+      },
+    );
+    expect(respuesta.tipo === 'propuesta' && respuesta.propuesta.departamento.id).toBe('d-ven');
+  });
+
+  it('una frase que no encaja con nada es una aclaración, no una propuesta inventada', async () => {
+    const { respuesta, pasoDeModelo } = await proponerContratacionConModelo(
+      '¿cómo cambio de plan?',
+      CONTEXTO,
+      {
+        ambito: 'departamento',
+        clasificador: puerto({ plantillaId: 'ninguno', departamentoId: null, motivo: 'Es soporte.' }),
+      },
+    );
+    expect(respuesta.tipo).toBe('aclaracion');
+    expect(respuesta.tipo === 'aclaracion' && respuesta.mensaje).toContain('No encuentro');
+    expect(pasoDeModelo).toMatchObject({ usado: true, resultado: 'ninguna' });
+  });
+
+  it.each([
+    ['una plantilla inventada', { plantillaId: 'finanzas.inventada', departamentoId: null }],
+    [
+      'un departamento inventado',
+      { plantillaId: 'finanzas.conciliacion-bancaria', departamentoId: 'd-inventado' },
+    ],
+  ])('%s es un fallo de esquema: ni propuesta ni aclaración con datos inventados', async (_n, parte) => {
+    const clasificador = puerto({ ...parte, motivo: 'Eso.' });
+    const { respuesta, pasoDeModelo } = await proponerContratacionConModelo(PARAFRASIS, CONTEXTO, {
+      ambito: 'departamento',
+      clasificador,
+    });
+    expect(respuesta.tipo).toBe('aclaracion');
+    expect(pasoDeModelo).toMatchObject({ usado: true, resultado: 'no_disponible' });
+    expect(clasificador).toHaveBeenCalledTimes(INTENTOS_DE_CLASIFICACION);
+  });
+
+  it('un fallo del modelo deja la misma aclaración que sin modelo', async () => {
+    const sinModelo = proponerContratacion(PARAFRASIS, CONTEXTO);
+    const roto = vi.fn(() => Promise.reject(new Error('503'))) as unknown as PuertoDeClasificacion;
+    const { respuesta, pasoDeModelo } = await proponerContratacionConModelo(PARAFRASIS, CONTEXTO, {
+      ambito: 'departamento',
+      clasificador: roto,
+    });
+    expect(respuesta).toEqual(sinModelo);
+    expect(pasoDeModelo).toMatchObject({ usado: true, resultado: 'no_disponible', costeEuros: 0 });
+  });
+
+  it('la sala general y las reglas que ya aciertan no llaman al modelo', async () => {
+    const clasificador = puerto({ plantillaId: 'ninguno', departamentoId: null, motivo: 'x' });
+    const general = await proponerContratacionConModelo(PARAFRASIS, CONTEXTO, {
+      ambito: 'organizacion',
+      clasificador,
+    });
+    expect(general.pasoDeModelo).toEqual({ usado: false, razon: 'sala_general' });
+    expect(general.respuesta.tipo).toBe('aclaracion');
+    const fija = await proponerContratacionConModelo(FRASE, CONTEXTO, {
+      ambito: 'departamento',
+      clasificador,
+    });
+    expect(fija.pasoDeModelo).toEqual({ usado: false, razon: 'reglas_decidieron' });
+    expect(fija.respuesta.tipo).toBe('propuesta');
+    expect(clasificador).not.toHaveBeenCalled();
+  });
+
+  it('el prompt es dato versionado: solo clasifica entre lo dado y no lleva credenciales', () => {
+    expect(PROMPT_DEL_DIRECTOR.version).toBeGreaterThan(0);
+    expect(PROMPT_DEL_DIRECTOR.sistema).toContain('Nunca inventes una plantilla');
+    expect(PROMPT_DEL_DIRECTOR.sistema).not.toMatch(/sk-|AKIA|token|secret|password/i);
   });
 });

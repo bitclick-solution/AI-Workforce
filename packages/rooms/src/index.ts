@@ -17,6 +17,8 @@ export type Paquete = typeof PAQUETE;
 
 // Sala v0
 export * from './moderador.js';
+export * from './clasificacion.js';
+export * from './moderador-modelo.js';
 export * from './sala.js';
 
 // Sala v1: presencia en vivo (ADR-022)

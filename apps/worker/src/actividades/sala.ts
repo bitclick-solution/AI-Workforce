@@ -11,9 +11,9 @@
  */
 import { uuidV7 } from '@aiw/db';
 import { anotar } from '@aiw/ledger';
-import { proponerContratacion, type PropuestaDeContratacion } from '@aiw/platform-agents';
+import { proponerContratacionConModelo, type PropuestaDeContratacion } from '@aiw/platform-agents';
 import {
-  moderar,
+  moderarConModelo,
   type AdjuntoDeSala,
   type DecisionDelModerador,
   type ParticipanteDeSala,
@@ -21,6 +21,8 @@ import {
 import { ApplicationFailure } from '@temporalio/activity';
 import type postgres from 'postgres';
 
+import { MODELO_PRUEBA_DIRECTOR, MODELO_PRUEBA_MODERADOR } from '@aiw/models';
+import { crearClasificadorDeSala } from './clasificacion.js';
 import { enTenant, type ContextoDeActividades } from './contexto.js';
 
 /** Nombres de acción del libro. Dominio y acción en pasado (ADR-014). */
@@ -319,7 +321,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
       texto: string;
       notaId: string;
     }): Promise<DecisionRegistrada> {
-      return enTenant(contexto, peticion.tenantId, async (tx) => {
+      const lectura = await enTenant(contexto, peticion.tenantId, async (tx) => {
         const [previa] = await tx<{ adjuntos: unknown }[]>`
           select adjuntos from mensaje where tenant_id = ${peticion.tenantId} and id = ${peticion.notaId}
         `;
@@ -327,9 +329,13 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
           const guardada = (previa.adjuntos as { tipo: string; decisionCompleta?: unknown }[]).find(
             (a) => a.tipo === 'moderacion',
           );
-          return { decision: guardada?.decisionCompleta as DecisionDelModerador, yaEstaba: true };
+          return { yaEstaba: true as const, decision: guardada?.decisionCompleta as DecisionDelModerador };
         }
 
+        const [sala] = await tx<{ ambito: string }[]>`
+          select ambito::text as ambito from sala
+          where tenant_id = ${peticion.tenantId} and id = ${peticion.salaId}
+        `;
         const filas = await tx<{ id: string; nombre: string; estado: string; ficha: unknown }[]>`
           select p.id, p.nombre, p.estado, p.ficha
           from sala_participante sp
@@ -343,10 +349,29 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
           estado: fila.estado,
           temas: temasDeLaFicha(fila.ficha, fila.nombre),
         }));
-        const decision = moderar(peticion.texto, participantes);
-        const puestos =
-          decision.tipo === 'intervenir' ? decision.turnos.map((t) => t.puestoId) : [];
+        return { yaEstaba: false as const, ambito: sala?.ambito ?? '', participantes };
+      });
+      if (lectura.yaEstaba) return { decision: lectura.decision, yaEstaba: true };
 
+      // El paso de modelo corre fuera de la transacción: no se retiene una conexión
+      // mientras se espera al proveedor. Un reintento tras esta llamada la repite, pero
+      // solo cobra la que queda anotada en el libro (la de la escritura de abajo).
+      const { decision, pasoDeModelo } = await moderarConModelo(peticion.texto, lectura.participantes, {
+        ambito: lectura.ambito,
+        clasificador: crearClasificadorDeSala(contexto, {
+          tenantId: peticion.tenantId,
+          mensajeId: peticion.mensajeId,
+          papel: 'haiku45',
+          clasePaso: 'moderador_sala',
+          modeloDePrueba: MODELO_PRUEBA_MODERADOR,
+        }),
+      });
+      const puestos = decision.tipo === 'intervenir' ? decision.turnos.map((t) => t.puestoId) : [];
+      // Coste de sala visible aparte (ADR-004): lo que costó el paso de modelo, o cero
+      // cuando decidieron las reglas, que no gastan modelo.
+      const costeEuros = pasoDeModelo.usado ? pasoDeModelo.costeEuros : 0;
+
+      return enTenant(contexto, peticion.tenantId, async (tx) => {
         await insertarMensaje(contexto, tx, peticion.tenantId, {
           id: peticion.notaId,
           salaId: peticion.salaId,
@@ -359,6 +384,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
               decision: decision.tipo,
               puestos,
               motivo: decision.motivo,
+              pasoDeModelo,
               decisionCompleta: decision,
             } as AdjuntoDeSala,
           ],
@@ -372,9 +398,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
             ...puestos.map((id) => ({ tipo: 'puesto', id })),
           ],
           resultado: 'exito',
-          // El moderador v0 decide con reglas: no gasta modelo. Su presupuesto propio
-          // (ADR-004) queda intacto y el coste de sala se ve aparte, en cero.
-          costeEuros: 0,
+          costeEuros,
         });
         return { decision, yaEstaba: false };
       });
@@ -515,18 +539,25 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
       propuestaId: string;
       respuestaId: string;
     }): Promise<{ propuestaId: string | null; caducidadSegundos: number }> {
-      return enTenant(contexto, peticion.tenantId, async (tx) => {
+      const lectura = await enTenant(contexto, peticion.tenantId, async (tx) => {
         const [previa] = await tx<{ id: string; efectos_previstos: { caducidadDias?: number } }[]>`
           select id, efectos_previstos from propuesta_operacion
           where tenant_id = ${peticion.tenantId} and id = ${peticion.propuestaId}
         `;
         if (previa) {
           return {
-            propuestaId: previa.id,
-            caducidadSegundos: (previa.efectos_previstos.caducidadDias ?? 7) * SEGUNDOS_POR_DIA,
+            yaEstaba: true as const,
+            resultado: {
+              propuestaId: previa.id,
+              caducidadSegundos: (previa.efectos_previstos.caducidadDias ?? 7) * SEGUNDOS_POR_DIA,
+            },
           };
         }
 
+        const [sala] = await tx<{ ambito: string }[]>`
+          select ambito::text as ambito from sala
+          where tenant_id = ${peticion.tenantId} and id = ${peticion.salaId}
+        `;
         const departamentos = await tx<{ id: string; nombre: string; estado: string }[]>`
           select id, nombre, estado from departamento where tenant_id = ${peticion.tenantId}
         `;
@@ -556,7 +587,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
           where c.tenant_id = ${peticion.tenantId} and c.estado = 'activo'
           order by c.nombre
         `;
-        const respuesta = proponerContratacion(peticion.texto, {
+        const contextoDelDirector = {
           departamentos: departamentos.map((d) => ({ ...d })),
           puestos: puestos.map((p) => ({
             id: p.id,
@@ -570,8 +601,29 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
             nombre: c.nombre,
             herramientasAutorizadas: c.herramientas ?? [],
           })),
-        });
+        };
+        return { yaEstaba: false as const, ambito: sala?.ambito ?? '', contextoDelDirector };
+      });
+      if (lectura.yaEstaba) return lectura.resultado;
 
+      // El paso de modelo corre fuera de la transacción (ver `moderarMensaje`).
+      const { respuesta, pasoDeModelo } = await proponerContratacionConModelo(
+        peticion.texto,
+        lectura.contextoDelDirector,
+        {
+          ambito: lectura.ambito,
+          clasificador: crearClasificadorDeSala(contexto, {
+            tenantId: peticion.tenantId,
+            mensajeId: peticion.mensajeId,
+            papel: 'sonnet5',
+            clasePaso: 'enrutado',
+            modeloDePrueba: MODELO_PRUEBA_DIRECTOR,
+          }),
+        },
+      );
+      const costeEuros = pasoDeModelo.usado ? pasoDeModelo.costeEuros : 0;
+
+      return enTenant(contexto, peticion.tenantId, async (tx) => {
         const autor: AdjuntoDeSala = { tipo: 'autor_plataforma', agente: 'director_ia' };
         if (respuesta.tipo === 'aclaracion') {
           const insertado = await insertarMensaje(contexto, tx, peticion.tenantId, {
@@ -589,6 +641,8 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
                 { tipo: 'mensaje', id: peticion.respuestaId },
               ],
               resultado: 'exito',
+              // El coste del paso de modelo no se pierde si acaba en aclaración.
+              costeEuros,
             });
           }
           return { propuestaId: null, caducidadSegundos: 0 };
@@ -605,7 +659,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
             ${JSON.stringify(propuesta.entidadesTocadas)}::text::jsonb,
             ${JSON.stringify(propuesta)}::text::jsonb,
             ${propuesta.coste.eurosMesCliente},
-            ${JSON.stringify({ frase: peticion.texto, mensajeId: peticion.mensajeId, personaId: peticion.personaId, salaId: peticion.salaId })}::text::jsonb,
+            ${JSON.stringify({ frase: peticion.texto, mensajeId: peticion.mensajeId, personaId: peticion.personaId, salaId: peticion.salaId, pasoDeModelo })}::text::jsonb,
             ${propuesta.nivelExigido}, 'pendiente',
             ${JSON.stringify(propuesta.reversion)}::text::jsonb
           )
@@ -620,6 +674,7 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
           ],
           resultado: 'exito',
           nivelAplicado: propuesta.nivelExigido,
+          costeEuros,
         });
         await insertarMensaje(contexto, tx, peticion.tenantId, {
           id: peticion.respuestaId,

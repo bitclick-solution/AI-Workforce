@@ -11,12 +11,22 @@
 import type { ResultadoEval } from '@aiw/evals';
 
 import {
+  MODELO_PRUEBA_DIRECTOR,
+  clasificadorDePrueba,
+  guionDirector,
+} from '@aiw/models';
+import type { PuertoDeClasificacion } from '@aiw/rooms';
+
+import {
   proponerContratacion,
+  proponerContratacionConModelo,
   type ContextoDelDirector,
   type RespuestaDelDirector,
 } from './director.js';
 
 export const CASO_DIRECTOR = 'director-contratar-001';
+
+export const CASO_DIRECTOR_MODELO = 'director-contratar-modelo-001';
 
 export const FRASE_DEL_CASO = 'contrata un agente de conciliación en Finanzas';
 
@@ -32,9 +42,14 @@ export const ORGANIZACION_DEL_CASO: ContextoDelDirector = {
   ],
 };
 
+/** Misma contratación pedida con otras palabras que los sinónimos de la plantilla. */
+export const FRASE_PARAFRASEADA_DEL_CASO =
+  'queremos que alguien pase los movimientos del banco contra las facturas en Finanzas';
+
 export function evaluarPropuesta(
   respuesta: RespuestaDelDirector,
   organizacion: ContextoDelDirector = ORGANIZACION_DEL_CASO,
+  id: string = CASO_DIRECTOR,
 ): ResultadoEval {
   const fallos: string[] = [];
   if (respuesta.tipo !== 'propuesta') {
@@ -69,14 +84,50 @@ export function evaluarPropuesta(
     }
   }
   return {
-    id: CASO_DIRECTOR,
+    id,
     superado: fallos.length === 0,
     puntuacion: fallos.length === 0 ? 1 : 0,
-    diagnostico:
-      fallos.length === 0 ? `${CASO_DIRECTOR}: superado` : `${CASO_DIRECTOR}: ${fallos.join('; ')}`,
+    diagnostico: fallos.length === 0 ? `${id}: superado` : `${id}: ${fallos.join('; ')}`,
   };
 }
 
 export function ejecutarCasoDirector(): ResultadoEval {
   return evaluarPropuesta(proponerContratacion(FRASE_DEL_CASO, ORGANIZACION_DEL_CASO));
+}
+
+export function clasificadorDelCaso(): PuertoDeClasificacion {
+  return clasificadorDePrueba(MODELO_PRUEBA_DIRECTOR, guionDirector) as PuertoDeClasificacion;
+}
+
+/**
+ * Caso dorado del paso de modelo: la frase parafraseada, en la sala de un
+ * departamento, produce la misma propuesta gobernada que la frase fija, y lo que no
+ * encaja con el catálogo sigue siendo una aclaración.
+ */
+export async function ejecutarCasoDirectorConModelo(
+  clasificador: PuertoDeClasificacion = clasificadorDelCaso(),
+): Promise<ResultadoEval> {
+  const { respuesta, pasoDeModelo } = await proponerContratacionConModelo(
+    FRASE_PARAFRASEADA_DEL_CASO,
+    ORGANIZACION_DEL_CASO,
+    { ambito: 'departamento', clasificador },
+  );
+  const resultado = evaluarPropuesta(respuesta, ORGANIZACION_DEL_CASO, CASO_DIRECTOR_MODELO);
+  const fallos: string[] = resultado.superado ? [] : [resultado.diagnostico];
+  if (!pasoDeModelo.usado) fallos.push('no se dio el paso de modelo');
+  if (respuesta.tipo === 'propuesta' && respuesta.propuesta.plantilla.id !== 'finanzas.conciliacion-bancaria') {
+    fallos.push(`plantilla ${respuesta.propuesta.plantilla.id}`);
+  }
+  const soporte = await proponerContratacionConModelo('¿cómo cambio de plan?', ORGANIZACION_DEL_CASO, {
+    ambito: 'departamento',
+    clasificador,
+  });
+  if (soporte.respuesta.tipo !== 'aclaracion') fallos.push('una pregunta de producto no es una aclaración');
+  return {
+    id: CASO_DIRECTOR_MODELO,
+    superado: fallos.length === 0,
+    puntuacion: fallos.length === 0 ? 1 : 0,
+    diagnostico:
+      fallos.length === 0 ? `${CASO_DIRECTOR_MODELO}: superado` : `${CASO_DIRECTOR_MODELO}: ${fallos.join('; ')}`,
+  };
 }

@@ -67,6 +67,15 @@ Sin endpoints nuevos, sin tablas nuevas, sin migración. Reutiliza el flujo `men
 
 Presupuesto: 40 €. Comparado con `sala-v0.md` (40 €, mismo tipo de rebanada de plataforma con dos agentes puros) y con el trabajo añadido de escribir y afinar dos prompts de sistema de zona crítica con sus casos dorados. Consumo real: se registra en la rebanada al abrir el PR. Superar el presupuesto en un 50 % pasa la rebanada a Bloqueada con diagnóstico.
 
+## Decisiones de construcción (Constructor, 2-10-2026)
+
+Lo que la especificación no fijaba y el código obligó a decidir:
+
+1. **El moderador devuelve además `pideOperacion`.** Sin él, el Director con modelo tendría que correr (con `sonnet5`) tras cada mensaje sin tema de cada sala de departamento. La bandera solo encamina al Director, que sigue decidiendo plantilla y departamento; no elige puestos ni redacta.
+2. **El coste va a `entrada_auditoria.coste_euros`, no a `uso_modelo`.** `registrarUsoDeModelo` y la tabla `uso_modelo` exigen tarea, puesto y versión de puesto (`not null`): una llamada «sin puesto de negocio» no cabe sin migración, y las migraciones y el contador son zona crítica. El coste se calcula con `tarifaVigente` y `calcularCosteEuros` y no suma a ningún contador de tareas. Pendiente de decidir: si el consumo de plataforma debe vivir también en `uso_modelo` (migración).
+3. **El proveedor de prueba cobra solo si hay tarifa registrada** para su guion (`deterministico-moderador`, `deterministico-director`). Sin ella cuesta 0, así que la demo local sigue siendo gratis.
+4. **Límite conocido:** si un proveedor real devuelve una salida fuera de esquema, el adaptador de Anthropic lanza antes de devolver los tokens y esa llamada no queda anotada. El esquema estricto ya restringe la salida en el proveedor; la validación local es la segunda defensa.
+
 ## Pregunta abierta
 
 Ninguna: el alcance queda acotado por las decisiones 1 y 4 de arriba, ya contrastadas con las fichas de «Disparadores gobernados por puesto» y «Ayuda en producto por el Director de IA».
