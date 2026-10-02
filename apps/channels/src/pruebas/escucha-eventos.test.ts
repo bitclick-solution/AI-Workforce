@@ -24,6 +24,8 @@ import {
 import type postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import type { CorreoSaliente, PuertoDeCorreo, ResultadoEnvio } from '@aiw/domain';
+
 import { leerConfiguracion, type ConfiguracionAprobacion } from '../aprobacion/configuracion.js';
 import {
   escucharEventosDeAprobacion,
@@ -34,6 +36,24 @@ import { CorreoEnMemoria } from '../correo/memoria.js';
 import { SenalEnMemoria } from '../senal/memoria.js';
 
 import { CorreoQueFalla, sinDormir } from './dobles.js';
+
+/** Correo que tarda: para comprobar que dos vueltas de sondeo no se solapan. */
+class CorreoLento implements PuertoDeCorreo {
+  readonly enviados: CorreoSaliente[] = [];
+  maximoConcurrente = 0;
+  #enVuelo = 0;
+
+  constructor(private readonly retardoMs: number) {}
+
+  async enviar(correo: CorreoSaliente): Promise<ResultadoEnvio> {
+    this.#enVuelo += 1;
+    this.maximoConcurrente = Math.max(this.maximoConcurrente, this.#enVuelo);
+    await new Promise((resolver) => setTimeout(resolver, this.retardoMs));
+    this.#enVuelo -= 1;
+    this.enviados.push(correo);
+    return { id: `lento-${this.enviados.length}`, proveedor: 'prueba' };
+  }
+}
 
 const TITULO = HAY_BASE_DE_DATOS
   ? 'escucha de la salida transaccional de eventos'
@@ -167,6 +187,37 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(TITULO, () => {
       });
       try {
         await new Promise((resolver) => setTimeout(resolver, 150));
+        expect(await pendientesDe(org.tenantId)).toBe(0);
+      } finally {
+        escucha.parar();
+      }
+    });
+
+    it('una vuelta lenta no deja que otra se solape: el correo sale una sola vez', async () => {
+      const correo = new CorreoLento(120);
+      const servicio = new ServicioDeAprobacion({
+        cliente,
+        configuracion: configuracion(),
+        correo,
+        senal: new SenalEnMemoria(),
+        dormir: sinDormir,
+      });
+      await pedirPermiso(org);
+
+      // El sondeo (cada 20 ms) dispara varias veces mientras la primera vuelta
+      // sigue mandando el correo (120 ms): sin la guarda contra solapes, cada
+      // tick volvería a leer el mismo evento todavía «pendiente» y lo mandaría
+      // otra vez.
+      const escucha = escucharEventosDeAprobacion({
+        cliente,
+        servicio,
+        tenantIds: [org.tenantId],
+        intervaloMs: 20,
+      });
+      try {
+        await new Promise((resolver) => setTimeout(resolver, 300));
+        expect(correo.enviados).toHaveLength(1);
+        expect(correo.maximoConcurrente).toBe(1);
         expect(await pendientesDe(org.tenantId)).toBe(0);
       } finally {
         escucha.parar();

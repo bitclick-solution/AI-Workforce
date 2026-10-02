@@ -75,21 +75,27 @@ export interface EscuchaEnMarcha {
 /**
  * Arranca el sondeo periódico. Un tenant que falla no bloquea a los demás; el
  * temporizador sigue en marcha hasta `parar()`.
+ *
+ * Una vuelta en marcha salta la siguiente del mismo tenant: sin esto, un lote que
+ * tarda más que `intervaloMs` deja que dos vueltas lean el mismo evento
+ * `pendiente` antes de que la primera lo marque, y lo manden dos veces.
  */
 export function escucharEventosDeAprobacion(opciones: OpcionesEscucha): EscuchaEnMarcha {
   const intervaloMs = opciones.intervaloMs ?? 5000;
   const alFallar = opciones.alFallar ?? (() => undefined);
+  const enMarcha = new Set<string>();
 
   const temporizador = setInterval(() => {
     for (const tenantId of opciones.tenantIds) {
-      procesarEventosDeAprobacion(
-        opciones.cliente,
-        opciones.servicio,
-        tenantId,
-        opciones.limite,
-      ).catch((error: unknown) => {
-        alFallar(tenantId, error);
-      });
+      if (enMarcha.has(tenantId)) continue;
+      enMarcha.add(tenantId);
+      procesarEventosDeAprobacion(opciones.cliente, opciones.servicio, tenantId, opciones.limite)
+        .catch((error: unknown) => {
+          alFallar(tenantId, error);
+        })
+        .finally(() => {
+          enMarcha.delete(tenantId);
+        });
     }
   }, intervaloMs);
   temporizador.unref();
