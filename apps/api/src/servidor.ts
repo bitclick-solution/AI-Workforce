@@ -43,6 +43,7 @@ import {
   puertoInicio,
   type PuertoInicio,
 } from './rutas/inicio.js';
+import { atenderExpediente, puertoExpediente, type PuertoExpediente } from './rutas/expediente.js';
 import { atenderPerfil, puertoPerfilConBaseDeDatos, type PuertoPerfil } from './rutas/perfil.js';
 import {
   atenderSala,
@@ -62,6 +63,8 @@ export interface OpcionesServidor {
   puertoSala?: PuertoSala | undefined;
   /** Puerto del inicio ya construido. Solo para pruebas. */
   puertoInicio?: PuertoInicio | undefined;
+  /** Puerto del expediente por agente ya construido. Solo para pruebas. */
+  puertoExpediente?: PuertoExpediente | undefined;
   /** Resolutor de sesión ya construido. Solo para pruebas: si falta, sale del acceso. */
   resolverSesion?: ResolutorDeSesion | undefined;
   /** Puerto del perfil ya construido. Solo para pruebas. */
@@ -247,6 +250,16 @@ export function crearApi(opciones: OpcionesServidor = {}): {
         { metodo: peticion.method, url: peticion.url, cabeceras: peticion.headers, cuerpo },
         configuracionInicio,
         puerto,
+        resolverSesion,
+      ),
+    );
+    // Expediente por agente: pantalla del Inicio, solo lectura, misma bandera.
+    const puertoDelExpediente = opciones.puertoExpediente ?? puertoExpediente(conexion.cliente);
+    manejadores.push((peticion) =>
+      atenderExpediente(
+        { metodo: peticion.method, url: peticion.url, cabeceras: peticion.headers },
+        true,
+        puertoDelExpediente,
         resolverSesion,
       ),
     );

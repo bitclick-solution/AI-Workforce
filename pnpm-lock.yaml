@@ -152,6 +152,9 @@ importers:
       '@aiw/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@aiw/learning':
+        specifier: workspace:*
+        version: link:../../packages/learning
       '@aiw/ledger':
         specifier: workspace:*
         version: link:../../packages/ledger

@@ -17,6 +17,7 @@
   "dependencies": {
     "@aiw/db": "workspace:*",
     "@aiw/domain": "workspace:*",
+    "@aiw/learning": "workspace:*",
     "@aiw/ledger": "workspace:*",
     "@aiw/mcp-gateway": "workspace:*",
     "@aiw/rooms": "workspace:*",
