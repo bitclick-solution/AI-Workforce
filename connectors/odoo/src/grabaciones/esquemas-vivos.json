@@ -1,0 +1,5 @@
+{
+  "_nota": "Esquemas de entrada (inputSchema) reales del MCP dinámico de Odoo v1.3.1, capturados del tools/list de la imagen viva por el Probador. PENDIENTE: el Probador los deja en la sección «Esquemas vivos del MCP de Odoo v1.3.1» de la rebanada «Bitclick como primera organización». Cuando se copien aquí, bajo «herramientas» y por nombre (search_records, preview_write, validate_write, execute_approved_write), la prueba de conformidad se activa sola. Sin datos de conexión ni de ningún ERP.",
+  "version": "1.3.1",
+  "herramientas": {}
+}
