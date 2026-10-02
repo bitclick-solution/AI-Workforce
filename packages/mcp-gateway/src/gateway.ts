@@ -51,7 +51,10 @@ import type { ResolvedorDeSecretos, Secreto } from './secretos.js';
  * Una entrada de auditoría se consulta filtrando por este texto dentro de seis
  * años: se añaden valores, no se renombran.
  */
-/** Motivo con el que se nombra la falta de la credencial de confirmación de una escritura aprobada. */
+/**
+ * Código con el que el libro anota la falta de la credencial de confirmación de una
+ * escritura aprobada (junto al motivo `no_autorizado` del contrato de errores).
+ */
 export const MOTIVO_SIN_CONFIRMACION = 'confirmacion_sin_credencial';
 
 export const ACCIONES = {
@@ -392,7 +395,7 @@ export class Gateway {
       throw new HerramientaFallo(
         herramienta.nombre,
         JSON.stringify({
-          code: '-32003',
+          code: MOTIVO_SIN_CONFIRMACION,
           message:
             'Falta la credencial de confirmación del conector: la escritura aprobada no se ejecuta.',
           datos: { motivo: 'no_autorizado' },

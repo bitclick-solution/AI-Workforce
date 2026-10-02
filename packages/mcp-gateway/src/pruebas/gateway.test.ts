@@ -30,6 +30,7 @@ import {
   HerramientaFallo,
   HerramientaNoAutorizada,
   MARCA_OCULTA,
+  MOTIVO_SIN_CONFIRMACION,
   PasoNoPermitido,
   RegistroDeServidores,
   Secreto,
@@ -333,8 +334,11 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('gateway MCP · contra la base y un servidor
       expect(llamadas).toHaveLength(1);
       expect(llamadas[0]?.resultado).toBe('error');
       expect(JSON.stringify(llamadas[0]?.datosReferenciados)).toContain('no_autorizado');
+      expect(JSON.stringify(llamadas[0]?.datosReferenciados)).toContain(MOTIVO_SIN_CONFIRMACION);
       // Nunca recibió la credencial: no se marca la confirmación.
-      expect(JSON.stringify(llamadas[0]?.datosReferenciados)).not.toContain('confirmacion');
+      expect(llamadas[0]?.datosReferenciados).not.toEqual(
+        expect.arrayContaining([{ tipo: 'confirmacion', id: 'gateway' }]),
+      );
     });
 
     it('si la conexión con la credencial lanza, el libro también marca la confirmación', async () => {
