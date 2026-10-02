@@ -43,7 +43,7 @@ import {
   puertoInicio,
   type PuertoInicio,
 } from './rutas/inicio.js';
-import { atenderPerfil, puertoPerfilConBaseDeDatos } from './rutas/perfil.js';
+import { atenderPerfil, puertoPerfilConBaseDeDatos, type PuertoPerfil } from './rutas/perfil.js';
 import {
   atenderSala,
   configuracionSalaDesdeEntorno,
@@ -62,6 +62,10 @@ export interface OpcionesServidor {
   puertoSala?: PuertoSala | undefined;
   /** Puerto del inicio ya construido. Solo para pruebas. */
   puertoInicio?: PuertoInicio | undefined;
+  /** Resolutor de sesión ya construido. Solo para pruebas: si falta, sale del acceso. */
+  resolverSesion?: ResolutorDeSesion | undefined;
+  /** Puerto del perfil ya construido. Solo para pruebas. */
+  puertoPerfil?: PuertoPerfil | undefined;
   /** Correo del acceso. Solo para pruebas: si falta, sale de `AIW_CORREO_PROVEEDOR`. */
   correoAcceso?: PuertoDeCorreo | undefined;
 }
@@ -85,6 +89,9 @@ async function leerJson(peticion: IncomingMessage): Promise<unknown> {
     return undefined;
   }
 }
+
+/** Métodos cuya petición lleva cuerpo. */
+const METODOS_CON_CUERPO = new Set(['POST', 'PATCH', 'PUT']);
 
 /**
  * Abre el cliente de Temporal. Solo se importa si se usa, y lo comparten la sala y
@@ -118,8 +125,14 @@ export interface ApiEnMarcha {
   cerrar: () => Promise<void>;
 }
 
+/**
+ * Un manejador recibe la petición y su cuerpo ya leído. El cuerpo es un flujo que
+ * solo se consume una vez: si cada manejador lo leyera por su cuenta, el primero
+ * que lo hiciera dejaría vacío el de los siguientes (y «Encargar» devolvería 400).
+ */
 type Manejador = (
   peticion: IncomingMessage,
+  cuerpo: unknown,
 ) => Promise<RespuestaContador | undefined> | RespuestaContador | undefined;
 
 function responder(respuesta: ServerResponse, resultado: RespuestaContador): void {
@@ -158,7 +171,8 @@ export function crearApi(opciones: OpcionesServidor = {}): {
       correo: opciones.correoAcceso ?? crearCorreo(configuracionAcceso.correo),
     });
   }
-  const resolverSesion: ResolutorDeSesion = acceso?.resolverSesion ?? SIN_SESION;
+  const resolverSesion: ResolutorDeSesion =
+    opciones.resolverSesion ?? acceso?.resolverSesion ?? SIN_SESION;
 
   // Contador de tareas v0: una línea, y el módulo decide si la ruta existe.
   if (conexion) {
@@ -177,15 +191,10 @@ export function crearApi(opciones: OpcionesServidor = {}): {
   // Perfil: el ajuste de presencia (ADR-026). Solo exige sesión, como el resto de
   // rutas de datos desde «Acceso al panel»; sin conexión a la base no existe.
   if (conexion) {
-    const puertoPerfil = puertoPerfilConBaseDeDatos(conexion.cliente);
-    manejadores.push(async (peticion) =>
+    const puertoPerfil = opciones.puertoPerfil ?? puertoPerfilConBaseDeDatos(conexion.cliente);
+    manejadores.push((peticion, cuerpo) =>
       atenderPerfil(
-        {
-          metodo: peticion.method,
-          url: peticion.url,
-          cabeceras: peticion.headers,
-          cuerpo: peticion.method === 'PATCH' ? await leerJson(peticion) : undefined,
-        },
+        { metodo: peticion.method, url: peticion.url, cabeceras: peticion.headers, cuerpo },
         puertoPerfil,
         resolverSesion,
       ),
@@ -215,14 +224,9 @@ export function crearApi(opciones: OpcionesServidor = {}): {
   if (conexion && configuracionSala) {
     const flujos = flujosCompartidos(configuracionSala);
     const puerto = opciones.puertoSala ?? puertoSala(conexion.cliente, flujos, configuracionSala);
-    manejadores.push(async (peticion) =>
+    manejadores.push((peticion, cuerpo) =>
       atenderSala(
-        {
-          metodo: peticion.method,
-          url: peticion.url,
-          cabeceras: peticion.headers,
-          cuerpo: peticion.method === 'POST' ? await leerJson(peticion) : undefined,
-        },
+        { metodo: peticion.method, url: peticion.url, cabeceras: peticion.headers, cuerpo },
         configuracionSala,
         puerto,
         resolverSesion,
@@ -238,14 +242,9 @@ export function crearApi(opciones: OpcionesServidor = {}): {
     const flujos = flujosCompartidos(configuracionInicio);
     const puerto =
       opciones.puertoInicio ?? puertoInicio(conexion.cliente, flujos, configuracionInicio);
-    manejadores.push(async (peticion) =>
+    manejadores.push((peticion, cuerpo) =>
       atenderInicio(
-        {
-          metodo: peticion.method,
-          url: peticion.url,
-          cabeceras: peticion.headers,
-          cuerpo: peticion.method === 'POST' ? await leerJson(peticion) : undefined,
-        },
+        { metodo: peticion.method, url: peticion.url, cabeceras: peticion.headers, cuerpo },
         configuracionInicio,
         puerto,
         resolverSesion,
@@ -260,8 +259,12 @@ export function crearApi(opciones: OpcionesServidor = {}): {
           await escribirRespuestaWeb(await acceso.manejar(await aPeticionWeb(peticion)), respuesta);
           return;
         }
+        // Una sola lectura por petición, compartida por todos los manejadores.
+        const cuerpo = METODOS_CON_CUERPO.has(peticion.method ?? '')
+          ? await leerJson(peticion)
+          : undefined;
         for (const manejador of manejadores) {
-          const resultado = await manejador(peticion);
+          const resultado = await manejador(peticion, cuerpo);
           if (resultado) {
             responder(respuesta, resultado);
             return;
