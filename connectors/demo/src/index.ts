@@ -20,6 +20,7 @@ export const PAQUETE = {
 export type Paquete = typeof PAQUETE;
 
 export * from './datos.js';
+export * from './conciliacion.js';
 export * from './servidor.js';
 export * from './errores.js';
 export * from './en-memoria.js';

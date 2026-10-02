@@ -1,7 +1,8 @@
 /**
  * Servidor MCP del conector.
  *
- * Anuncia exactamente dos herramientas. Usa la interfaz de bajo nivel del SDK
+ * Anuncia exactamente cuatro herramientas: las dos de cobros y las dos de
+ * conciliación bancaria. Usa la interfaz de bajo nivel del SDK
  * a propósito: así un fallo sale como error MCP con `code`, `message` en
  * español y `datos.motivo`, y no como texto dentro de un resultado correcto.
  *
@@ -23,7 +24,13 @@ import {
 import { clienteHttp, type ClienteMcpDinamico } from './cliente.js';
 import { leerConfiguracion, redactar, registrar, type ConfiguracionOdoo } from './entorno.js';
 import { ErrorConector, traducirError } from './errores.js';
-import { ESQUEMA_ENTRADA_LISTAR, ESQUEMA_ENTRADA_NOTA } from './esquema-json.js';
+import { NOMBRES_CONCILIACION } from './conciliacion.js';
+import {
+  ESQUEMA_ENTRADA_ASIENTO,
+  ESQUEMA_ENTRADA_EXTRACTO,
+  ESQUEMA_ENTRADA_LISTAR,
+  ESQUEMA_ENTRADA_NOTA,
+} from './esquema-json.js';
 import { NOMBRES, crearHerramientas, type Herramientas } from './herramientas.js';
 import { esProcesoPrincipal } from './proceso.js';
 
@@ -35,6 +42,10 @@ export const DESCRIPCIONES = {
     'Devuelve las facturas de cliente vencidas y sin cobrar del ERP, de más a menos días vencida. Solo lectura.',
   [NOMBRES.nota]:
     'Anota una nota de seguimiento o una actividad con fecha límite en una factura del ERP. Escritura.',
+  [NOMBRES_CONCILIACION.extracto]:
+    'Devuelve los apuntes del extracto bancario del ERP, del más antiguo al más reciente, por defecto solo los que aún no están casados. Solo lectura.',
+  [NOMBRES_CONCILIACION.asiento]:
+    'Crea en el ERP el borrador de un asiento por la diferencia entre un apunte bancario y su documento. Nunca lo contabiliza: lo publica una persona. Escritura.',
 } as const;
 
 export const CATALOGO = [
@@ -50,6 +61,18 @@ export const CATALOGO = [
     name: NOMBRES.nota,
     description: DESCRIPCIONES[NOMBRES.nota],
     inputSchema: ESQUEMA_ENTRADA_NOTA,
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  },
+  {
+    name: NOMBRES_CONCILIACION.extracto,
+    description: DESCRIPCIONES[NOMBRES_CONCILIACION.extracto],
+    inputSchema: ESQUEMA_ENTRADA_EXTRACTO,
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  },
+  {
+    name: NOMBRES_CONCILIACION.asiento,
+    description: DESCRIPCIONES[NOMBRES_CONCILIACION.asiento],
+    inputSchema: ESQUEMA_ENTRADA_ASIENTO,
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   },
 ] as const;
@@ -78,9 +101,16 @@ export function crearServidor(opciones: OpcionesServidor): Server {
           ? await opciones.herramientas.listarFacturasVencidas(argumentos ?? {})
           : name === NOMBRES.nota
             ? await opciones.herramientas.crearNotaSeguimiento(argumentos)
-            : (() => {
-                throw new ErrorConector('no_encontrada', `El conector de Odoo no sirve «${name}».`);
-              })();
+            : name === NOMBRES_CONCILIACION.extracto
+              ? await opciones.herramientas.leerExtractoBancario(argumentos ?? {})
+              : name === NOMBRES_CONCILIACION.asiento
+                ? await opciones.herramientas.proponerAsientoDiferencia(argumentos)
+                : (() => {
+                    throw new ErrorConector(
+                      'no_encontrada',
+                      `El conector de Odoo no sirve «${name}».`,
+                    );
+                  })();
       return {
         content: [{ type: 'text', text: JSON.stringify(salida) }],
         structuredContent: salida,

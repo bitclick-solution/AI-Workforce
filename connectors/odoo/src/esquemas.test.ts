@@ -9,7 +9,17 @@ import {
   Moneda,
   SalidaCrearNotaSeguimiento,
 } from './esquemas.js';
-import { ESQUEMA_ENTRADA_LISTAR, ESQUEMA_ENTRADA_NOTA } from './esquema-json.js';
+import {
+  EntradaLeerExtractoBancario,
+  EntradaProponerAsientoDiferencia,
+  SalidaProponerAsientoDiferencia,
+} from './esquemas-conciliacion.js';
+import {
+  ESQUEMA_ENTRADA_ASIENTO,
+  ESQUEMA_ENTRADA_EXTRACTO,
+  ESQUEMA_ENTRADA_LISTAR,
+  ESQUEMA_ENTRADA_NOTA,
+} from './esquema-json.js';
 
 describe('entrada de listar_facturas_vencidas', () => {
   it('tiene los valores por defecto del contrato', () => {
@@ -114,6 +124,87 @@ describe('tipos del contrato', () => {
     expect(SalidaCrearNotaSeguimiento.parse(salida).creado_en).toBe('2026-09-21T08:30:00.000Z');
     expect(
       SalidaCrearNotaSeguimiento.safeParse({ ...salida, creado_en: '2026-09-21' }).success,
+    ).toBe(false);
+  });
+});
+
+describe('esquemas de conciliación bancaria', () => {
+  const extracto = { cuenta_id: '7', desde: '2026-09-01', hasta: '2026-09-30' };
+  const asiento = {
+    apunte_id: '301',
+    documento_id: '46',
+    importe_diferencia: -12.5,
+    cuenta_contrapartida: '629000',
+    motivo: 'Comisión bancaria.',
+  };
+
+  it('leer_extracto_bancario tiene los valores por defecto del contrato', () => {
+    expect(EntradaLeerExtractoBancario.parse({})).toEqual({ solo_sin_casar: true, limite: 50 });
+  });
+
+  it.each([
+    ['límite cero', { limite: 0 }],
+    ['límite por encima de 200', { limite: 201 }],
+    ['hasta anterior a desde', { desde: '2026-09-30', hasta: '2026-09-01' }],
+    ['fecha que no existe', { desde: '2026-02-30' }],
+    ['un campo que el contrato no tiene', { clave_api: 'x' }],
+  ])('leer_extracto_bancario rechaza %s', (_caso, entrada) => {
+    expect(EntradaLeerExtractoBancario.safeParse({ ...extracto, ...entrada }).success).toBe(false);
+  });
+
+  it.each([
+    ['sin documento', { documento_id: undefined }],
+    ['sin cuenta de contrapartida', { cuenta_contrapartida: undefined }],
+    ['diferencia cero', { importe_diferencia: 0 }],
+    ['diferencia con tres decimales', { importe_diferencia: 1.005 }],
+    ['motivo vacío', { motivo: '' }],
+    ['motivo de más de 500 caracteres', { motivo: 'a'.repeat(501) }],
+    ['motivo con HTML', { motivo: 'Comisión <b>bancaria</b>' }],
+    ['clave de idempotencia vacía', { clave_idempotencia: '' }],
+  ])('proponer_asiento_diferencia rechaza %s', (_caso, cambio) => {
+    expect(EntradaProponerAsientoDiferencia.safeParse({ ...asiento, ...cambio }).success).toBe(
+      false,
+    );
+  });
+
+  it('proponer_asiento_diferencia acepta el asiento válido', () => {
+    expect(EntradaProponerAsientoDiferencia.safeParse(asiento).success).toBe(true);
+  });
+
+  it('el asiento solo se devuelve en borrador', () => {
+    const salida = {
+      id: '7001',
+      apunte_id: '301',
+      estado: 'borrador',
+      creado_en: '2026-09-21T08:30:00.000Z',
+    };
+    expect(SalidaProponerAsientoDiferencia.safeParse(salida).success).toBe(true);
+    expect(
+      SalidaProponerAsientoDiferencia.safeParse({ ...salida, estado: 'contabilizado' }).success,
+    ).toBe(false);
+  });
+
+  it('el esquema JSON anunciado dice lo mismo que el esquema Zod', () => {
+    expect(Object.keys(ESQUEMA_ENTRADA_EXTRACTO.properties).sort()).toEqual(
+      Object.keys(EntradaLeerExtractoBancario.shape).sort(),
+    );
+    expect(Object.keys(ESQUEMA_ENTRADA_ASIENTO.properties).sort()).toEqual(
+      Object.keys(EntradaProponerAsientoDiferencia.shape).sort(),
+    );
+    expect([...ESQUEMA_ENTRADA_ASIENTO.required].sort()).toEqual(
+      ['apunte_id', 'cuenta_contrapartida', 'documento_id', 'importe_diferencia', 'motivo'].sort(),
+    );
+    expect(ESQUEMA_ENTRADA_EXTRACTO.properties.limite.maximum).toBe(200);
+    expect(ESQUEMA_ENTRADA_ASIENTO.properties.motivo.maxLength).toBe(500);
+  });
+
+  it('ninguna herramienta de conciliación acepta credenciales por argumento', () => {
+    const campos = [
+      ...Object.keys(ESQUEMA_ENTRADA_EXTRACTO.properties),
+      ...Object.keys(ESQUEMA_ENTRADA_ASIENTO.properties),
+    ];
+    expect(
+      campos.some((campo) => /clave_api|pass|token|secret|usuario|credencial|url/i.test(campo)),
     ).toBe(false);
   });
 });

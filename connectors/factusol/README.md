@@ -57,6 +57,10 @@ Toda escritura es un borrador que caduca a los 30 minutos. La aprobación N1 de 
 
 El conector se niega a arrancar si el token del agente trae el scope `confirmar`. `FACTUSOL_CONFIRMACION=A` (solo desarrollo, sin gateway) deja el borrador pendiente para que una persona lo confirme en el panel. Detalle y secuencia exacta: la especificación, «Confirmación de la escritura».
 
+## Conciliación bancaria: fuera de este conector
+
+Las herramientas `leer_extracto_bancario` y `proponer_asiento_diferencia` (rebanada «Herramientas de conciliación bancaria en los conectores») **no se sirven en Factusol**. El catálogo de Factusol MCP 3.4.7 (97 herramientas, informe del Probador del 1-10) es de facturación: solo tiene `list_bancos`/`get_banco` (las cuentas bancarias propias, datos maestros), el registro de cobros y pagos de facturas y `list_documentos_por_importe`. Ninguna lee movimientos bancarios ni crea asientos contables, y simularlas con otra cosa daría al agente una conciliación inventada. Hasta que Factusol MCP ofrezca las dos (mejora 9), el puesto de Conciliación bancaria no funciona con un tenant de Factusol: el gateway no encontrará las herramientas.
+
 ## Idempotencia
 
 `clave_idempotencia` guarda junto a la nota la huella de los datos que la crearon. La misma clave con los mismos datos devuelve el mismo `draft_id`; con datos distintos sale `invalido`. Dos llamadas simultáneas escriben una vez. El almacén vive en el proceso y guarda 1000 claves; la garantía duradera es del flujo de Temporal y del gateway. Los borradores de Factusol no admiten clave: la idempotencia es de este adaptador.
@@ -75,14 +79,16 @@ Sin `AIW_CONECTOR_FACTUSOL=1` el proceso no abre transporte ni toca Factusol: ba
 
 Solo nombres; los valores los inyecta el gateway.
 
-| Variable                                                                      | Qué es                                                                   |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `FACTUSOL_MCP_URL`                                                            | Extremo SSE de Factusol MCP, sin usuario ni contraseña dentro.           |
-| `FACTUSOL_MCP_TOKEN`                                                          | JWT HS256 del agente, **sin** scope `confirmar`. Mínimo ocho caracteres. |
-| `FACTUSOL_TENANT_ID`                                                          | Tenant que Factusol MCP exige en cada llamada.                           |
-| `FACTUSOL_CONFIRMACION`                                                       | `A` (por defecto). `B` no arranca aún.                                   |
-| `AIW_CONECTOR_FACTUSOL`, `FACTUSOL_CONECTOR_HTTP`, `FACTUSOL_CONECTOR_PUERTO` | Banderas y puerto del transporte.                                        |
-| `FACTUSOL_FACTURA_PRUEBA`                                                     | Solo pruebas: `serie-número` de una factura de la empresa de pruebas.    |
+| Variable                                                                      | Qué es                                                                                                                                                    |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FACTUSOL_MCP_URL`                                                            | Extremo SSE de Factusol MCP, sin usuario ni contraseña dentro.                                                                                            |
+| `FACTUSOL_MCP_TOKEN`                                                          | JWT HS256 del agente, **sin** scope `confirmar`. Mínimo ocho caracteres.                                                                                  |
+| `FACTUSOL_MCP_TOKEN_CONFIRMAR`                                                | Opcional. JWT con scope `confirmar`, distinto del anterior y de ocho caracteres como mínimo. Solo lo guarda el gateway; confirma el borrador aprobado.    |
+| `FACTUSOL_TENANT_ID`                                                          | Tenant que Factusol MCP exige en cada llamada.                                                                                                            |
+| `FACTUSOL_CONFIRMACION`                                                       | `B` (por defecto): el gateway confirma con el token de confirmación tras la aprobación N1. `A`: solo desarrollo, el borrador queda pendiente en el panel. |
+| `FACTUSOL_ESTADO_DIR`                                                         | Opcional. Directorio donde se guarda el borrador pendiente por clave de idempotencia, para no crear un segundo tras una caída.                            |
+| `AIW_CONECTOR_FACTUSOL`, `FACTUSOL_CONECTOR_HTTP`, `FACTUSOL_CONECTOR_PUERTO` | Banderas y puerto del transporte.                                                                                                                         |
+| `FACTUSOL_FACTURA_PRUEBA`                                                     | Solo pruebas: `serie-número` de una factura de la empresa de pruebas.                                                                                     |
 
 Las variables del servidor de Factusol MCP (`MCP_AUTH_SECRET`, `HITL_CONFIRMACION_SECRET`…) no entran nunca aquí. El cifrado por tenant y la resolución de `conector.referencia_secreto` son del gateway (`packages/mcp-gateway`).
 
@@ -98,7 +104,7 @@ CI=1 pnpm --filter @aiw/connector-factusol test
 
 ## Mejoras que conviene pedir a Factusol MCP
 
-Salen del descubrimiento del 1-10. La numeración es de este README salvo la 8, que el Probador numeró.
+Salen del descubrimiento del 1-10. La numeración es de este README salvo la 8, que el Probador numeró; la 9 sale de la rebanada de conciliación bancaria.
 
 1. **Respuestas en JSON** además del Markdown: hoy el adaptador analiza texto y cualquier cambio de formato lo rompe.
 2. **Vencimiento e importe pendiente por factura** en `list_facturas_emitidas` y `get_factura`.
@@ -108,3 +114,4 @@ Salen del descubrimiento del 1-10. La numeración es de este README salvo la 8, 
 6. **Código de cliente** en el listado de facturas, para no resolverlo por NIF con una llamada más.
 7. **Documentar como camino oficial** el flujo de confirmación desde un proceso anfitrión con el scope `confirmar`.
 8. **`observaciones`** y el resto de campos editables en la respuesta de `get_cliente`, para poder verificar una escritura sin leer el diff de un borrador.
+9. **Movimientos bancarios y asientos**: una herramienta de lectura de los movimientos importados de cada cuenta bancaria (fecha, concepto, importe con signo, si están conciliados y con qué documento) y otra de borrador de asiento contable (`draft_crear_asiento`), con la misma confirmación humana y clave de idempotencia. Sin ellas no hay conciliación bancaria sobre Factusol.
