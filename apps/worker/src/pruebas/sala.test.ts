@@ -696,6 +696,43 @@ describe.skipIf(!HAY_BASE_DE_DATOS)('sala v0 · actividades contra la base y el 
     expect(await usosDePlataforma(montaje)).toHaveLength(0);
   });
 
+  it('con la bandera AIW_SALA_MODELO apagada, el moderador y el Director son los de reglas, aunque haya proveedor', async () => {
+    const montaje = await preparar('Sala departamento bandera apagada');
+    await conTarifaDeSala(montaje);
+    (montaje.contexto as { salaConModelo: boolean }).salaConModelo = false;
+    const salaId = await salaDeDepartamento(montaje);
+
+    const moderado = await moderarEn(montaje, salaId, PARAFRASIS_DE_COBROS);
+    expect(moderado.decision.tipo).toBe('silencio');
+    expect((await notaDelModerador(montaje, salaId, moderado.notaId))?.pasoDeModelo).toEqual({
+      usado: false,
+      razon: 'sin_puerto',
+    });
+
+    const contratar = await moderarEn(montaje, salaId, PARAFRASIS_DE_CONTRATAR);
+    expect(contratar.decision.tipo).toBe('silencio');
+    const [propuestaId = '', respuestaId = ''] = await montaje.actividades.nuevosIdentificadores({
+      cantidad: 2,
+    });
+    const resultado = await montaje.actividades.proponerOperacion({
+      ...contratar.base,
+      mensajeId: contratar.mensajeId,
+      personaId: montaje.semilla.personaId,
+      texto: PARAFRASIS_DE_CONTRATAR,
+      propuestaId,
+      respuestaId,
+    });
+    expect(resultado.propuestaId).toBeNull();
+
+    // Sin modelo no hay coste, ni fila de uso, ni nada que referenciar.
+    expect(await usosDePlataforma(montaje)).toHaveLength(0);
+    for (const accion of [ACCIONES_SALA.moderacionDecidida, ACCIONES_SALA.respuestaPublicada]) {
+      for (const entrada of await entradasDe(montaje, accion)) {
+        expect(Number(entrada.coste_euros)).toBe(0);
+      }
+    }
+  });
+
   it('un modelo sin proveedor elegido no bloquea la sala: silencio con el motivo', async () => {
     const montaje = await preparar('Sala departamento sin proveedor');
     const salaId = await salaDeDepartamento(montaje);

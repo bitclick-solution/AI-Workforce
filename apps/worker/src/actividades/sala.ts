@@ -399,13 +399,16 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
         lectura.participantes,
         {
           ambito: lectura.ambito,
-          clasificador: crearClasificadorDeSala(contexto, {
-            tenantId: peticion.tenantId,
-            mensajeId: peticion.mensajeId,
-            papel: 'haiku45',
-            clasePaso: 'moderador_sala',
-            modeloDePrueba: MODELO_PRUEBA_MODERADOR,
-          }),
+          // Con la bandera apagada no hay puerto: el moderador es el de reglas de siempre.
+          clasificador: contexto.salaConModelo
+            ? crearClasificadorDeSala(contexto, {
+                tenantId: peticion.tenantId,
+                mensajeId: peticion.mensajeId,
+                papel: 'haiku45',
+                clasePaso: 'moderador_sala',
+                modeloDePrueba: MODELO_PRUEBA_MODERADOR,
+              })
+            : undefined,
         },
       );
       const puestos = decision.tipo === 'intervenir' ? decision.turnos.map((t) => t.puestoId) : [];
@@ -663,13 +666,16 @@ export function crearActividadesDeSala(contexto: ContextoDeActividades) {
         lectura.contextoDelDirector,
         {
           ambito: lectura.ambito,
-          clasificador: crearClasificadorDeSala(contexto, {
-            tenantId: peticion.tenantId,
-            mensajeId: peticion.mensajeId,
-            papel: 'sonnet5',
-            clasePaso: 'enrutado',
-            modeloDePrueba: MODELO_PRUEBA_DIRECTOR,
-          }),
+          // Con la bandera apagada no hay puerto: el Director es el de reglas de siempre.
+          clasificador: contexto.salaConModelo
+            ? crearClasificadorDeSala(contexto, {
+                tenantId: peticion.tenantId,
+                mensajeId: peticion.mensajeId,
+                papel: 'sonnet5',
+                clasePaso: 'enrutado',
+                modeloDePrueba: MODELO_PRUEBA_DIRECTOR,
+              })
+            : undefined,
         },
       );
 

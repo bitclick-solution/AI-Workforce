@@ -76,6 +76,8 @@ Lo que la especificación no fijaba y el código obligó a decidir:
 3. **El proveedor de prueba cobra solo si hay tarifa registrada** para su guion (`deterministico-moderador`, `deterministico-director`). Sin ella cuesta 0, así que la demo local sigue siendo gratis.
 4. **Límite conocido:** si un proveedor real devuelve una salida fuera de esquema, el adaptador de Anthropic lanza antes de devolver los tokens y esa llamada no queda anotada. El esquema estricto ya restringe la salida en el proveedor; la validación local es la segunda defensa.
 
+5. **Bandera `AIW_SALA_MODELO` (petición del 2-10-2026 tras la demo).** El trabajador lee la bandera con el patrón de `AIW_SALA_V1`: `1` o `true` la activan; apagada por defecto. Apagada, el moderador y el Director son los de reglas de siempre —sin modelo, sin fila en `uso_modelo` y con coste cero— aunque haya proveedor configurado. `.env.example` la lleva a `0`; `pnpm local:arrancar` no la enciende todavía (se pone a mano, con `AIW_PROVEEDOR_MODELOS=prueba` es gratis).
+
 ## Pregunta abierta
 
 Ninguna: el alcance queda acotado por las decisiones 1 y 4 de arriba, ya contrastadas con las fichas de «Disparadores gobernados por puesto» y «Ayuda en producto por el Director de IA».
